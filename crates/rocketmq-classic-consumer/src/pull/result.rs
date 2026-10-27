@@ -8,8 +8,8 @@ use std::{
 use rand::Rng;
 use rocketmq_classic_common::{
     message::{
-        DecodeError, DecodeOptions, MessageExt, MessageQueue, decode_many_as_client_compatible,
-        decode_properties,
+        CompactMessageError, DecodeError, DecodeOptions, MessageExt, MessageQueue,
+        decode_inner_batch, decode_many_as_client_compatible,
     },
     sysflag::message::{INNER_BATCH_FLAG, NEED_UNWRAP_FLAG},
 };
@@ -345,7 +345,24 @@ fn unwrap_messages(
     let mut unwrapped = Vec::new();
     for outer in messages {
         if outer.sys_flag() & INNER_BATCH_FLAG != 0 && outer.sys_flag() & NEED_UNWRAP_FLAG != 0 {
-            unwrapped.extend(decode_inner_batch(outer)?);
+            unwrapped.extend(decode_inner_batch(outer).map_err(|error| match error {
+                CompactMessageError::IncompleteInnerMessage { offset, .. } => {
+                    ProcessPullError::MalformedInnerBatch {
+                        offset,
+                        reason: "compact inner message is truncated",
+                    }
+                }
+                CompactMessageError::InvalidInnerSize { .. } => {
+                    ProcessPullError::MalformedInnerBatch {
+                        offset: 0,
+                        reason: "compact inner message has an invalid size",
+                    }
+                }
+                _ => ProcessPullError::MalformedInnerBatch {
+                    offset: 0,
+                    reason: "compact inner message is malformed",
+                },
+            })?);
         } else {
             unwrapped.push(outer.clone());
         }
@@ -353,128 +370,38 @@ fn unwrap_messages(
     Ok(unwrapped)
 }
 
-const MAX_INNER_BATCH_RECORD_BYTES: usize = 16 * 1024 * 1024;
-const MAX_INNER_BATCH_DECODED_BYTES: usize = 64 * 1024 * 1024;
-
-fn decode_inner_batch(outer: &MessageExt) -> Result<Vec<MessageExt>, ProcessPullError> {
-    let bytes = outer.body();
-    let mut offset = 0usize;
-    let mut total_decoded = 0usize;
-    let mut messages = Vec::new();
-    while offset < bytes.len() {
-        let size = read_i32(&bytes, offset).ok_or(ProcessPullError::MalformedInnerBatch {
-            offset,
-            reason: "missing record size",
-        })?;
-        let size = usize::try_from(size).map_err(|_| ProcessPullError::MalformedInnerBatch {
-            offset,
-            reason: "negative record size",
-        })?;
-        if size > MAX_INNER_BATCH_RECORD_BYTES {
-            return Err(ProcessPullError::InnerBatchLimitExceeded {
-                limit: MAX_INNER_BATCH_RECORD_BYTES,
-            });
-        }
-        if size < 22 || offset.checked_add(size).is_none_or(|end| end > bytes.len()) {
-            return Err(ProcessPullError::MalformedInnerBatch {
-                offset,
-                reason: "record size is truncated or smaller than its header",
-            });
-        }
-        let record = &bytes[offset..offset + size];
-        let flag = read_i32(record, 12).ok_or(ProcessPullError::MalformedInnerBatch {
-            offset,
-            reason: "missing flag",
-        })?;
-        let body_size = usize::try_from(read_i32(record, 16).ok_or(
-            ProcessPullError::MalformedInnerBatch {
-                offset,
-                reason: "missing body size",
-            },
-        )?)
-        .map_err(|_| ProcessPullError::MalformedInnerBatch {
-            offset,
-            reason: "negative body size",
-        })?;
-        let body_start = 20usize;
-        let body_end = body_start
-            .checked_add(body_size)
-            .filter(|end| *end <= record.len())
-            .ok_or(ProcessPullError::MalformedInnerBatch {
-                offset,
-                reason: "body exceeds its record",
-            })?;
-        let properties_size =
-            read_i16(record, body_end).ok_or(ProcessPullError::MalformedInnerBatch {
-                offset,
-                reason: "missing properties size",
-            })?;
-        let properties_size = usize::try_from(properties_size).map_err(|_| {
-            ProcessPullError::MalformedInnerBatch {
-                offset,
-                reason: "negative properties size",
-            }
-        })?;
-        let properties_start = body_end + 2;
-        let properties_end = properties_start
-            .checked_add(properties_size)
-            .filter(|end| *end == record.len())
-            .ok_or(ProcessPullError::MalformedInnerBatch {
-                offset,
-                reason: "properties length does not match record size",
-            })?;
-        total_decoded = total_decoded
-            .checked_add(body_size)
-            .and_then(|size| size.checked_add(properties_size))
-            .ok_or(ProcessPullError::InnerBatchLimitExceeded {
-                limit: MAX_INNER_BATCH_DECODED_BYTES,
-            })?;
-        if total_decoded > MAX_INNER_BATCH_DECODED_BYTES {
-            return Err(ProcessPullError::InnerBatchLimitExceeded {
-                limit: MAX_INNER_BATCH_DECODED_BYTES,
-            });
-        }
-        let properties = String::from_utf8_lossy(&record[properties_start..properties_end]);
-        let mut inner = MessageExt::new();
-        inner.set_topic(outer.topic().to_owned());
-        inner.set_body(record[body_start..body_end].to_vec());
-        inner.set_flag(flag);
-        for (key, value) in decode_properties(&properties) {
-            let _ = inner.set_system_property(key, value);
-        }
-        inner.set_queue_id(outer.queue_id());
-        inner.set_queue_offset(outer.queue_offset().wrapping_add(messages.len() as i64));
-        inner.set_sys_flag(outer.sys_flag());
-        inner.set_born_timestamp(outer.born_timestamp());
-        inner.set_born_host(outer.born_host().cloned());
-        inner.set_store_timestamp(outer.store_timestamp());
-        inner.set_store_host(outer.store_host().cloned());
-        inner.set_commit_log_offset(outer.commit_log_offset());
-        messages.push(inner);
-        offset += size;
-    }
-    Ok(messages)
-}
-
-fn read_i16(bytes: &[u8], offset: usize) -> Option<i16> {
-    Some(i16::from_be_bytes(
-        bytes.get(offset..offset.checked_add(2)?)?.try_into().ok()?,
-    ))
-}
-
-fn read_i32(bytes: &[u8], offset: usize) -> Option<i32> {
-    Some(i32::from_be_bytes(
-        bytes.get(offset..offset.checked_add(4)?)?.try_into().ok()?,
-    ))
-}
-
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, HashSet};
     use std::net::{IpAddr, Ipv4Addr};
 
     use super::*;
-    use rocketmq_classic_common::message::{MessageHostAddress, encode_message_ext};
+    use rocketmq_classic_common::message::{
+        Message, MessageHostAddress, encode_compact_messages, encode_message_ext,
+    };
+
+    fn encode_inner_outer(body: Vec<u8>, queue_offset: i64, wait_store_msg_ok: bool) -> Vec<u8> {
+        let mut outer = MessageExt::new();
+        outer.set_topic("orders");
+        outer.set_body(body);
+        outer.set_queue_id(2);
+        outer.set_queue_offset(queue_offset);
+        outer.set_sys_flag(
+            rocketmq_classic_common::sysflag::message::COMPRESSED_FLAG
+                | rocketmq_classic_common::sysflag::message::INNER_BATCH_FLAG
+                | rocketmq_classic_common::sysflag::message::NEED_UNWRAP_FLAG,
+        );
+        outer.set_born_host(Some(MessageHostAddress::from_ip_address(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            10_911,
+        )));
+        outer.set_store_host(Some(MessageHostAddress::from_ip_address(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            10_912,
+        )));
+        outer.set_wait_store_msg_ok(wait_store_msg_ok).unwrap();
+        encode_message_ext(&outer, true).expect("inner-batch outer message encodes")
+    }
 
     fn empty_pull_result(status: PullStatus) -> PullResultExt {
         PullResultExt {
@@ -529,6 +456,157 @@ mod tests {
             messages
                 .iter()
                 .all(|message| message.body().len() == BODY_SIZE)
+        );
+    }
+
+    #[test]
+    fn pull_processing_expands_24_large_compact_records() {
+        const BODY_SIZE: usize = 3 * 1024 * 1024;
+        let compact_records = {
+            let messages = (0..24)
+                .map(|index| {
+                    let mut message = Message::new("orders", vec![b'R'; BODY_SIZE]);
+                    message.set_tags(format!("tag-{index}")).unwrap();
+                    message
+                })
+                .collect::<Vec<_>>();
+            encode_compact_messages(&messages).unwrap()
+        };
+        let mut result = empty_pull_result(PullStatus::Found);
+        result.next_begin_offset = 24;
+        result.raw_messages = Some(encode_inner_outer(compact_records, 0, false));
+
+        let processed = PullAPIWrapper::default()
+            .process_pull_result(
+                &MessageQueue::new("orders", "broker-a", 2),
+                result,
+                &SubscriptionData::default(),
+                DecodeOptions::default(),
+            )
+            .expect("valid compact records decode");
+        let messages = processed.messages.expect("FOUND returns messages");
+
+        assert_eq!(processed.result.next_begin_offset, 24);
+        assert_eq!(messages.len(), 24);
+        assert!(messages.iter().enumerate().all(|(index, message)| {
+            message.body().len() == BODY_SIZE
+                && message.queue_offset() == index as i64
+                && message.tags().as_deref() == Some(format!("tag-{index}").as_str())
+                && !message.is_wait_store_msg_ok()
+                && message.is_message_client_ext()
+        }));
+    }
+
+    #[test]
+    fn pull_processing_accepts_one_compact_record_larger_than_16_mib() {
+        const BODY_SIZE: usize = 17 * 1024 * 1024;
+        let compact_records =
+            encode_compact_messages(&[Message::new("orders", vec![b'L'; BODY_SIZE])]).unwrap();
+        let mut result = empty_pull_result(PullStatus::Found);
+        result.next_begin_offset = 1;
+        result.raw_messages = Some(encode_inner_outer(compact_records, 6, true));
+
+        let processed = PullAPIWrapper::default()
+            .process_pull_result(
+                &MessageQueue::new("orders", "broker-a", 2),
+                result,
+                &SubscriptionData::default(),
+                DecodeOptions::default(),
+            )
+            .expect("valid large compact record decodes");
+        let messages = processed.messages.expect("FOUND returns messages");
+
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].body().len(), BODY_SIZE);
+        assert_eq!(messages[0].queue_offset(), 6);
+        assert!(messages[0].is_wait_store_msg_ok());
+    }
+
+    #[test]
+    fn pull_processing_preserves_mixed_inner_metadata_and_malformed_fallback() {
+        let mut ordinary = MessageExt::new();
+        ordinary.set_topic("orders");
+        ordinary.set_body(b"ordinary".to_vec());
+        ordinary.set_queue_id(2);
+        ordinary.set_queue_offset(40);
+        ordinary.set_born_host(Some(MessageHostAddress::from_ip_address(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            10_911,
+        )));
+        ordinary.set_store_host(Some(MessageHostAddress::from_ip_address(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            10_912,
+        )));
+        ordinary.set_tags("blue").unwrap();
+        ordinary
+            .set_system_property("UNIQ_KEY", "ordinary-id")
+            .unwrap();
+        let ordinary_record = encode_message_ext(&ordinary, true).unwrap();
+
+        let mut inner_blue = Message::new("orders", b"inner-blue".to_vec());
+        inner_blue.set_tags("blue").unwrap();
+        inner_blue
+            .set_system_property("UNIQ_KEY", "inner-blue-id")
+            .unwrap();
+        let mut inner_red = Message::new("orders", b"inner-red".to_vec());
+        inner_red.set_tags("red").unwrap();
+        inner_red
+            .set_system_property("UNIQ_KEY", "inner-red-id")
+            .unwrap();
+        let inner_record = encode_inner_outer(
+            encode_compact_messages(&[inner_blue, inner_red]).unwrap(),
+            41,
+            false,
+        );
+
+        let mut subscription =
+            SubscriptionData::new(Some("orders".to_owned()), Some("blue".to_owned()));
+        subscription.set_tags_set_owned(Some(HashSet::from([Some("blue".to_owned())])));
+        let mut result = empty_pull_result(PullStatus::Found);
+        result.next_begin_offset = 43;
+        result.raw_messages = Some([ordinary_record.clone(), inner_record].concat());
+        let processed = PullAPIWrapper::default()
+            .process_pull_result(
+                &MessageQueue::new("orders", "broker-a", 2),
+                result,
+                &subscription,
+                DecodeOptions::default(),
+            )
+            .unwrap();
+        let messages = processed.messages.unwrap();
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].queue_offset(), 40);
+        assert_eq!(messages[0].body().as_ref(), b"ordinary");
+        assert_eq!(messages[0].message_id(), Some("ordinary-id"));
+        assert!(messages[0].is_wait_store_msg_ok());
+        assert_eq!(messages[1].queue_offset(), 41);
+        assert_eq!(messages[1].body().as_ref(), b"inner-blue");
+        assert_eq!(messages[1].tags().as_deref(), Some("blue"));
+        assert_eq!(messages[1].message_id(), Some("inner-blue-id"));
+        assert!(messages[1].is_message_client_ext());
+        assert!(!messages[1].is_wait_store_msg_ok());
+        assert_eq!(processed.result.next_begin_offset, 43);
+
+        let malformed = encode_inner_outer(vec![0, 0, 0, 1], 41, false);
+        let mut fallback_result = empty_pull_result(PullStatus::Found);
+        fallback_result.raw_messages = Some([ordinary_record, malformed].concat());
+        let fallback = PullAPIWrapper::default()
+            .process_pull_result(
+                &MessageQueue::new("orders", "broker-a", 2),
+                fallback_result,
+                &SubscriptionData::default(),
+                DecodeOptions::default(),
+            )
+            .unwrap()
+            .messages
+            .unwrap();
+        assert_eq!(fallback.len(), 2);
+        assert_eq!(fallback[0].body().as_ref(), b"ordinary");
+        assert_eq!(fallback[1].body().as_ref(), &[0, 0, 0, 1]);
+        assert_ne!(
+            fallback[1].sys_flag() & rocketmq_classic_common::sysflag::message::INNER_BATCH_FLAG,
+            0
         );
     }
 

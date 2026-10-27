@@ -2,8 +2,6 @@ use std::io::{self, Read, Write};
 
 use crate::sysflag::message::CompressionType;
 
-pub(crate) const DEFAULT_MAX_DECOMPRESSED_BODY_BYTES: usize = 64 * 1024 * 1024;
-
 /// Compress a message body using the RocketMQ wire format selected by sysFlag.
 /// The LZ4 backend emits the framed format used by RocketMQ 5.5.1.
 pub fn compress(compression_type: CompressionType, body: &[u8], level: i32) -> io::Result<Vec<u8>> {
@@ -30,7 +28,7 @@ pub fn compress(compression_type: CompressionType, body: &[u8], level: i32) -> i
 
 /// Decompress the RocketMQ message body according to its compression type.
 pub fn decompress(compression_type: CompressionType, body: &[u8]) -> io::Result<Vec<u8>> {
-    decompress_limited(compression_type, body, DEFAULT_MAX_DECOMPRESSED_BODY_BYTES)
+    decompress_limited(compression_type, body, usize::MAX)
 }
 
 /// Decompress a message body while capping the decoded bytes.
@@ -249,6 +247,26 @@ mod tests {
         for kind in CompressionType::values() {
             let compressed = compress(kind, &body, 5).unwrap();
             assert_eq!(decompress(kind, &compressed).unwrap(), body, "{kind}");
+        }
+    }
+
+    #[test]
+    fn public_decompression_round_trips_bodies_larger_than_64_mib() {
+        let body = vec![b'R'; 65 * 1024 * 1024];
+        for kind in CompressionType::values() {
+            let compressed = compress(kind, &body, 5).unwrap();
+            let decompressed = decompress(kind, &compressed).unwrap();
+            assert_eq!(decompressed, body, "{kind}");
+        }
+    }
+
+    #[test]
+    fn every_public_decompressor_rejects_malformed_input() {
+        for kind in CompressionType::values() {
+            assert!(
+                decompress(kind, b"not a valid compressed message").is_err(),
+                "{kind}"
+            );
         }
     }
 

@@ -14,3 +14,13 @@
 - Focused checks passed: `cargo test -p rocketmq-classic-consumer --locked --test lite_pop scripted_lite_helpers_cover_assignment_offsets_commits_and_name_server_updates` and `cargo test -p rocketmq-classic-consumer --locked lite_poll_consume_hooks_run_around_delivery_with_queue_metadata`.
 - `cargo fmt --all -- --check` and `git diff --check` will be recorded after final phase checks. Phase 1 commit is the changeset containing this entry.
 - Formatting follow-up: the initial format check identified one expected rustfmt layout change in the new hook-context construction; `cargo fmt --all` applied it, and the subsequent format check and `git diff --check` passed.
+
+## Phase 2 — F02 compact inner decoding and F04 public decompression
+
+- Replaced Consumer's duplicate compact-record parser and its 16 MiB per-record / 64 MiB aggregate limits with Common's `decode_inner_batch`; compact decode failures still trigger the existing all-or-original fallback.
+- Added `PullAPIWrapper` regressions for 24 × 3 MiB compact messages, one 17 MiB compact message, mixed ordinary/inner records, offsets, tags, unique/client IDs, client subtype, inherited WAIT true/false, and malformed fallback.
+- Public `compression::decompress` now delegates to the bounded implementation with the full `usize` output domain. Internal message decode continues to use its explicit bounded helper.
+- Added 65 MiB round-trips for Zlib/LZ4/Zstd, malformed input checks for all codecs, and a Producer compressor test proving its public round-trip and returned-type snapshot behavior.
+- Focused checks passed: `cargo test -p rocketmq-classic-consumer --locked pull_processing_` (4 passed); `cargo test -p rocketmq-classic-common --locked public_decompression` (1 passed); `cargo test -p rocketmq-classic-common --locked every_public_decompressor` (1 passed); `cargo test -p rocketmq-classic-producer --locked producer_compressor_round_trips_large_body` (1 passed).
+- `cargo fmt --all -- --check` and `git diff --check` passed. Java differential replay will be run after the remaining F03/F05 state changes and its evidence will remain untracked.
+- Phase 1 changeset: `92940332` (`Preserve Lite poll batches with nullable groups`).
