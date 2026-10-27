@@ -403,6 +403,26 @@ mod tests {
         encode_message_ext(&outer, true).expect("inner-batch outer message encodes")
     }
 
+    fn precompressed_lz4_record(body: Vec<u8>, queue_offset: i64) -> Vec<u8> {
+        let mut message = MessageExt::new();
+        message.set_topic("orders");
+        message.set_body(body);
+        message.set_queue_offset(queue_offset);
+        message.set_sys_flag(
+            rocketmq_classic_common::sysflag::message::COMPRESSED_FLAG
+                | rocketmq_classic_common::sysflag::message::COMPRESSION_LZ4_TYPE,
+        );
+        message.set_born_host(Some(MessageHostAddress::from_ip_address(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            10_911,
+        )));
+        message.set_store_host(Some(MessageHostAddress::from_ip_address(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            10_912,
+        )));
+        encode_message_ext(&message, false).expect("precompressed LZ4 record encodes")
+    }
+
     fn empty_pull_result(status: PullStatus) -> PullResultExt {
         PullResultExt {
             status,
@@ -457,6 +477,43 @@ mod tests {
                 .iter()
                 .all(|message| message.body().len() == BODY_SIZE)
         );
+    }
+
+    #[test]
+    fn pull_result_delivers_a_record_with_concatenated_lz4_frames() {
+        let mut stream = rocketmq_classic_common::compression::compress(
+            rocketmq_classic_common::sysflag::message::CompressionType::Lz4,
+            b"first-",
+            5,
+        )
+        .unwrap();
+        stream.extend_from_slice(
+            &rocketmq_classic_common::compression::compress(
+                rocketmq_classic_common::sysflag::message::CompressionType::Lz4,
+                b"second",
+                5,
+            )
+            .unwrap(),
+        );
+        let record = precompressed_lz4_record(stream, 0);
+        let mut result = empty_pull_result(PullStatus::Found);
+        result.next_begin_offset = 1;
+        result.raw_messages = Some(record);
+
+        let processed = PullAPIWrapper::default()
+            .process_pull_result(
+                &MessageQueue::new("orders", "broker-a", 0),
+                result,
+                &SubscriptionData::default(),
+                DecodeOptions::default(),
+            )
+            .expect("a Java-readable concatenated LZ4 record decodes");
+
+        let messages = processed.messages.expect("FOUND returns its decoded batch");
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].body().as_ref(), b"first-second");
+        assert_eq!(messages[0].queue_offset(), 0);
+        assert_eq!(processed.result.next_begin_offset, 1);
     }
 
     #[test]

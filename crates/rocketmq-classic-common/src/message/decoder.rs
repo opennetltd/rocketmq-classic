@@ -883,6 +883,24 @@ mod tests {
         super::super::encode_message_ext(&message, true).expect("compressed message encodes")
     }
 
+    fn precompressed_lz4_record(body: Vec<u8>) -> Vec<u8> {
+        let mut message = MessageExt::new();
+        message.set_topic("orders");
+        message.set_body(body);
+        message
+            .set_sys_flag(message::COMPRESSED_FLAG | crate::sysflag::message::COMPRESSION_LZ4_TYPE);
+        message.set_born_host(Some(MessageHostAddress::from_ip_address(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            10_911,
+        )));
+        message.set_store_host(Some(MessageHostAddress::from_ip_address(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            10_912,
+        )));
+        super::super::encode_message_ext(&message, false)
+            .expect("precompressed LZ4 message encodes")
+    }
+
     #[test]
     fn compatible_batch_decode_keeps_valid_records_past_rust_only_limits() {
         const MIB: usize = 1024 * 1024;
@@ -905,6 +923,30 @@ mod tests {
         let decoded = decode_many_compatible(&large_record, DecodeOptions::default());
         assert_eq!(decoded.len(), 1);
         assert_eq!(decoded[0].body().len(), 65 * MIB);
+    }
+
+    #[test]
+    fn compatible_batch_decode_expands_concatenated_lz4_frames_in_one_record() {
+        let mut lz4_stream = crate::compression::compress(
+            crate::sysflag::message::CompressionType::Lz4,
+            b"first-",
+            5,
+        )
+        .unwrap();
+        lz4_stream.extend_from_slice(
+            &crate::compression::compress(
+                crate::sysflag::message::CompressionType::Lz4,
+                b"second",
+                5,
+            )
+            .unwrap(),
+        );
+        let record = precompressed_lz4_record(lz4_stream);
+
+        let decoded = decode_many_compatible(&record, DecodeOptions::default());
+
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].body().as_ref(), b"first-second");
     }
 
     #[test]

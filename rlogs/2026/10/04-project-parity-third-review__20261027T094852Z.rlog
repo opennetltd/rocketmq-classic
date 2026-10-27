@@ -1,0 +1,11 @@
+Execution: repair findings from `plan/2026/10/04-project-parity-third-review.md`.
+Date: 2026-10-27 UTC. Branch: `fix/parity-third-review-2026-10-27`.
+Baseline: `cbc1bae1`; review findings G01 (concatenated/skippable LZ4 stream rejection) and G02 (Lite consume trace uses a startup group snapshot).
+Constraints: do not modify the supplied plan; supplied bilingual plan may be committed; never stage or commit review/repair evidence.
+
+Phase G01 — pending. Validate concatenated ordinary/skippable LZ4 stream decoding, aggregate output bounds, Pull/Lite delivery, and pinned Java behavior.
+Phase G02 — pending. Derive trace identity from the before-hook context, preserve it for after rows, and pass Lite's live facade group unchanged to hooks.
+Validation — pending. Run focused tests, workspace format/Clippy/tests, offline Java fixture verify, metadata check, and scripted runtime probes as feasible.
+
+G01 implementation complete: the Common LZ4 parser now consumes ordinary and skippable frames through EOF, validates each ordinary frame independently, and applies the internal decompression cap to the cumulative output. Added stream-shape, empty-frame, truncated-data, checksum, invalid-tail, cumulative-cap, full-record Pull, and Lite persisted-offset regressions. The Lite loopback case delivered `first-second` and persisted offset 1.
+Focused checks passed: `cargo test -p rocketmq-classic-common --locked lz4_` (4 selected tests), `cargo test -p rocketmq-classic-consumer --locked pull_result_delivers_a_record_with_concatenated_lz4_frames`, and `cargo test -p rocketmq-classic-consumer --locked --test lite_pop scripted_lite_delivers_concatenated_lz4_record_before_committing_its_offset`.

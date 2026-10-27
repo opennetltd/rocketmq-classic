@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeSet, HashMap},
+    net::{IpAddr, Ipv4Addr},
     path::PathBuf,
     sync::{Arc, Mutex},
     time::Duration,
@@ -7,7 +8,9 @@ use std::{
 
 use base64::Engine;
 use bytes::BytesMut;
-use rocketmq_classic_common::message::MessageQueue;
+use rocketmq_classic_common::message::{
+    MessageExt, MessageHostAddress, MessageQueue, encode_message_ext,
+};
 use rocketmq_classic_consumer::push::PushConsumerConfig;
 use rocketmq_classic_consumer::{
     LitePullConsumer, LitePullConsumerConfig, LitePullConsumerError,
@@ -428,12 +431,6 @@ fn reply_offset(request: ScriptedBrokerRequest, code: i32, name: &str, offset: i
 }
 
 fn pull_reply(request: ScriptedBrokerRequest, code: i32, offset: i64, message: bool) {
-    let fields = HeaderMap::from([
-        ("suggestWhichBrokerId".into(), "0".into()),
-        ("nextBeginOffset".into(), offset.to_string()),
-        ("minOffset".into(), "0".into()),
-        ("maxOffset".into(), "30".into()),
-    ]);
     let body = message.then(|| {
         let fixture: Value =
             serde_json::from_str(include_str!("../../../fixtures/messages/records.json")).unwrap();
@@ -452,6 +449,21 @@ fn pull_reply(request: ScriptedBrokerRequest, code: i32, offset: i64, message: b
         bytes[20..28].copy_from_slice(&(offset - 1).to_be_bytes());
         bytes
     });
+    pull_reply_with_body(request, code, offset, body);
+}
+
+fn pull_reply_with_body(
+    request: ScriptedBrokerRequest,
+    code: i32,
+    offset: i64,
+    body: Option<Vec<u8>>,
+) {
+    let fields = HeaderMap::from([
+        ("suggestWhichBrokerId".into(), "0".into()),
+        ("nextBeginOffset".into(), offset.to_string()),
+        ("minOffset".into(), "0".into()),
+        ("maxOffset".into(), "30".into()),
+    ]);
     request
         .reply
         .send(ScriptedReply {
@@ -460,6 +472,39 @@ fn pull_reply(request: ScriptedBrokerRequest, code: i32, offset: i64, message: b
             body,
         })
         .unwrap();
+}
+
+fn concatenated_lz4_record() -> Vec<u8> {
+    let mut stream = rocketmq_classic_common::compression::compress(
+        rocketmq_classic_common::sysflag::message::CompressionType::Lz4,
+        b"first-",
+        5,
+    )
+    .unwrap();
+    stream.extend_from_slice(
+        &rocketmq_classic_common::compression::compress(
+            rocketmq_classic_common::sysflag::message::CompressionType::Lz4,
+            b"second",
+            5,
+        )
+        .unwrap(),
+    );
+    let mut message = MessageExt::new();
+    message.set_topic("orders");
+    message.set_body(stream);
+    message.set_sys_flag(
+        rocketmq_classic_common::sysflag::message::COMPRESSED_FLAG
+            | rocketmq_classic_common::sysflag::message::COMPRESSION_LZ4_TYPE,
+    );
+    message.set_born_host(Some(MessageHostAddress::from_ip_address(
+        IpAddr::V4(Ipv4Addr::LOCALHOST),
+        10_911,
+    )));
+    message.set_store_host(Some(MessageHostAddress::from_ip_address(
+        IpAddr::V4(Ipv4Addr::LOCALHOST),
+        10_912,
+    )));
+    encode_message_ext(&message, false).expect("precompressed LZ4 record encodes")
 }
 
 fn lite_config_with_store(
@@ -615,6 +660,46 @@ async fn scripted_lite_seek_pause_resume_commit_and_restart_preserve_delivery_of
     pull_reply(restarted_pull, response::PULL_NOT_FOUND, 11, false);
     restarted.shutdown().await.unwrap();
 
+    nameserver_task.abort();
+    broker_task.abort();
+}
+
+#[tokio::test]
+async fn scripted_lite_delivers_concatenated_lz4_record_before_committing_its_offset() {
+    let broker_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let broker_address = broker_listener.local_addr().unwrap().to_string();
+    let (nameserver, nameserver_task) =
+        start_scripted_nameserver(broker_route(&broker_address)).await;
+    let (mut requests, broker_task) = start_scripted_broker(broker_listener);
+    let queue = MessageQueue::new("orders", "broker-a", 0);
+    let store = Arc::new(LiteScriptedOffsetStore::default());
+    let mut config = lite_config_with_store(
+        "lite-concat-lz4",
+        "lite-concat-lz4-client",
+        &nameserver,
+        store.clone(),
+    );
+    config.set_pull_thread_nums(1);
+    let consumer = Arc::new(LitePullConsumer::new(config).unwrap());
+    consumer.assign([queue.clone()]).await.unwrap();
+    consumer.start().await.unwrap();
+
+    let pull = next_lite_pull_request(&mut requests, "lite-concat-lz4-client").await;
+    pull_reply_with_body(pull, response::SUCCESS, 1, Some(concatenated_lz4_record()));
+    let delivered = timeout(Duration::from_secs(3), consumer.poll(Some(3_000)))
+        .await
+        .expect("the concatenated LZ4 message should reach Lite poll")
+        .unwrap();
+    assert_eq!(delivered.len(), 1);
+    assert_eq!(delivered[0].body().as_ref(), b"first-second");
+    assert_eq!(delivered[0].queue_offset(), 0);
+
+    consumer.pause([queue.clone()]);
+    consumer.commit_queues([queue.clone()], true).await.unwrap();
+    assert_eq!(store.memory.lock().unwrap().get(&queue), Some(&1));
+    assert_eq!(store.persisted.lock().unwrap().get(&queue), Some(&1));
+
+    consumer.shutdown().await.unwrap();
     nameserver_task.abort();
     broker_task.abort();
 }
