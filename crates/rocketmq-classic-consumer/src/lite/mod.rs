@@ -811,7 +811,6 @@ impl LitePullConsumer {
         if let Some(dispatcher) = trace_dispatcher.as_ref() {
             self.register_consume_message_hook(Arc::new(trace::LiteConsumeTraceHook::new(
                 dispatcher.clone(),
-                &raw_consumer_group,
                 self.config.client_config().clone(),
             )));
         }
@@ -1133,12 +1132,7 @@ impl LitePullConsumer {
                 }
                 let mut client_config = self.config.client_config().clone();
                 let namespace = client_config.get_namespace()?.map(str::to_owned);
-                let consumer_group = match self.get_consumer_group() {
-                    Some(raw_consumer_group) => {
-                        client_config.with_namespace(Some(&raw_consumer_group))?
-                    }
-                    None => None,
-                };
+                let consumer_group = self.get_consumer_group();
                 let mut consume_context =
                     ConsumeMessageContext::new(consumer_group, Some(batch), queue, namespace);
                 self.consume_message_hooks
@@ -2787,6 +2781,78 @@ mod tests {
 
         assert_eq!(messages.len(), 1);
         assert_eq!(events.lock().unwrap().as_slice(), ["before", "after"]);
+    }
+
+    #[tokio::test]
+    async fn lite_poll_passes_the_live_facade_group_unchanged_to_hooks() {
+        struct GroupHook(Arc<Mutex<Vec<Option<String>>>>);
+
+        impl ConsumeMessageHook for GroupHook {
+            fn hook_name(&self) -> &str {
+                "lite-live-group-hook"
+            }
+
+            fn consume_message_before(&self, context: &mut ConsumeMessageContext) {
+                self.0.lock().unwrap().push(context.consumer_group.clone());
+            }
+
+            fn consume_message_after(&self, context: &mut ConsumeMessageContext) {
+                self.0.lock().unwrap().push(context.consumer_group.clone());
+            }
+        }
+
+        for (namespace, live_group) in [
+            (Some("tenant"), Some("later-group")),
+            (Some("tenant"), Some("tenant%qualified-group")),
+            (Some("tenant"), None),
+            (None, Some("plain-group")),
+            (None, None),
+        ] {
+            let mut config = LitePullConsumerConfig::new("initial-group").unwrap();
+            config
+                .client_config_mut()
+                .set_namespace(namespace.map(str::to_owned));
+            let consumer = LitePullConsumer::new(config).unwrap();
+            consumer.running.store(true, Ordering::Release);
+            consumer.auto_commit.store(false, Ordering::Release);
+            consumer.set_consumer_group_nullable(live_group.map(str::to_owned));
+            let observed = Arc::new(Mutex::new(Vec::new()));
+            consumer.register_consume_message_hook(Arc::new(GroupHook(observed.clone())));
+
+            let queue = MessageQueue::new("orders", "broker-a", 0);
+            consumer.queue_states.lock().unwrap().insert(
+                queue.clone(),
+                QueueState {
+                    generation: 7,
+                    fetched_offset: Some(1),
+                    delivered_offset: None,
+                    paused: false,
+                },
+            );
+            let mut message =
+                crate::test_support::message_ext_from(Message::new("orders", b"body".to_vec()));
+            message.set_queue_offset(0);
+            consumer
+                .buffer
+                .lock()
+                .unwrap()
+                .batches
+                .push_back(BufferedBatch {
+                    queue,
+                    generation: 7,
+                    messages: vec![message],
+                    body_bytes: 4,
+                });
+            consumer.buffer.lock().unwrap().messages = 1;
+            consumer.buffer.lock().unwrap().body_bytes = 4;
+
+            assert_eq!(consumer.poll(Some(0)).await.unwrap().len(), 1);
+            assert_eq!(
+                observed.lock().unwrap().as_slice(),
+                [live_group.map(str::to_owned), live_group.map(str::to_owned)],
+                "namespace={namespace:?}"
+            );
+        }
     }
 
     #[test]

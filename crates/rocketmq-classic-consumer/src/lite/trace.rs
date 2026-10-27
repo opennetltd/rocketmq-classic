@@ -113,22 +113,21 @@ impl LiteTraceContext {
 /// Internal Java-compatible consume hook installed when Lite tracing is enabled.
 pub(crate) struct LiteConsumeTraceHook {
     dispatcher: Arc<LiteTraceDispatcher>,
-    consumer_group: String,
     client_config: ClientConfig,
 }
 
 impl LiteConsumeTraceHook {
-    pub(crate) fn new(
-        dispatcher: Arc<LiteTraceDispatcher>,
-        consumer_group: impl Into<String>,
-        client_config: ClientConfig,
-    ) -> Self {
+    pub(crate) fn new(dispatcher: Arc<LiteTraceDispatcher>, client_config: ClientConfig) -> Self {
         Self {
             dispatcher,
-            consumer_group: consumer_group.into(),
             client_config,
         }
     }
+}
+
+struct LiteConsumeTraceBefore {
+    timestamp_millis: i64,
+    consumer_group: Option<String>,
 }
 
 impl ConsumeMessageHook for LiteConsumeTraceHook {
@@ -137,24 +136,31 @@ impl ConsumeMessageHook for LiteConsumeTraceHook {
     }
 
     fn consume_message_before(&self, context: &mut ConsumeMessageContext) {
-        context.trace_context = Some(Box::new(epoch_millis()));
+        context.trace_context = Some(Box::new(LiteConsumeTraceBefore {
+            timestamp_millis: epoch_millis(),
+            consumer_group: context
+                .consumer_group
+                .as_deref()
+                .map(|group| without_namespace(&self.client_config, group)),
+        }));
     }
 
     fn consume_message_after(&self, context: &mut ConsumeMessageContext) {
         let Some(messages) = context.messages.as_deref() else {
             return;
         };
-        let before_timestamp = context
+        let Some(before) = context
             .trace_context
             .as_deref()
-            .and_then(|value| value.downcast_ref::<i64>())
-            .copied()
-            .unwrap_or_else(epoch_millis);
+            .and_then(|value| value.downcast_ref::<LiteConsumeTraceBefore>())
+        else {
+            return;
+        };
         for trace in consume_contexts(
             messages,
-            &self.consumer_group,
+            before.consumer_group.as_deref(),
             &self.client_config,
-            before_timestamp,
+            before.timestamp_millis,
             epoch_millis(),
         ) {
             let _ = self.dispatcher.append(trace);
@@ -180,7 +186,7 @@ fn java_nullable(value: Option<&str>) -> String {
 
 pub(crate) fn consume_contexts(
     messages: &[MessageExt],
-    consumer_group: &str,
+    consumer_group: Option<&str>,
     client_config: &ClientConfig,
     before_timestamp_millis: i64,
     after_timestamp_millis: i64,
@@ -188,7 +194,9 @@ pub(crate) fn consume_contexts(
     if messages.is_empty() {
         return Vec::new();
     }
-    let group_name = without_namespace(client_config, consumer_group);
+    let group_name = consumer_group
+        .map(|group| without_namespace(client_config, group))
+        .unwrap_or_else(|| "null".to_owned());
     let mut region_id = None;
     let mut trace_beans = Vec::with_capacity(messages.len());
     for message in messages {
@@ -648,7 +656,13 @@ mod tests {
             .set_system_property(PROPERTY_TRACE_SWITCH, "false")
             .unwrap();
 
-        let contexts = consume_contexts(&[included, excluded], "ns%workers", &client, 1_000, 1_020);
+        let contexts = consume_contexts(
+            &[included, excluded],
+            Some("ns%workers"),
+            &client,
+            1_000,
+            1_020,
+        );
         assert_eq!(contexts.len(), 2);
         assert_eq!(contexts[0].group_name, "workers");
         assert_eq!(contexts[0].trace_beans.len(), 1);
@@ -657,7 +671,7 @@ mod tests {
         assert_eq!(contexts[0].trace_beans[0].retry_times, 2);
         assert_eq!(contexts[1].cost_time_millis, 10);
         assert_eq!(contexts[0].request_id, contexts[1].request_id);
-        assert!(consume_contexts(&[], "workers", &client, 1, 2).is_empty());
+        assert!(consume_contexts(&[], Some("workers"), &client, 1, 2).is_empty());
     }
 
     #[test]
@@ -666,7 +680,7 @@ mod tests {
         client.set_namespace(Some("ns".to_owned()));
         let dispatcher =
             Arc::new(LiteTraceDispatcher::new(&client, "ns%workers", None, None).unwrap());
-        let hook = LiteConsumeTraceHook::new(dispatcher.clone(), "ns%workers", client.clone());
+        let hook = LiteConsumeTraceHook::new(dispatcher.clone(), client.clone());
         let mut message =
             crate::test_support::message_ext_from(Message::new("ns%orders", b"body".to_vec()));
         message.set_message_id(Some("msg-1".to_owned()));
@@ -703,6 +717,56 @@ mod tests {
         assert_eq!(before.trace_beans[0].topic, "orders");
         assert_eq!(before.request_id, after.request_id);
         assert!(after.success);
+    }
+
+    #[test]
+    fn consume_trace_rows_keep_the_before_hook_live_group_identity() {
+        let cases = [
+            (Some("tenant"), Some("later-group"), "later-group"),
+            (
+                Some("tenant"),
+                Some("tenant%qualified-group"),
+                "qualified-group",
+            ),
+            (Some("tenant"), None, "null"),
+            (None, Some("plain-group"), "plain-group"),
+            (None, None, "null"),
+        ];
+
+        for (namespace, live_group, expected_group) in cases {
+            let mut client = ClientConfig::new("lite-trace-live-group");
+            client.set_namespace(namespace.map(str::to_owned));
+            let dispatcher =
+                Arc::new(LiteTraceDispatcher::new(&client, "initial-group", None, None).unwrap());
+            let hook = LiteConsumeTraceHook::new(dispatcher.clone(), client.clone());
+            let message =
+                crate::test_support::message_ext_from(Message::new("orders", b"body".to_vec()));
+            let mut context = ConsumeMessageContext::new(
+                live_group.map(str::to_owned),
+                Some(vec![message]),
+                rocketmq_classic_common::message::MessageQueue::new("orders", "broker-a", 0),
+                namespace.map(str::to_owned),
+            );
+
+            hook.consume_message_before(&mut context);
+            context.consumer_group = Some("mutated-after-before".to_owned());
+            hook.consume_message_after(&mut context);
+
+            let mut receiver = dispatcher
+                .receiver
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take()
+                .unwrap();
+            let Some(TraceCommand::Append(before)) = receiver.try_recv().ok() else {
+                panic!("Lite trace hook did not append the before record");
+            };
+            let Some(TraceCommand::Append(after)) = receiver.try_recv().ok() else {
+                panic!("Lite trace hook did not append the after record");
+            };
+            assert_eq!(before.group_name, expected_group, "namespace={namespace:?}");
+            assert_eq!(after.group_name, expected_group, "namespace={namespace:?}");
+        }
     }
 
     #[test]
