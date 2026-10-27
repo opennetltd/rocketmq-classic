@@ -1129,16 +1129,19 @@ impl LitePullConsumer {
         loop {
             let notified = self.ready.notified();
             if let Some((queue, batch)) = self.take_ready_batch_with_queue() {
+                if self.consume_message_hooks.is_empty() {
+                    return Ok(batch);
+                }
                 let mut client_config = self.config.client_config().clone();
                 let namespace = client_config.get_namespace()?.map(str::to_owned);
-                let raw_consumer_group = self
-                    .get_consumer_group()
-                    .ok_or(PullConsumerError::InvalidConsumerGroup)?;
-                let consumer_group = client_config
-                    .with_namespace(Some(&raw_consumer_group))?
-                    .unwrap_or(raw_consumer_group);
+                let consumer_group = match self.get_consumer_group() {
+                    Some(raw_consumer_group) => {
+                        client_config.with_namespace(Some(&raw_consumer_group))?
+                    }
+                    None => None,
+                };
                 let mut consume_context =
-                    ConsumeMessageContext::new(Some(consumer_group), Some(batch), queue, namespace);
+                    ConsumeMessageContext::new(consumer_group, Some(batch), queue, namespace);
                 self.consume_message_hooks
                     .execute_before(&mut consume_context);
                 consume_context.status = Some("CONSUME_SUCCESS".to_owned());
@@ -2637,7 +2640,7 @@ mod tests {
                 assert!(!context.success);
                 assert!(context.properties.is_none());
                 assert!(context.access_channel.is_none());
-                assert_eq!(context.consumer_group.as_deref(), Some("tenant%lite-hook"));
+                assert_eq!(context.consumer_group, None);
                 assert_eq!(context.namespace.as_deref(), Some("tenant"));
                 context.properties = Some(std::collections::HashMap::new());
                 context
@@ -2676,6 +2679,7 @@ mod tests {
         consumer.auto_commit.store(false, Ordering::Release);
         let events = Arc::new(Mutex::new(Vec::new()));
         consumer.register_consume_message_hook(Arc::new(Hook(events.clone())));
+        consumer.set_consumer_group_nullable(None);
         let queue = MessageQueue::new("orders", "broker-a", 0);
         consumer.queue_states.lock().unwrap().insert(
             queue.clone(),

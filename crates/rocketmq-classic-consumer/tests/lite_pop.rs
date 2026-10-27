@@ -799,9 +799,11 @@ async fn scripted_lite_helpers_cover_assignment_offsets_commits_and_name_server_
     assert_eq!(pull_fields.get("subscription"), Some(&"green".to_owned()));
     assert_eq!(pull_fields.get("expressionType"), Some(&"TAG".to_owned()));
     pull_reply(first_pull, response::SUCCESS, 1, true);
+    consumer.set_consumer_group_nullable(None);
     let messages = consumer.poll(None).await.unwrap();
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0].queue_offset(), 0);
+    consumer.set_consumer_group("lite-helper-flow");
 
     let next_pull = next_request(&mut requests, request::LITE_PULL_MESSAGE).await;
     assert_eq!(

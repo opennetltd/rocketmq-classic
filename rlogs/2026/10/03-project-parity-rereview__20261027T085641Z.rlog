@@ -1,0 +1,16 @@
+# Project parity rereview remediation — 2026-10-27
+
+- Plan: `plan/2026/10/03-project-parity-rereview.md` with Traditional Chinese companion; Java oracle Apache RocketMQ client 5.5.1.
+- Starting revision: `9b006383fd8c81490c673244d69853b3d8ee89eb`.
+- Branch: `fix/parity-rereview-2026-10-27`.
+- User constraint: the plan may be committed; keep all files under `plan/2026/10/03-project-parity-rereview-evidence/` out of commits. The previous `02-project-parity-review-evidence/` is also preserved and excluded.
+- The `coding` skill phased workflow is in use. The plan and this append-only log are eligible for commit; evidence files are not.
+
+## Phase 1 — F01 Lite poll delivery with nullable group
+
+- `LitePullConsumer::poll` now skips consume-hook context construction when no hooks are installed, so a nullable live group cannot fail after the ready batch has been removed.
+- When hooks are installed, a null live group is retained as `None` in `ConsumeMessageContext`, matching Java. Group/namespace preparation occurs only for the hook path.
+- Extended the external scripted Lite flow to set the group to null after startup, deliver a valid queued message, restore the group, commit the queue, and assert persisted offset 1. Updated the hook unit case to verify a null group reaches both callbacks' shared context path.
+- Focused checks passed: `cargo test -p rocketmq-classic-consumer --locked --test lite_pop scripted_lite_helpers_cover_assignment_offsets_commits_and_name_server_updates` and `cargo test -p rocketmq-classic-consumer --locked lite_poll_consume_hooks_run_around_delivery_with_queue_metadata`.
+- `cargo fmt --all -- --check` and `git diff --check` will be recorded after final phase checks. Phase 1 commit is the changeset containing this entry.
+- Formatting follow-up: the initial format check identified one expected rustfmt layout change in the new hook-context construction; `cargo fmt --all` applied it, and the subsequent format check and `git diff --check` passed.
