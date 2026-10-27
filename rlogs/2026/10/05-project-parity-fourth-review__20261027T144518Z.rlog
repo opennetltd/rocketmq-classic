@@ -3,3 +3,9 @@
 - Read the English and Traditional Chinese fourth-review plans; confirmed H01 trace namespace overload and Lite before/after stage mismatch.
 - Preserved all existing untracked evidence directories. Evidence is excluded from all commits.
 - Plan files are staged unchanged in this initial documentation commit, as authorized by the user.
+
+## Phase 1 — Consumer and Lite trace namespace parity
+- Replaced configured-namespace removal with Java's one-argument NamespaceUtil operation in General Consumer and Lite group/topic trace fields.
+- Lite now stores a once-normalized before group and derives SubAfter by normalizing that snapshot again; callback-time group mutation remains ignored.
+- Added regression cases for foreign and nested prefixes, absent/configured namespaces, null/empty groups, retry/DLQ topics, and system resources; General Consumer verifies its nested two-stage group and foreign topic.
+- Validation: cargo fmt --all; cargo test --offline --locked -p rocketmq-classic-consumer -p rocketmq-classic-producer trace (Consumer trace tests passed; full final gates remain).

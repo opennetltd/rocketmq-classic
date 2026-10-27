@@ -4927,10 +4927,7 @@ impl PushConsumer {
             return;
         }
         self.consume_message_hooks
-            .register(Arc::new(ConsumeTraceHook::new(
-                dispatcher.clone(),
-                client_config.clone(),
-            )));
+            .register(Arc::new(ConsumeTraceHook::new(dispatcher.clone())));
         let _ = self.trace_dispatcher.set(dispatcher);
     }
 

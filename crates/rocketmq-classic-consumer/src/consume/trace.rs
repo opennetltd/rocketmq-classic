@@ -1,25 +1,19 @@
 use std::sync::Arc;
 
 use rocketmq_classic_common::message::{MessageExt, constants::*};
-use rocketmq_classic_core::{
-    config::ClientConfig,
-    trace::{TraceBean, TraceContext, TraceType},
-};
+use rocketmq_classic_core::trace::{TraceBean, TraceContext, TraceType};
 use rocketmq_classic_producer::TraceDispatcher;
+use rocketmq_classic_protocol::NamespaceUtil;
 
 use super::{ConsumeMessageContext, ConsumeMessageHook};
 
 pub(crate) struct ConsumeTraceHook {
     dispatcher: Arc<TraceDispatcher>,
-    client_config: ClientConfig,
 }
 
 impl ConsumeTraceHook {
-    pub(crate) fn new(dispatcher: Arc<TraceDispatcher>, client_config: ClientConfig) -> Self {
-        Self {
-            dispatcher,
-            client_config,
-        }
+    pub(crate) fn new(dispatcher: Arc<TraceDispatcher>) -> Self {
+        Self { dispatcher }
     }
 }
 
@@ -36,10 +30,7 @@ impl ConsumeMessageHook for ConsumeTraceHook {
             return;
         }
         let mut before = TraceContext::new(TraceType::SubBefore);
-        before.group_name = context
-            .consumer_group
-            .as_deref()
-            .map(|group| without_namespace(&self.client_config, group));
+        before.group_name = context.consumer_group.as_deref().map(without_namespace);
         let mut region_id = None;
         let mut trace_beans = Vec::with_capacity(messages.len());
         for message in messages {
@@ -51,7 +42,7 @@ impl ConsumeMessageHook for ConsumeTraceHook {
                 continue;
             }
             region_id = properties.get(PROPERTY_MSG_REGION).cloned();
-            trace_beans.push(trace_bean(message, &self.client_config));
+            trace_beans.push(trace_bean(message));
         }
         if !trace_beans.is_empty() {
             before.region_id = region_id;
@@ -70,53 +61,56 @@ impl ConsumeMessageHook for ConsumeTraceHook {
         else {
             return;
         };
-        let Some(before_beans) = before.trace_beans.as_ref() else {
-            return;
-        };
-        if before_beans.is_empty() {
-            return;
+        if let Some(after) = consume_after_trace_context(before, context) {
+            let _ = self.dispatcher.append(after);
         }
-        let Some(messages) = context
-            .messages
-            .as_ref()
-            .filter(|messages| !messages.is_empty())
-        else {
-            return;
-        };
-        let denominator = i64::try_from(messages.len()).unwrap_or(i64::MAX).max(1);
-        let cost = epoch_millis()
-            .saturating_sub(before.timestamp_millis)
-            .checked_div(denominator)
-            .unwrap_or_default();
-        let after = TraceContext {
-            trace_type: Some(TraceType::SubAfter),
-            timestamp_millis: epoch_millis(),
-            region_id: before.region_id.clone(),
-            region_name: before.region_name.clone(),
-            group_name: before
-                .group_name
-                .clone()
-                .map(|group| without_namespace(&self.client_config, &group)),
-            cost_time_millis: i32::try_from(cost).unwrap_or(i32::MAX),
-            success: context.success,
-            request_id: before.request_id.clone(),
-            context_code: context
-                .properties
-                .as_ref()
-                .and_then(|properties| properties.get("CONSUME_CONTEXT_TYPE"))
-                .and_then(|value| consume_return_type_ordinal(value))
-                .unwrap_or_default(),
-            access_channel: context.access_channel,
-            trace_beans: Some(before_beans.clone()),
-        };
-        let _ = self.dispatcher.append(after);
     }
 }
 
-fn trace_bean(message: &MessageExt, client_config: &ClientConfig) -> TraceBean {
+fn consume_after_trace_context(
+    before: &TraceContext,
+    context: &ConsumeMessageContext,
+) -> Option<TraceContext> {
+    let before_beans = before.trace_beans.as_ref()?;
+    if before_beans.is_empty() {
+        return None;
+    }
+    let messages = context
+        .messages
+        .as_ref()
+        .filter(|messages| !messages.is_empty())?;
+    let denominator = i64::try_from(messages.len()).unwrap_or(i64::MAX).max(1);
+    let cost = epoch_millis()
+        .saturating_sub(before.timestamp_millis)
+        .checked_div(denominator)
+        .unwrap_or_default();
+    Some(TraceContext {
+        trace_type: Some(TraceType::SubAfter),
+        timestamp_millis: epoch_millis(),
+        region_id: before.region_id.clone(),
+        region_name: before.region_name.clone(),
+        group_name: before
+            .group_name
+            .clone()
+            .map(|group| without_namespace(&group)),
+        cost_time_millis: i32::try_from(cost).unwrap_or(i32::MAX),
+        success: context.success,
+        request_id: before.request_id.clone(),
+        context_code: context
+            .properties
+            .as_ref()
+            .and_then(|properties| properties.get("CONSUME_CONTEXT_TYPE"))
+            .and_then(|value| consume_return_type_ordinal(value))
+            .unwrap_or_default(),
+        access_channel: context.access_channel,
+        trace_beans: Some(before_beans.clone()),
+    })
+}
+
+fn trace_bean(message: &MessageExt) -> TraceBean {
     let base_message = &**message;
     TraceBean {
-        topic: Some(without_namespace(client_config, base_message.topic())),
+        topic: Some(without_namespace(base_message.topic())),
         message_id: message.message_id().map(str::to_owned),
         offset_message_id: None,
         tags: base_message.tags(),
@@ -143,13 +137,8 @@ fn consume_return_type_ordinal(value: &str) -> Option<i32> {
     }
 }
 
-fn without_namespace(client_config: &ClientConfig, value: &str) -> String {
-    let mut client_config = client_config.clone();
-    client_config
-        .without_namespace(Some(value))
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| value.to_owned())
+fn without_namespace(value: &str) -> String {
+    NamespaceUtil::without_namespace(Some(value)).unwrap_or_default()
 }
 
 fn epoch_millis() -> i64 {
@@ -165,6 +154,7 @@ mod tests {
     use std::sync::Arc;
 
     use rocketmq_classic_common::message::{Message, MessageQueue};
+    use rocketmq_classic_core::config::ClientConfig;
     use rocketmq_classic_core::runtime::ClientRuntimeManager;
     use rocketmq_classic_producer::TraceProducerKind;
 
@@ -185,9 +175,9 @@ mod tests {
             )
             .unwrap(),
         );
-        let hook = ConsumeTraceHook::new(dispatcher, client_config);
+        let hook = ConsumeTraceHook::new(dispatcher);
         let mut message =
-            crate::test_support::message_ext_from(Message::new("tenant%orders", b"body".to_vec()));
+            crate::test_support::message_ext_from(Message::new("other%orders", b"body".to_vec()));
         message.set_message_id(Some("message-1".into()));
         message.set_store_size(4);
         message.set_store_timestamp(1_700);
@@ -197,9 +187,9 @@ mod tests {
             .set_system_property(PROPERTY_MSG_REGION, "region-a")
             .unwrap();
         let mut context = ConsumeMessageContext::new(
-            Some("tenant%workers".to_owned()),
+            Some("tenant%tenant%workers".to_owned()),
             Some(vec![message]),
-            MessageQueue::new("tenant%orders", "broker-a", 0),
+            MessageQueue::new("other%orders", "broker-a", 0),
             Some("tenant".into()),
         );
 
@@ -216,7 +206,7 @@ mod tests {
                 .as_deref()
                 .is_some_and(|id| !id.is_empty())
         );
-        assert_eq!(before.group_name.as_deref(), Some("workers"));
+        assert_eq!(before.group_name.as_deref(), Some("tenant%workers"));
         assert_eq!(before.region_id.as_deref(), Some("region-a"));
         assert_eq!(
             before.trace_beans.as_ref().unwrap()[0].topic.as_deref(),
@@ -244,6 +234,18 @@ mod tests {
                 .parse::<std::net::IpAddr>()
                 .is_ok()
         }));
+        let before_snapshot = before.clone();
+        context.consumer_group = Some("changed-between-callbacks".to_owned());
+        context.success = true;
+        let after = consume_after_trace_context(&before_snapshot, &context)
+            .expect("valid before context creates a SubAfter trace");
+        assert_eq!(after.trace_type, Some(TraceType::SubAfter));
+        assert_eq!(after.group_name.as_deref(), Some("workers"));
+        assert_eq!(
+            after.trace_beans.as_ref().unwrap()[0].topic.as_deref(),
+            Some("orders")
+        );
+        assert!(after.success);
 
         let mut trace_off =
             crate::test_support::message_ext_from(Message::new("orders", b"body".to_vec()));
