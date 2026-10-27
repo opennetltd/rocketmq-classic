@@ -9,3 +9,8 @@
 - Lite now stores a once-normalized before group and derives SubAfter by normalizing that snapshot again; callback-time group mutation remains ignored.
 - Added regression cases for foreign and nested prefixes, absent/configured namespaces, null/empty groups, retry/DLQ topics, and system resources; General Consumer verifies its nested two-stage group and foreign topic.
 - Validation: cargo fmt --all; cargo test --offline --locked -p rocketmq-classic-consumer -p rocketmq-classic-producer trace (Consumer trace tests passed; full final gates remain).
+
+## Phase 2 — Producer trace namespace parity
+- Send, EndTransaction, and Recall trace builders now remove any resource namespace independently of ClientConfig, matching Java's overload; host-client ID remains derived from ClientConfig where required.
+- Regression tests assert public group  and Pub topic normalization without configured namespace, plus foreign-prefix EndTransaction and Recall group/topic values.
+- Validation: cargo test --offline --locked -p rocketmq-classic-producer trace (9 unit tests and 3 trace lifecycle integration tests passed); cargo fmt --all -- --check; git diff --check.

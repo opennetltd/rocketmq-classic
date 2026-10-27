@@ -1249,7 +1249,6 @@ impl Producer {
         self.register_send_message_hook(Arc::new(crate::trace::ProducerSendTraceHook::new(
             dispatcher.clone(),
             producer_group,
-            self.config.client.clone(),
         )));
         self.register_end_transaction_hook(Arc::new(
             crate::trace::ProducerEndTransactionTraceHook::new(
@@ -1376,10 +1375,8 @@ impl Producer {
         runtime: &ClientRuntime,
         dispatcher: Arc<crate::trace::TraceDispatcher>,
     ) {
-        let hook: Arc<dyn RpcHook> = Arc::new(crate::trace::RecallMessageTraceHook::new(
-            dispatcher,
-            self.config.client.clone(),
-        ));
+        let hook: Arc<dyn RpcHook> =
+            Arc::new(crate::trace::RecallMessageTraceHook::new(dispatcher));
         runtime.remoting().add_rpc_hook(hook.clone());
         *self.recall_trace_hook.lock().await = Some(hook);
     }

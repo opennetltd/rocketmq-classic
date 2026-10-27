@@ -14,6 +14,7 @@ use rocketmq_classic_core::{
     trace::{MessageType, TraceBean, TraceContext, TraceType},
 };
 use rocketmq_classic_protocol::{
+    NamespaceUtil,
     codes::{request, response},
     header::{CommandHeader, RecallMessageRequestHeader},
 };
@@ -48,7 +49,6 @@ static TRACE_PRODUCER_COUNTER: AtomicU64 = AtomicU64::new(0);
 pub(crate) struct ProducerSendTraceHook {
     dispatcher: Arc<TraceDispatcher>,
     producer_group: String,
-    client_config: ClientConfig,
 }
 
 pub(crate) struct ProducerEndTransactionTraceHook {
@@ -72,30 +72,21 @@ impl ProducerEndTransactionTraceHook {
 }
 
 impl ProducerSendTraceHook {
-    pub(crate) fn new(
-        dispatcher: Arc<TraceDispatcher>,
-        producer_group: impl Into<String>,
-        client_config: ClientConfig,
-    ) -> Self {
+    pub(crate) fn new(dispatcher: Arc<TraceDispatcher>, producer_group: impl Into<String>) -> Self {
         Self {
             dispatcher,
             producer_group: producer_group.into(),
-            client_config,
         }
     }
 }
 
 pub(crate) struct RecallMessageTraceHook {
     dispatcher: Arc<TraceDispatcher>,
-    client_config: ClientConfig,
 }
 
 impl RecallMessageTraceHook {
-    pub(crate) fn new(dispatcher: Arc<TraceDispatcher>, client_config: ClientConfig) -> Self {
-        Self {
-            dispatcher,
-            client_config,
-        }
+    pub(crate) fn new(dispatcher: Arc<TraceDispatcher>) -> Self {
+        Self { dispatcher }
     }
 }
 
@@ -106,9 +97,7 @@ impl RpcHook for RecallMessageTraceHook {
         request_command: &RemotingCommand,
         response_command: &RemotingCommand,
     ) {
-        if let Some(trace) =
-            recall_trace_context(&self.client_config, request_command, response_command)
-        {
+        if let Some(trace) = recall_trace_context(request_command, response_command) {
             let _ = self.dispatcher.append(trace);
         }
     }
@@ -123,7 +112,6 @@ fn recall_trace_property_value(value: Option<&str>) -> bool {
 }
 
 fn recall_trace_context(
-    client_config: &ClientConfig,
     request_command: &RemotingCommand,
     response_command: &RemotingCommand,
 ) -> Option<TraceContext> {
@@ -139,9 +127,7 @@ fn recall_trace_context(
     let request_header = RecallMessageRequestHeader::decode_fields(request_fields).ok()?;
     let recall_handle =
         crate::RecallMessageHandle::decode_handle(request_header.get_recall_handle()).ok()?;
-    let group_name = request_header
-        .get_producer_group()
-        .map(|group| without_namespace(client_config, group));
+    let group_name = request_header.get_producer_group().map(without_namespace);
     Some(TraceContext {
         trace_type: Some(TraceType::Recall),
         timestamp_millis: epoch_millis(),
@@ -154,7 +140,7 @@ fn recall_trace_context(
         context_code: 0,
         access_channel: None,
         trace_beans: Some(vec![TraceBean {
-            topic: Some(without_namespace(client_config, request_header.get_topic())),
+            topic: Some(without_namespace(request_header.get_topic())),
             message_id: Some(recall_handle.message_id().to_owned()),
             offset_message_id: None,
             tags: None,
@@ -182,13 +168,9 @@ impl SendMessageHook for ProducerSendTraceHook {
             return;
         }
         let mut trace_context = TraceContext::new(TraceType::Pub);
-        trace_context.group_name =
-            Some(without_namespace(&self.client_config, &self.producer_group));
+        trace_context.group_name = Some(without_namespace(&self.producer_group));
         trace_context.trace_beans = Some(vec![TraceBean {
-            topic: Some(without_namespace(
-                &self.client_config,
-                context.message.topic(),
-            )),
+            topic: Some(without_namespace(context.message.topic())),
             message_id: None,
             offset_message_id: None,
             tags: context.message.tags(),
@@ -292,14 +274,14 @@ fn end_transaction_trace_context(
         timestamp_millis: epoch_millis(),
         region_id: Some(region_id),
         region_name: Some(String::new()),
-        group_name: Some(without_namespace(client_config, producer_group)),
+        group_name: Some(without_namespace(producer_group)),
         cost_time_millis: 0,
         success: true,
         request_id: None,
         context_code: 0,
         access_channel: None,
         trace_beans: Some(vec![TraceBean {
-            topic: Some(without_namespace(client_config, message.topic())),
+            topic: Some(without_namespace(message.topic())),
             message_id: Some(data.message_id.to_owned()),
             offset_message_id: None,
             tags: message.tags(),
@@ -360,13 +342,8 @@ impl TraceProducerKind {
     }
 }
 
-fn without_namespace(client_config: &ClientConfig, value: &str) -> String {
-    let mut client_config = client_config.clone();
-    client_config
-        .without_namespace(Some(value))
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| value.to_owned())
+fn without_namespace(value: &str) -> String {
+    NamespaceUtil::without_namespace(Some(value)).unwrap_or_default()
 }
 
 fn epoch_millis() -> i64 {
@@ -846,12 +823,13 @@ mod tests {
         let mut client_config = ClientConfig::default();
         client_config.set_client_ip(Some("192.0.2.17".into()));
         client_config.set_instance_name(Some("trace-host".into()));
+        client_config.set_namespace(Some("tenant".into()));
         let expected_client_id = "192.0.2.17@trace-host";
-        let message = Message::new("orders", b"transaction".to_vec());
+        let message = Message::new("other%orders", b"transaction".to_vec());
 
         let context = end_transaction_trace_context(
             &client_config,
-            "orders-producer",
+            "other%producer-group",
             &message,
             EndTransactionTraceData {
                 message_id: "message-id",
@@ -867,6 +845,11 @@ mod tests {
                 .client_host
                 .as_deref(),
             Some(expected_client_id)
+        );
+        assert_eq!(context.group_name.as_deref(), Some("producer-group"));
+        assert_eq!(
+            context.trace_beans.as_ref().unwrap()[0].topic.as_deref(),
+            Some("orders")
         );
     }
 
@@ -960,16 +943,15 @@ mod tests {
             )
             .unwrap(),
         );
-        let hook =
-            ProducerSendTraceHook::new(dispatcher.clone(), "trace-hook-producer", client_config);
-        let mut message = Message::new("orders", b"body".to_vec());
+        let hook = ProducerSendTraceHook::new(dispatcher.clone(), "other%workers");
+        let mut message = Message::new("other%orders", b"body".to_vec());
         message.set_tags("paid").unwrap();
         message.set_keys("order-1").unwrap();
         let mut context = SendMessageContext {
-            producer_group: Some("trace-hook-producer".into()),
+            producer_group: Some("other%workers".into()),
             producer: &producer,
             message: &mut message,
-            queue: MessageQueue::new("orders", "broker-a", 0),
+            queue: MessageQueue::new("other%orders", "broker-a", 0),
             broker_addr: "127.0.0.1:10911".into(),
             born_host: None,
             communication_mode: CommunicationMode::Sync,
@@ -986,7 +968,7 @@ mod tests {
             status: crate::SendStatus::SendOk,
             msg_id: "message-1".into(),
             offset_msg_id: Some("offset-1".into()),
-            topic: "orders".into(),
+            topic: "other%orders".into(),
             broker_name: "broker-a".into(),
             queue_id: 0,
             queue_offset: 12,
@@ -1013,7 +995,7 @@ mod tests {
                 .as_deref()
                 .is_some_and(|request_id| !request_id.is_empty())
         );
-        assert_eq!(trace.group_name.as_deref(), Some("trace-hook-producer"));
+        assert_eq!(trace.group_name.as_deref(), Some("workers"));
         assert_eq!(
             trace.trace_beans.as_ref().unwrap()[0].topic.as_deref(),
             Some("orders")
@@ -1036,7 +1018,7 @@ mod tests {
         );
         assert_eq!(bean.message_type, Some(SendMessageType::Normal));
 
-        let mut not_traced = Message::new("orders", b"body".to_vec());
+        let mut not_traced = Message::new("other%orders", b"body".to_vec());
         context.message = &mut not_traced;
         context.send_result.as_mut().unwrap().trace_on = false;
         context.trace_context = None;
@@ -1047,14 +1029,12 @@ mod tests {
 
     #[test]
     fn recall_trace_context_matches_java_fields_and_unwraps_namespace() {
-        let mut client_config = ClientConfig::default();
-        client_config.set_namespace(Some("tenant".into()));
         let recall_handle =
             crate::RecallMessageHandle::build_handle("orders", "broker-a", "123", "message-1");
         let header = {
             let mut __phase18_header_0 = RecallMessageRequestHeader::default();
-            __phase18_header_0.set_producer_group(Some("tenant%producer-group".into()));
-            __phase18_header_0.set_topic("tenant%orders".into());
+            __phase18_header_0.set_producer_group(Some("other%producer-group".into()));
+            __phase18_header_0.set_topic("other%orders".into());
             __phase18_header_0.set_recall_handle(recall_handle);
             __phase18_header_0
         };
@@ -1077,7 +1057,7 @@ mod tests {
             ..RemotingCommand::default()
         };
 
-        let trace = recall_trace_context(&client_config, &request_command, &response_command)
+        let trace = recall_trace_context(&request_command, &response_command)
             .expect("valid recall response creates trace context");
         assert_eq!(trace.trace_type, Some(TraceType::Recall));
         assert_eq!(trace.group_name.as_deref(), Some("producer-group"));
@@ -1098,18 +1078,11 @@ mod tests {
             ..response_command
         };
         assert!(
-            !recall_trace_context(&client_config, &request_command, &failed_response)
+            !recall_trace_context(&request_command, &failed_response)
                 .unwrap()
                 .success
         );
-        assert!(
-            recall_trace_context(
-                &client_config,
-                &request_command,
-                &RemotingCommand::default()
-            )
-            .is_none()
-        );
+        assert!(recall_trace_context(&request_command, &RemotingCommand::default()).is_none());
     }
 
     #[test]
