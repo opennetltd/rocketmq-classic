@@ -175,3 +175,6 @@ compat/java-reference/java-home-before-store-class-init/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# Local parity review evidence; keep artifacts out of source commits.
+/evidence/
