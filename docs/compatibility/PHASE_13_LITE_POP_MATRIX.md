@@ -4,6 +4,19 @@ Java reference: `rocketmq-client:5.5.1`, source tag commit `efa1be59d6fc747ad220
 
 This matrix tracks Phase 13 implementation evidence. A lower-level request/header model does not establish completion of the high-level consumer flow.
 
+## Current status — 2026-10-27
+
+`P13-V02` passed on the current parity-remediation revision
+`7e0e9955f591f773c0f4b2f816951cf57dfd7580` on 2026-10-27 (118 seconds,
+clean source). Java and Rust matched POP delivery, expiry redelivery, ACK,
+visibility changes, replacement receipt ACK, mixed queue mapping, and
+malformed receipt rejection. Raw output is retained locally and uncommitted at
+`plan/2026/10/02-project-parity-review-evidence/live/P13-V02/20261027T070426Z/`.
+Earlier clean-source pass `99d2dc68` and the full 37/37 aggregate on
+`413f735a` remain historical records. Intermediate failed attempts below are
+superseded by the clean passes. See
+[current compatibility status](CURRENT_STATUS.md).
+
 | Java source/API | Behavior owned by Phase 13 | Rust mapping | Local evidence | Status |
 | --- | --- | --- | --- | --- |
 | `LitePullConsumer` / `DefaultLitePullConsumer` lifecycle | Constructors, start/shutdown/running state, namespace, group and lifecycle validation | `LitePullConsumer` facade and config | `fixtures/consumer/lite-pop.json`; `tests/lite_pop.rs` covers all five constructor forms, default group, running state, RPC-hook forwarding and namespaced requests | Locally covered |
@@ -12,8 +25,8 @@ This matrix tracks Phase 13 implementation evidence. A lower-level request/heade
 | Lite offsets | Commit set/map/single/all and deprecated `commitSync` aliases, auto-commit deadline, committed read, timestamp/min/max seek helpers | Lite offset state over existing offset store and admin RPCs | Scripted `lite_pop` cases cover invalid/valid seek, seek-to-begin/end bounds, timestamp lookup success/error, committed Broker read success/error, commit map/set/aliases, persisted offsets and restart position; unit cases cover best-effort auto-commit and empty commits | Locally covered |
 | Lite public settings | Defaults and validation for pull threads, batch, flow thresholds, poll timeout, long-poll timeout, consume origin/timestamp, offset store, selector strategy, unit mode, trace controls, broker selection | `LitePullConsumerConfig` configures construction; consumer getters/setters retain Java's post-construction behavior for settings Java reads while running | Java fixture records constructors and `enableStreamRequestType=true`; config tests cover defaults/configured values and validation; post-construction scripted tests verify pull batch changes reach the next request and `poll()` uses its updated timeout; engine setup test compares every inherited `ClientConfig` field; trace tests cover dispatcher lifecycle and wire rows | Locally covered |
 | Push POP assignment | `QUERY_ASSIGNMENT`, per-queue PULL/POP assignment, mode transitions, POP retry-topic subscription and assignment callback | Existing typed assignment RPC plus POP queue runtime | `RuntimeConsumerOperationsFixtures.popRebalance` invokes pinned `RebalanceImpl.updateMessageQueueAssignment` for expired assigned, dropped assigned and empty-assignment cases. `broker_assignment_error_preserves_worker_until_empty_assignment` compares those rows, scripts an expired queue replacement, checks a failed assignment leaves its live replacement in place, and verifies dropped-only retention until an authoritative empty assignment. Also `pop_to_pull_transition_*`, core `tests/extensions.rs` and `tests/runtime_lookup.rs`. Consumer operations fixture SHA-256: `3d7af953b38b28a742a0d3eeb2671e8484066203f06ade2c829e2485ead1de4f`. | Local expiry, error-preservation, dropped-retention, empty-assignment and mode-transition paths are covered |
-| Push POP pull/consume | POP scheduling, invisible-time bounds/default, batch size, queue flow control, subscription filtering, retry cutoff and listener dispatch | POP request worker and consumer service | `pop::tests` response mapping; `tests/lite_pop.rs` POP settings; `broker_assignment_error_preserves_worker_until_empty_assignment` observes worker `POP_MESSAGE`; `pop_consume_dispatches_ack_redelivery_and_replacement_receipt` scripts listener success and redelivery, ACK and replacement receipt | Local worker request and consume-dispatch paths are covered by separate scripted tests; Phase 19 live Broker validation remains pending |
-| POP receipt operations | Preserve `PROPERTY_POP_CK`, parse checkpoint/pop/invisible/revive/retry/Broker/queue/offset data, ACK, source-used batch ACK and change-invisibility receipt replacement | `PopReceipt` retains and validates the raw token; Push invokes ACK/change-invisibility RPCs; batch ACK body construction follows pinned merge keys and bit positions | `pop::tests` (receipt parsing, retry topic, mixed-queue mapping, fallback metadata, batch grouping/range); `pop_batch_expiry_*` checks expiry and malformed receipts; `expired_pop_batch_*` checks listener suppression and found-count release; `pop_consume_dispatches_ack_redelivery_and_replacement_receipt` scripts ACK, redelivery extension, replacement receipt and final ACK; core `tests/extensions.rs` and `tests/rpc_invoked_pop_ack_fixtures.rs` | Local receipt paths are covered; Phase 19 live Broker cases remain pending |
+| Push POP pull/consume | POP scheduling, invisible-time bounds/default, batch size, queue flow control, subscription filtering, retry cutoff and listener dispatch | POP request worker and consumer service | `pop::tests` response mapping; `tests/lite_pop.rs` POP settings; `broker_assignment_error_preserves_worker_until_empty_assignment` observes worker `POP_MESSAGE`; `pop_consume_dispatches_ack_redelivery_and_replacement_receipt` scripts listener success and redelivery, ACK and replacement receipt | Local worker and consume paths are covered; current `P13-V02` live replay passed on `7e0e9955`; full 37/37 matrix remains historical |
+| POP receipt operations | Preserve `PROPERTY_POP_CK`, parse checkpoint/pop/invisible/revive/retry/Broker/queue/offset data, ACK, source-used batch ACK and change-invisibility receipt replacement | `PopReceipt` retains and validates the raw token; Push invokes ACK/change-invisibility RPCs; batch ACK body construction follows pinned merge keys and bit positions | `pop::tests` (receipt parsing, retry topic, mixed-queue mapping, fallback metadata, batch grouping/range); `pop_batch_expiry_*` checks expiry and malformed receipts; `expired_pop_batch_*` checks listener suppression and found-count release; `pop_consume_dispatches_ack_redelivery_and_replacement_receipt` scripts ACK, redelivery extension, replacement receipt and final ACK; core `tests/extensions.rs` and `tests/rpc_invoked_pop_ack_fixtures.rs` | Local receipt paths are covered; current `P13-V02` live replay passed on `7e0e9955`; full 37/37 matrix remains historical |
 
 ## Lite public API crosswalk
 
@@ -90,8 +103,8 @@ Typed request/response bodies and low-level POP/ACK RPCs are already present in 
 
 Run `20261025T124657Z` verified offset 0 for both queues of all six Java/Rust
 groups after seeding, but the separate Java consume process observed offset 1
-before its first POP and got `POLLING_NOT_FOUND`. The lifecycle remains
-pending, and the exact transition after reset is not yet localized.
+before its first POP and got `POLLING_NOT_FOUND`. This failed intermediate
+attempt was superseded by the clean-source passing run recorded below.
 
 Run `20261025T125153Z` clarifies the offset reset result: Java's first POP
 request began at offset 0 and returned the seeded message. Offset 1 appeared
@@ -108,4 +121,4 @@ the subsequent clean Java/Rust run passed.
 
 ## Phase 19 live Broker result
 
-The historical clean-source run `20261025T130156Z` on `99d2dc68484ab8de43da86b997dc20dc49267c3c` passed `P13-V02`. Java and Rust matched delivery, expiry redelivery, ACK, visibility change, replacement receipt ACK, mixed queue mapping (`0,1`), and malformed receipt rejection. The manifest then recorded PASS, bringing live coverage to 26/37 with 11 cases pending. The runner removed the topic, containers, network, and volumes. Raw output is not retained.
+The clean-source run `20261025T130156Z` on `99d2dc68484ab8de43da86b997dc20dc49267c3c` passed `P13-V02`; the later 2026-10-26 aggregate recorded 37/37 on `413f735a`. The scenario was rerun on current revision `7e0e9955` in `20261027T070426Z` and passed the same Java/Rust receipt lifecycle assertions. Its raw output is retained locally and uncommitted under `plan/2026/10/02-project-parity-review-evidence/live/P13-V02/`. Each run's runner removed its scenario topic/groups and isolated containers, volumes, and network. The full 37-scenario matrix was not rerun on `7e0e9955`.

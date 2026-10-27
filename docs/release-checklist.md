@@ -12,6 +12,27 @@ storage rules.
 
 ## Compatibility and validation
 
+### Current status — 2026-10-27
+
+The R01–R09 parity-review fixes are locally verified on source revision
+`7e0e9955`; the consumer crate passed 287 unit tests, all integration suites,
+and 12 doctests, and the workspace tests, strict Clippy, offline Maven verify,
+metadata, formatting, and diff checks passed on that revision. Targeted clean-
+source live replays also passed: `P9-V03` (115 seconds), `P5-V02-consumer`
+(76 seconds), and `P13-V02` (118 seconds) against the pinned 5.3.4 image. Raw
+outputs are retained locally and uncommitted under
+`plan/2026/10/02-project-parity-review-evidence/live/`. The complete local
+aggregate and all 37/37 Phase 19 scenario passes remain historical results from
+`413f735a` on 2026-10-26; the full matrix was not rerun on `7e0e9955`. GitHub
+Actions was removed as a validation requirement on 2026-10-27. MAN-01 through
+MAN-04 remain open for owner inputs, so final compatibility/release approval is
+not recorded. See [current compatibility status](compatibility/CURRENT_STATUS.md)
+and the [2026-10-27 execution log](../rlogs/2026/10/02-project-parity-review__20261027T062249Z.rlog).
+
+The dated checklist entries below are preserved as run history. Their older
+`PENDING` or `open` statements are snapshots from those runs and are superseded
+where the current-status entry above records a later result.
+
 - [x] P18-V02 full current-code server-free refresh (`c497f376`, 2026-10-24):
   default/all-feature workspace tests and doctests, strict host Clippy, Windows
   GNU check/strict Clippy/test-harness compile-link, pinned offline Maven

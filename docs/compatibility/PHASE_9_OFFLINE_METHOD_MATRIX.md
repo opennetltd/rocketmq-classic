@@ -1,5 +1,17 @@
 # Phase 9 offline method matrix
 
+## Current status — 2026-10-27
+
+`P9-V03` passed on the current parity-remediation revision
+`7e0e9955f591f773c0f4b2f816951cf57dfd7580` on 2026-10-27 (115 seconds,
+clean source). The Java/Rust run matched all four Pull statuses, suggested
+Broker selection, boundary RPCs, and persisted offset resume. Raw output is
+retained locally and uncommitted at
+`plan/2026/10/02-project-parity-review-evidence/live/P9-V03/20261027T070105Z/`.
+Earlier clean-source pass `3343347d` and the full 37/37 aggregate on
+`413f735a` remain historical records. See
+[current compatibility status](CURRENT_STATUS.md).
+
 Java source baseline: Apache RocketMQ client 5.5.1, commit `efa1be59d6fc747ad220f036c86030f05f0419f9`. The 5.3.4 Broker is not contacted by these checks. Boundary RPC fixture hashes and source provenance are recorded in [`fixtures/rpc-invoked-offset-boundaries/provenance.json`](../../fixtures/rpc-invoked-offset-boundaries/provenance.json).
 
 ## Source-to-Rust mapping
@@ -76,7 +88,7 @@ The accessor exposes more public methods than the facade delegates. The table re
 | `RebalancePullImpl.dispatchPullRequest`, `dispatchPopPullRequest`, `createProcessQueue`, `createPopProcessQueue` | The Java Pull subclass has empty dispatch methods, creates a pull `ProcessQueue`, and returns null for a POP queue. Rust's manual Pull does not auto-dispatch PullRequest work; ProcessQueue state and runtime ownership remain internal. | Source-reconciled boundary — Pull sends only through its explicit facade calls, and POP dispatch belongs to Push. Phase 11 covers Pull assignment lifecycle; Phase 13 covers Push POP dispatch and receipts. |
 | `RebalanceImpl.lock`, `unlock`, `lockAll`, `unlockAll`; inherited mutable process/POP/subscription/route table getters; group/model/strategy/factory setters; `removeProcessQueue`, `destroy` | These are raw rebalance/factory controls. The pinned Pull facade calls `doRebalance(false)` and owner lifecycle methods; it does not call rebalance locks. Rust config setters establish group/model/strategy before owner startup, public assignment queries return snapshots, and shutdown owns table cleanup and runtime registration. | Internal-entrypoint disposition — exposing mutable factory/table handles or lock mutation would bypass Rust generation, offset-persistence, and shutdown ownership. The supported Pull facade operations and state transitions have fixture/unit evidence; Push orderly lock behavior remains separately mapped to Phase 12. |
 
-The Java raw implementation surface was inspected with `javap -public` against the pinned 5.5.1 artifact and the corresponding source. Supported observable Pull flows map to owner APIs with unit/fixture evidence; raw mutable tables, factory injection, and worker construction are internal integration entrypoints whose exposure would bypass Rust lifecycle ownership. The Pull raw-surface review is resolved; the Phase 10 Push raw surface is separately source-reconciled. P18-V01 remains open for the broader source/API/input/reverse-export audit.
+The Java raw implementation surface was inspected with `javap -public` against the pinned 5.5.1 artifact and the corresponding source. Supported observable Pull flows map to owner APIs with unit/fixture evidence; raw mutable tables, factory injection, and worker construction are internal integration entrypoints whose exposure would bypass Rust lifecycle ownership. The Pull raw-surface review is resolved; the Phase 10 Push raw surface is separately source-reconciled. The final P18-V01 audit later closed on its recorded revision; this earlier matrix sentence is a historical checkpoint, not current status.
 
 The consumer-specific settings in this phase map as follows. The inherited Java `ClientConfig` settings remain owned by the shared client configuration map and are accessed through `client_config()` / `client_config_mut()`.
 
@@ -135,9 +147,9 @@ does not close the wider P18-V01 input/branch audit.
 | P9-V01 | `UNIT_VERIFIED` | Offset read/update/freeze modes, missing-value distinction, stale updates, reset ordering, remote persistence failure and Java store fixture. |
 | P9-V02 | `UNIT_VERIFIED` | Local-file write-step fault injection, recoverable old/new generation, backup recovery, corrupt snapshots, path traversal rejection and writer ownership. |
 | P9-U01 | `UNIT_VERIFIED` | Scripted pull statuses, next offset handling and persistence, Broker routing, boundary RPCs, local-store restart and offset readback. |
-| P9-V03 | `PENDING_PHASE_19` | Live 5.3.4 Broker pull/restart, all statuses, suggested Broker and boundary calls have not run. |
+| P9-V03 | `PASS_CURRENT_REVISION` | Clean-source live run `20261027T070105Z` on `7e0e9955` matched Java/Rust pull statuses, Broker selection, boundary RPCs, and resumed offset; raw output is retained locally under `plan/2026/10/02-project-parity-review-evidence/live/P9-V03/`. Earlier passes remain dated history. |
 
-Offline test fixtures demonstrate client request/response behavior and do not claim live Broker interoperability. Phase 9 implementation evidence is not final compatibility or release acceptance; Phase 19 owns live Broker validation.
+Offline fixtures demonstrate request/response behavior. The current `P9-V03` live PASS covers this scenario only and does not constitute full Phase 19 or final release acceptance; see the current-status note above.
 
 ## Phase 18 offset topic-filter correction — 2026-10-20
 

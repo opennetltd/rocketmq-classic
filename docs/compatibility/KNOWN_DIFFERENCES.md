@@ -1,5 +1,15 @@
 # Known differences and evidence gaps
 
+## Current status — 2026-10-27
+
+The R01–R09 parity-review fixes are recorded against source revision
+`7e0e9955` in [CURRENT_STATUS.md](CURRENT_STATUS.md). The 23/23 local aggregate
+and full 37/37 Phase 19 matrix belong to `413f735a` and were not rerun after
+the 2026-10-27 source changes. Affected Pull/Lite/POP live scenarios
+`P9-V03`, `P5-V02-consumer`, and `P13-V02` did pass against 5.3.4 on
+`7e0e9955`; raw current-run output remains local and uncommitted. MAN-01
+through MAN-04 still block final release approval.
+
 ## P18 Java common thread-pool monitors outside client scope
 
 - Pinned Java 5.5.1 `common` contains `ThreadPoolMonitor`,
@@ -36,7 +46,7 @@
 
 ## Phase 9 pull and offset validation boundary
 
-- Pull facade, offset-store and boundary-RPC offline checks are recorded in [PHASE_9_OFFLINE_METHOD_MATRIX.md](PHASE_9_OFFLINE_METHOD_MATRIX.md). They use Java 5.5.1 source-derived fixtures and scripted peers; no live 5.3.4 Broker result is claimed. P9-V03 remains `PENDING_PHASE_19` until the Docker local integration suite runs.
+- Pull facade, offset-store and boundary-RPC checks are recorded in [PHASE_9_OFFLINE_METHOD_MATRIX.md](PHASE_9_OFFLINE_METHOD_MATRIX.md). The live `P9-V03` Java/Rust pull and offset-resume scenario passed on clean source revision `3343347d` on 2026-10-25; the later 37/37 Phase 19 aggregate is recorded for `413f735a`. These historical live results were not rerun on current remediation revision `7e0e9955`.
 - Search timestamps and response offsets are signed Java `long` values. A successful `-1` empty-queue result stays a valid value; only transport/protocol/Broker failures return an error.
 
 ## P18 compact inner-message counter malformed sizes
