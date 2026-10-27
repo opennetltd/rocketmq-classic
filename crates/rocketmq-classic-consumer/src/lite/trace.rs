@@ -722,6 +722,11 @@ mod tests {
     #[test]
     fn consume_trace_rows_keep_the_before_hook_live_group_identity() {
         let cases = [
+            (
+                Some("tenant"),
+                Some("tenant%initial-group"),
+                "initial-group",
+            ),
             (Some("tenant"), Some("later-group"), "later-group"),
             (
                 Some("tenant"),
@@ -729,6 +734,7 @@ mod tests {
                 "qualified-group",
             ),
             (Some("tenant"), None, "null"),
+            (None, Some("initial-group"), "initial-group"),
             (None, Some("plain-group"), "plain-group"),
             (None, None, "null"),
         ];

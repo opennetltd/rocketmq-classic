@@ -2802,9 +2802,11 @@ mod tests {
         }
 
         for (namespace, live_group) in [
+            (Some("tenant"), Some("tenant%initial-group")),
             (Some("tenant"), Some("later-group")),
             (Some("tenant"), Some("tenant%qualified-group")),
             (Some("tenant"), None),
+            (None, Some("initial-group")),
             (None, Some("plain-group")),
             (None, None),
         ] {
