@@ -5167,9 +5167,10 @@ impl PushConsumer {
                 .await;
                 continue;
             }
-            if i64::from(process_queue.wait_ack_count())
-                > i64::from(self.config.pop_threshold_for_queue())
-            {
+            if pop_queue_wait_ack_flow_controlled(
+                process_queue.wait_ack_count(),
+                self.config.pop_threshold_for_queue(),
+            ) {
                 tokio::time::sleep(Duration::from_millis(
                     PULL_TIME_DELAY_MILLIS_WHEN_CACHE_FLOW_CONTROL as u64,
                 ))
@@ -5479,7 +5480,6 @@ impl PushConsumer {
             return;
         }
         if matches!(&listener, PushMessageListener::Orderly(_)) {
-            process_queue.dec_found_messages(messages.len());
             return;
         }
         if pop_batch_is_expired(&messages, epoch_millis()) {
@@ -7467,6 +7467,10 @@ fn pop_batch_is_expired(messages: &[MessageExt], now_millis: i64) -> bool {
     now_millis.saturating_sub(receipt.pop_time()) >= receipt.invisible_time()
 }
 
+fn pop_queue_wait_ack_flow_controlled(wait_ack_count: i32, threshold: i32) -> bool {
+    i64::from(wait_ack_count) > i64::from(threshold)
+}
+
 fn pop_invisible_timeout(messages: &[MessageExt]) -> Duration {
     messages
         .first()
@@ -9201,6 +9205,7 @@ mod tests {
     async fn pop_orderly_path_skips_listener_hooks_and_listener_result_side_effects() {
         let mut config = PushConsumerConfig::new("pop-orderly-stats-group").unwrap();
         config.client_config_mut().set_namesrv_addr(None);
+        config.set_pop_threshold_for_queue(96);
         let manager = ClientRuntimeManager::new();
         let consumer = Arc::new(PushConsumer::with_manager(config, manager.clone()));
         let runtime = manager
@@ -9209,6 +9214,8 @@ mod tests {
             .unwrap();
         let queue = MessageQueue::new("orders", "broker-a", 0);
         let process_queue = Arc::new(PopProcessQueue::new_for_assignment(queue.clone(), 2));
+        process_queue.inc_found_messages(96);
+        // pop_loop accounts the newly returned message before dispatch.
         process_queue.inc_found_messages(1);
         let receipt = format!("10 {} 60000 2 0 broker-a 0 10", epoch_millis());
         let listener_called = Arc::new(AtomicBool::new(false));
@@ -9254,7 +9261,12 @@ mod tests {
 
         assert!(!listener_called.load(Ordering::Acquire));
         assert!(hook_calls.lock().unwrap().is_empty());
-        assert_eq!(process_queue.wait_ack_count(), 0);
+        assert_eq!(process_queue.wait_ack_count(), 97);
+        assert!(pop_queue_wait_ack_flow_controlled(
+            process_queue.wait_ack_count(),
+            consumer.config.pop_threshold_for_queue()
+        ));
+        assert!(!pop_queue_wait_ack_flow_controlled(96, 96));
         runtime.shutdown().await.unwrap();
     }
 

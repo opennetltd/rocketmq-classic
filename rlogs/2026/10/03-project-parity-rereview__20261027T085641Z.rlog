@@ -24,3 +24,12 @@
 - Focused checks passed: `cargo test -p rocketmq-classic-consumer --locked pull_processing_` (4 passed); `cargo test -p rocketmq-classic-common --locked public_decompression` (1 passed); `cargo test -p rocketmq-classic-common --locked every_public_decompressor` (1 passed); `cargo test -p rocketmq-classic-producer --locked producer_compressor_round_trips_large_body` (1 passed).
 - `cargo fmt --all -- --check` and `git diff --check` passed. Java differential replay will be run after the remaining F03/F05 state changes and its evidence will remain untracked.
 - Phase 1 changeset: `92940332` (`Preserve Lite poll batches with nullable groups`).
+- Phase 2 changeset: `79cd6caf` (`Fix compact pull decoding and decompression bounds`).
+
+## Phase 3 — F03 POP orderly wait-ACK accounting
+
+- Removed the orderly no-op decrement; messages remain counted until their POP ACK lifecycle resolves.
+- Extracted the existing wait-ACK threshold comparison into `pop_queue_wait_ack_flow_controlled`, used directly by the POP pull loop. The orderly regression begins at 96, accounts one newly popped message, verifies count 97 remains after no-op, and verifies threshold 96 blocks another admission while 96 itself is allowed.
+- Existing expiry and listener paths still release their counts: focused tests passed for `expired_pop_batch_skips_listener_and_releases_found_message_count` and `pop_consume_dispatches_ack_redelivery_and_replacement_receipt`; the latter exercises concurrent ACK and redelivery lifecycle.
+- The orderly regression passed: `cargo test -p rocketmq-classic-consumer --locked pop_orderly_path_skips_listener_hooks_and_listener_result_side_effects`.
+- `cargo fmt --all -- --check` and `git diff --check` passed. Pinned Java's orderly no-op probe already records listener calls 0 and wait-ACK count 1; the full replay will be refreshed with the final acceptance run.
