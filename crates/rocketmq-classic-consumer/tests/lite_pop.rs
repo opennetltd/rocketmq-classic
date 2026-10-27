@@ -649,6 +649,10 @@ async fn lite_rpc_hook_stream_identity_and_namespace_config_reach_runtime() {
     let queue = MessageQueue::new("orders", "broker-a", 0);
     consumer.assign([queue.clone()]).await.unwrap();
     consumer.start().await.unwrap();
+    assert_eq!(
+        consumer.get_consumer_group().as_deref(),
+        Some("tenant%lite-rpc-hook-flow")
+    );
 
     let pull = next_request(&mut requests, request::LITE_PULL_MESSAGE).await;
     let fields = pull.command.ext_fields.as_ref().unwrap();
@@ -683,6 +687,16 @@ async fn lite_rpc_hook_stream_identity_and_namespace_config_reach_runtime() {
     assert_eq!(
         consumer.assignment().await.unwrap(),
         [queue].into_iter().collect()
+    );
+
+    consumer.set_consumer_group("later-lite-rpc-hook-flow");
+    assert!(matches!(
+        consumer.start().await,
+        Err(LitePullConsumerError::AlreadyStarted)
+    ));
+    assert_eq!(
+        consumer.get_consumer_group().as_deref(),
+        Some("tenant%later-lite-rpc-hook-flow")
     );
 
     consumer.shutdown().await.unwrap();

@@ -720,6 +720,20 @@ impl LitePullConsumer {
 
     pub async fn start(self: &Arc<Self>) -> Result<(), LitePullConsumerError> {
         let _lifecycle_gate = self.lifecycle_gate.lock().await;
+        let mut client_config = self.config.client_config().clone();
+        let effective_group =
+            match client_config.with_namespace(self.get_consumer_group().as_deref()) {
+                Ok(group) => group,
+                Err(error) => {
+                    self.start_invoked.store(true, Ordering::Release);
+                    let mut state = self.lifecycle.lock().await;
+                    if matches!(*state, Lifecycle::Created) {
+                        *state = Lifecycle::StartFailed;
+                    }
+                    return Err(error.into());
+                }
+            };
+        self.set_consumer_group_nullable(effective_group.clone());
         self.start_invoked.store(true, Ordering::Release);
         {
             let mut state = self.lifecycle.lock().await;
@@ -732,29 +746,14 @@ impl LitePullConsumer {
                 Lifecycle::Created => *state = Lifecycle::Starting,
             }
         }
-        let raw_consumer_group = match self.get_consumer_group() {
+        let effective_group = match effective_group {
             Some(group) => group,
             None => {
                 *self.lifecycle.lock().await = Lifecycle::StartFailed;
                 return Err(PullConsumerError::InvalidConsumerGroup.into());
             }
         };
-        let effective_group = match self
-            .config
-            .client_config()
-            .clone()
-            .with_namespace(Some(&raw_consumer_group))
-        {
-            Ok(Some(group)) => group,
-            Ok(None) => {
-                *self.lifecycle.lock().await = Lifecycle::StartFailed;
-                return Err(PullConsumerError::InvalidConsumerGroup.into());
-            }
-            Err(error) => {
-                *self.lifecycle.lock().await = Lifecycle::StartFailed;
-                return Err(error.into());
-            }
-        };
+        let raw_consumer_group = effective_group.clone();
         let group_validation = crate::config::validate_group(&effective_group).and_then(|()| {
             if effective_group == crate::config::DEFAULT_CONSUMER_GROUP {
                 Err(PullConsumerError::DefaultConsumerGroup)
@@ -2300,6 +2299,83 @@ mod tests {
             .unwrap();
         assert_eq!(effective_group, "tenant%valid-lite-group");
         assert!(crate::config::validate_group(&effective_group).is_ok());
+    }
+
+    #[tokio::test]
+    async fn lite_start_wraps_live_group_before_validation_and_repeat_checks() {
+        for (group, namespace, expected_group, invalid_group) in [
+            (
+                Some("valid-lite-group"),
+                Some("tenant"),
+                Some("tenant%valid-lite-group"),
+                false,
+            ),
+            (
+                Some("tenant%already-wrapped"),
+                Some("tenant"),
+                Some("tenant%already-wrapped"),
+                false,
+            ),
+            (
+                Some("unscoped-lite-group"),
+                None,
+                Some("unscoped-lite-group"),
+                false,
+            ),
+            (None, Some("tenant"), None, true),
+            (Some(""), Some("tenant"), Some(""), true),
+        ] {
+            let mut config =
+                LitePullConsumerConfig::new_nullable(group.map(str::to_owned)).unwrap();
+            if let Some(namespace) = namespace {
+                config
+                    .client_config_mut()
+                    .set_namespace(Some(namespace.to_owned()));
+            }
+            config.set_pull_thread_nums(-1);
+            let consumer = Arc::new(LitePullConsumer::new(config).unwrap());
+            let error = consumer.start().await.unwrap_err();
+            if invalid_group {
+                assert!(matches!(
+                    error,
+                    LitePullConsumerError::Pull(PullConsumerError::InvalidConsumerGroup)
+                ));
+            } else {
+                assert!(matches!(
+                    error,
+                    LitePullConsumerError::InvalidPullThreadCount
+                ));
+            }
+            assert_eq!(consumer.get_consumer_group().as_deref(), expected_group);
+        }
+
+        let mut config = LitePullConsumerConfig::new("initial-lite-group").unwrap();
+        config
+            .client_config_mut()
+            .set_namespace(Some("tenant".to_owned()));
+        config.set_pull_thread_nums(-1);
+        let consumer = Arc::new(LitePullConsumer::new(config).unwrap());
+        assert!(matches!(
+            consumer.start().await,
+            Err(LitePullConsumerError::InvalidPullThreadCount)
+        ));
+        assert_eq!(
+            consumer.get_consumer_group().as_deref(),
+            Some("tenant%initial-lite-group")
+        );
+        consumer.set_consumer_group("later-lite-group");
+        assert_eq!(
+            consumer.get_consumer_group().as_deref(),
+            Some("later-lite-group")
+        );
+        assert!(matches!(
+            consumer.start().await,
+            Err(LitePullConsumerError::StartFailed)
+        ));
+        assert_eq!(
+            consumer.get_consumer_group().as_deref(),
+            Some("tenant%later-lite-group")
+        );
     }
 
     #[tokio::test]
