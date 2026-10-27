@@ -2583,6 +2583,49 @@ mod tests {
     }
 
     #[test]
+    fn lite_accepts_the_complete_pull_batch_before_advancing_fetched_offset() {
+        let consumer = consumer();
+        let queue = MessageQueue::new("orders", "broker-a", 0);
+        consumer.queue_states.lock().unwrap().insert(
+            queue.clone(),
+            QueueState {
+                generation: 7,
+                fetched_offset: None,
+                delivered_offset: None,
+                paused: false,
+            },
+        );
+        let messages = (0..24)
+            .map(|offset| {
+                let mut message =
+                    crate::test_support::message_ext_from(Message::new("orders", b"body".to_vec()));
+                message.set_queue_offset(offset);
+                message
+            })
+            .collect::<Vec<_>>();
+        let result = ProcessedPullResult {
+            result: PullResultExt {
+                status: PullStatus::Found,
+                next_begin_offset: 24,
+                min_offset: 0,
+                max_offset: 24,
+                suggest_which_broker_id: 0,
+                offset_delta: None,
+                raw_messages: None,
+            },
+            messages: Some(messages),
+        };
+
+        assert_eq!(consumer.accept_pull_result(&queue, 7, result), Some(true));
+        let states = consumer.queue_states.lock().unwrap();
+        assert_eq!(states.get(&queue).unwrap().fetched_offset, Some(24));
+        drop(states);
+        let buffer = consumer.buffer.lock().unwrap();
+        assert_eq!(buffer.messages, 24);
+        assert_eq!(buffer.batches.front().unwrap().messages.len(), 24);
+    }
+
+    #[test]
     fn flow_control_uses_java_request_count_message_and_whole_mib_boundaries() {
         let config = LitePullConsumerConfig::new("lite-flow-control").unwrap();
         let consumer = LitePullConsumer::new(config).unwrap();

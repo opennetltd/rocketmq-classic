@@ -5,7 +5,9 @@ use std::{
 
 use base64::Engine;
 use bytes::BytesMut;
-use rocketmq_classic_common::message::{MessageExt, decode_many_compatible};
+use rocketmq_classic_common::message::{
+    MessageExt, MessageHostAddress, decode_many_compatible, encode_message_ext,
+};
 use rocketmq_classic_core::{
     api::{MQClientApi, admin::AdminQueryRequest},
     error::RpcError,
@@ -45,6 +47,7 @@ use rocketmq_classic_remoting::{
     codec::frame,
 };
 use serde_json::{Value, json};
+use std::net::{IpAddr, Ipv4Addr};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
@@ -7077,6 +7080,64 @@ async fn query_message_sets_unique_flag_and_decodes_java_message_records() {
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     assert_eq!(returned_values, expected_values);
+    client.shutdown().await;
+}
+
+#[tokio::test]
+async fn query_message_keeps_all_24_valid_compressed_records() {
+    const BODY_SIZE: usize = 3 * 1024 * 1024;
+
+    let mut message = MessageExt::new();
+    message.set_topic("orders");
+    message.set_body(vec![0x5a; BODY_SIZE]);
+    message.set_sys_flag(rocketmq_classic_common::sysflag::message::COMPRESSED_FLAG);
+    message
+        .set_system_property("UNIQ_KEY", "producer-unique-1")
+        .unwrap();
+    message.set_born_host(Some(MessageHostAddress::from_ip_address(
+        IpAddr::V4(Ipv4Addr::LOCALHOST),
+        10_911,
+    )));
+    message.set_store_host(Some(MessageHostAddress::from_ip_address(
+        IpAddr::V4(Ipv4Addr::LOCALHOST),
+        10_912,
+    )));
+    let record = encode_message_ext(&message, true).expect("compressed message encodes");
+    let mut batch = Vec::new();
+    for _ in 0..24 {
+        batch.extend_from_slice(&record);
+    }
+    let mut fields = HeaderMap::new();
+    java_query_message_response_header(1_700_000_200_041, 1_700_000_000_041)
+        .encode_fields(&mut fields);
+    let (addr, peer) = scripted_peer(response::SUCCESS, Some(fields), Some(batch)).await;
+    let (api, client) = api().await;
+    let mut header = QueryMessageRequestHeader::default();
+    header.set_topic(Some("orders".into()));
+    header.set_key(Some("producer-unique-1".into()));
+    header.set_max_num(Some(32));
+
+    let result = api
+        .query_message(
+            &addr,
+            &header,
+            true,
+            Instant::now() + Duration::from_secs(2),
+        )
+        .await
+        .unwrap();
+
+    peer.await.unwrap();
+    let messages = result.get_message_list().unwrap().snapshot();
+    assert_eq!(messages.len(), 24);
+    assert!(
+        messages
+            .iter()
+            .all(|message| message.as_ref().unwrap().with(|message| {
+                message.body().len() == BODY_SIZE
+                    && message.message_id() == Some("producer-unique-1")
+            }))
+    );
     client.shutdown().await;
 }
 

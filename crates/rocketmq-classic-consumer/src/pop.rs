@@ -804,7 +804,8 @@ fn parse_i32(value: &str, field: &'static str, kind: &'static str) -> Result<i32
 mod tests {
     use super::*;
     use base64::Engine;
-    use rocketmq_classic_common::message::Message;
+    use rocketmq_classic_common::message::{Message, MessageHostAddress, encode_message_ext};
+    use std::net::{IpAddr, Ipv4Addr};
 
     fn java_message_record(name: &str) -> Vec<u8> {
         let fixture: serde_json::Value =
@@ -981,6 +982,48 @@ mod tests {
                 .map(String::as_str),
             Some("123")
         );
+    }
+
+    #[test]
+    fn pop_reply_keeps_all_24_valid_compressed_messages() {
+        const BODY_SIZE: usize = 3 * 1024 * 1024;
+
+        let mut message = MessageExt::new();
+        message.set_topic("orders");
+        message.set_body(vec![0x5a; BODY_SIZE]);
+        message.set_sys_flag(rocketmq_classic_common::sysflag::message::COMPRESSED_FLAG);
+        message.set_born_host(Some(MessageHostAddress::from_ip_address(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            10_911,
+        )));
+        message.set_store_host(Some(MessageHostAddress::from_ip_address(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            10_912,
+        )));
+        let record = encode_message_ext(&message, true).expect("compressed message encodes");
+        let mut raw = Vec::new();
+        for _ in 0..24 {
+            raw.extend_from_slice(&record);
+        }
+        let mut request = PopMessageRequestHeader::default();
+        request.set_topic(Some("orders".to_owned()));
+        let mut header = PopMessageResponseHeader::default();
+        header.set_pop_time(123);
+        header.set_invisible_time(456);
+        header.set_revive_qid(2);
+        let reply = PopReply {
+            status: PopStatus::Found,
+            header: Some(header),
+            raw_messages: Some(raw),
+        };
+
+        let result = process_pop_reply(reply, &request, "broker-a", DecodeOptions::default())
+            .expect("valid compressed POP response decodes");
+        let messages = result.messages().unwrap();
+        assert_eq!(messages.len(), 24);
+        assert!(messages.iter().all(|message| {
+            message.body().len() == BODY_SIZE && message.properties().contains_key(PROPERTY_POP_CK)
+        }));
     }
 
     #[test]

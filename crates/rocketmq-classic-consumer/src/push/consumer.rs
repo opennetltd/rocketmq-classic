@@ -6,6 +6,7 @@ use std::{
         Arc, OnceLock, RwLock, Weak,
         atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicU64, Ordering},
     },
+    task::Poll,
     time::Duration,
 };
 
@@ -303,6 +304,44 @@ impl<T> Drop for AbortOnDrop<T> {
     fn drop(&mut self) {
         self.0.abort();
     }
+}
+
+async fn await_pop_worker_handles(
+    handles: &mut [tokio::task::JoinHandle<()>],
+    completed: &mut [bool],
+    wait: Duration,
+) -> bool {
+    let join_all = std::future::poll_fn(|context| {
+        for (handle, completed) in handles.iter_mut().zip(completed.iter_mut()) {
+            if !*completed && Pin::new(handle).poll(context).is_ready() {
+                *completed = true;
+            }
+        }
+        if completed.iter().all(|completed| *completed) {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    });
+    tokio::time::timeout(wait, join_all).await.is_ok()
+}
+
+async fn shutdown_pop_worker_handles(
+    mut handles: Vec<tokio::task::JoinHandle<()>>,
+    await_termination_millis: i64,
+) {
+    let wait = Duration::from_millis(await_termination_millis.max(0) as u64);
+    let mut completed = vec![false; handles.len()];
+    if await_pop_worker_handles(&mut handles, &mut completed, wait).await {
+        return;
+    }
+
+    for (handle, completed) in handles.iter().zip(&completed) {
+        if !completed {
+            handle.abort();
+        }
+    }
+    let _ = await_pop_worker_handles(&mut handles, &mut completed, wait).await;
 }
 
 fn consume_timeout_exceeded(started_at: Instant, timeout_minutes: i64) -> bool {
@@ -2572,10 +2611,10 @@ impl PushConsumer {
             PushMessageListener::Concurrently(listener) if !orderly => {
                 result.set_order(false);
                 result.set_auto_commit(true);
-                let callback = tokio::spawn(
+                let mut callback = AbortOnDrop(tokio::spawn(
                     listener.consume_message(messages, ConsumeConcurrentlyContext::new(queue)),
-                );
-                match callback.await {
+                ));
+                match (&mut callback.0).await {
                     Ok((Some(ConsumeConcurrentlyStatus::ConsumeSuccess), _)) => {
                         result.set_consume_result(Some(ConsumeMessageResult::CrSuccess));
                     }
@@ -2593,10 +2632,10 @@ impl PushConsumer {
             }
             PushMessageListener::Orderly(listener) if orderly => {
                 result.set_order(true);
-                let callback = tokio::spawn(
+                let mut callback = AbortOnDrop(tokio::spawn(
                     listener.consume_message(messages, ConsumeOrderlyContext::new(queue)),
-                );
-                match callback.await {
+                ));
+                match (&mut callback.0).await {
                     Ok((Some(ConsumeOrderlyStatus::Success), context)) => {
                         result.set_consume_result(Some(ConsumeMessageResult::CrSuccess));
                         result.set_auto_commit(context.auto_commit());
@@ -5439,6 +5478,10 @@ impl PushConsumer {
         if process_queue.is_dropped() {
             return;
         }
+        if matches!(&listener, PushMessageListener::Orderly(_)) {
+            process_queue.dec_found_messages(messages.len());
+            return;
+        }
         if pop_batch_is_expired(&messages, epoch_millis()) {
             process_queue.dec_found_messages(messages.len());
             tracing::debug!(
@@ -5461,10 +5504,10 @@ impl PushConsumer {
                     let context = ConsumeConcurrentlyContext::new(queue.clone());
                     let listener_messages = messages.clone();
                     let callback_started = Instant::now();
-                    let callback = tokio::spawn(async move {
+                    let mut callback = AbortOnDrop(tokio::spawn(async move {
                         listener.consume_message(listener_messages, context).await
-                    });
-                    match callback.await {
+                    }));
+                    match (&mut callback.0).await {
                         Ok((Some(ConsumeConcurrentlyStatus::ConsumeSuccess), context)) => (
                             context
                                 .ack_index()
@@ -5509,10 +5552,10 @@ impl PushConsumer {
                     let context = ConsumeOrderlyContext::new(queue.clone());
                     let listener_messages = messages.clone();
                     let callback_started = Instant::now();
-                    let callback = tokio::spawn(async move {
+                    let mut callback = AbortOnDrop(tokio::spawn(async move {
                         listener.consume_message(listener_messages, context).await
-                    });
-                    match callback.await {
+                    }));
+                    match (&mut callback.0).await {
                         Ok((
                             Some(ConsumeOrderlyStatus::Success | ConsumeOrderlyStatus::Commit),
                             context,
@@ -7099,20 +7142,7 @@ impl PushConsumer {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .drain(..)
             .collect::<Vec<_>>();
-        for mut worker in pop_consume_workers {
-            if await_termination_millis > 0
-                && tokio::time::timeout(
-                    Duration::from_millis(await_termination_millis as u64),
-                    &mut worker,
-                )
-                .await
-                .is_ok()
-            {
-                continue;
-            }
-            worker.abort();
-            let _ = worker.await;
-        }
+        shutdown_pop_worker_handles(pop_consume_workers, await_termination_millis).await;
         let process_queues = read_lock(&self.process_queues)
             .iter()
             .map(|(queue, process_queue)| (queue.clone(), process_queue.clone()))
@@ -9168,7 +9198,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pop_orderly_consumption_does_not_record_concurrent_service_stats() {
+    async fn pop_orderly_path_skips_listener_hooks_and_listener_result_side_effects() {
         let mut config = PushConsumerConfig::new("pop-orderly-stats-group").unwrap();
         config.client_config_mut().set_namesrv_addr(None);
         let manager = ClientRuntimeManager::new();
@@ -9177,22 +9207,40 @@ mod tests {
             .get_or_create(consumer.config.client_config())
             .await
             .unwrap();
-        consumer.bind_stats_manager(runtime.consumer_stats_manager());
         let queue = MessageQueue::new("orders", "broker-a", 0);
         let process_queue = Arc::new(PopProcessQueue::new_for_assignment(queue.clone(), 2));
         process_queue.inc_found_messages(1);
         let receipt = format!("10 {} 60000 2 0 broker-a 0 10", epoch_millis());
-        let listener = PushMessageListener::orderly(
-            |_messages: Vec<MessageExt>, context: ConsumeOrderlyContext| async move {
-                (Some(ConsumeOrderlyStatus::Success), context)
-            },
-        );
+        let listener_called = Arc::new(AtomicBool::new(false));
+        let listener = PushMessageListener::orderly({
+            let listener_called = listener_called.clone();
+            move |_messages: Vec<MessageExt>, context: ConsumeOrderlyContext| {
+                listener_called.store(true, Ordering::Release);
+                async move { (Some(ConsumeOrderlyStatus::Success), context) }
+            }
+        });
+        let hook_calls = Arc::new(Mutex::new(Vec::new()));
+        struct Hook(Arc<Mutex<Vec<&'static str>>>);
+        impl ConsumeMessageHook for Hook {
+            fn hook_name(&self) -> &str {
+                "pop-orderly-parity"
+            }
+
+            fn consume_message_before(&self, _context: &mut ConsumeMessageContext) {
+                self.0.lock().unwrap().push("before");
+            }
+
+            fn consume_message_after(&self, _context: &mut ConsumeMessageContext) {
+                self.0.lock().unwrap().push("after");
+            }
+        }
+        consumer.register_consume_message_hook(Arc::new(Hook(hook_calls.clone())));
 
         consumer
             .clone()
             .consume_pop_batch(
                 PopConsumeBatchContext {
-                    process_queue,
+                    process_queue: process_queue.clone(),
                     runtime: runtime.clone(),
                     queue,
                     route_topic: "orders".to_owned(),
@@ -9204,13 +9252,156 @@ mod tests {
             )
             .await;
 
-        let status = consumer
-            .stats_manager()
-            .unwrap()
-            .consume_status("pop-orderly-stats-group", "orders");
-        assert_eq!(status.get_consume_rt(), 0.0);
-        assert_eq!(status.get_consume_ok_tps(), 0.0);
+        assert!(!listener_called.load(Ordering::Acquire));
+        assert!(hook_calls.lock().unwrap().is_empty());
+        assert_eq!(process_queue.wait_ack_count(), 0);
         runtime.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn pop_worker_shutdown_cancels_its_listener_child_and_prevents_late_ack() {
+        struct NotifyOnDrop(Arc<tokio::sync::Notify>);
+        impl Drop for NotifyOnDrop {
+            fn drop(&mut self) {
+                self.0.notify_one();
+            }
+        }
+
+        let started = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let cancelled = Arc::new(tokio::sync::Notify::new());
+        let late_side_effect = Arc::new(AtomicBool::new(false));
+        let listener = PushMessageListener::concurrently({
+            let started = started.clone();
+            let release = release.clone();
+            let cancelled = cancelled.clone();
+            let late_side_effect = late_side_effect.clone();
+            move |_messages, context| {
+                let started = started.clone();
+                let release = release.clone();
+                let cancelled = cancelled.clone();
+                let late_side_effect = late_side_effect.clone();
+                async move {
+                    let _drop_signal = NotifyOnDrop(cancelled);
+                    started.notify_one();
+                    release.notified().await;
+                    late_side_effect.store(true, Ordering::Release);
+                    (Some(ConsumeConcurrentlyStatus::ConsumeSuccess), context)
+                }
+            }
+        });
+        let mut config = PushConsumerConfig::new("pop-child-cancellation").unwrap();
+        config.client_config_mut().set_namesrv_addr(None);
+        let manager = ClientRuntimeManager::new();
+        let consumer = Arc::new(PushConsumer::with_manager(config, manager.clone()));
+        let runtime = install_started_consumer(
+            &consumer,
+            &manager,
+            Arc::new(RecordingOffsetStore::default()),
+            idle_consume_service(),
+            Arc::new(PullScheduler::new()),
+            Arc::new(PullRpcWorkers::new()),
+        )
+        .await;
+        *write_lock(&consumer.pop_listener) = Some(listener);
+
+        let queue = MessageQueue::new("orders", "broker-a", 0);
+        let process_queue = Arc::new(PopProcessQueue::new_for_assignment(queue.clone(), 1));
+        process_queue.inc_found_messages(1);
+        let receipt = format!("10 {} 60000 2 0 broker-a 0 10", epoch_millis());
+        consumer
+            .dispatch_pop_messages(
+                process_queue.clone(),
+                runtime.clone(),
+                queue,
+                "orders".to_owned(),
+                "pop-child-cancellation".to_owned(),
+                vec![pop_receipt_message(Some(&receipt))],
+            )
+            .await;
+        timeout(Duration::from_secs(1), started.notified())
+            .await
+            .expect("POP listener did not start");
+
+        consumer
+            .shutdown_with_await_termination_millis(100)
+            .await
+            .unwrap();
+        timeout(Duration::from_secs(1), cancelled.notified())
+            .await
+            .expect("aborting the POP worker must drop its listener child");
+        release.notify_waiters();
+        tokio::task::yield_now().await;
+
+        assert!(!late_side_effect.load(Ordering::Acquire));
+        assert_eq!(process_queue.wait_ack_count(), 1);
+        runtime.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn cancelling_direct_consume_drops_its_listener_child() {
+        struct NotifyOnDrop(Arc<tokio::sync::Notify>);
+        impl Drop for NotifyOnDrop {
+            fn drop(&mut self) {
+                self.0.notify_one();
+            }
+        }
+
+        let started = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let cancelled = Arc::new(tokio::sync::Notify::new());
+        let late_side_effect = Arc::new(AtomicBool::new(false));
+        let listener: Arc<dyn MessageListenerConcurrently> = {
+            let started = started.clone();
+            let release = release.clone();
+            let cancelled = cancelled.clone();
+            let late_side_effect = late_side_effect.clone();
+            Arc::new(
+                move |_messages: Vec<MessageExt>, context: ConsumeConcurrentlyContext| {
+                    let started = started.clone();
+                    let release = release.clone();
+                    let cancelled = cancelled.clone();
+                    let late_side_effect = late_side_effect.clone();
+                    async move {
+                        let _drop_signal = NotifyOnDrop(cancelled);
+                        started.notify_one();
+                        release.notified().await;
+                        late_side_effect.store(true, Ordering::Release);
+                        (Some(ConsumeConcurrentlyStatus::ConsumeSuccess), context)
+                    }
+                },
+            )
+        };
+        let service =
+            ConsumeService::Concurrent(Arc::new(ConcurrentConsumeService::new(1, 1, listener)));
+        let config = PushConsumerConfig::new("direct-consume-cancellation").unwrap();
+        let consumer = Arc::new(PushConsumer::with_manager(
+            config,
+            ClientRuntimeManager::new(),
+        ));
+        let task_consumer = consumer.clone();
+        let task = tokio::spawn(async move {
+            task_consumer
+                .consume_message_directly_using_service(
+                    retry_test_message(10),
+                    Some("broker-a".to_owned()),
+                    service,
+                )
+                .await
+        });
+        timeout(Duration::from_secs(1), started.notified())
+            .await
+            .expect("direct listener did not start");
+
+        task.abort();
+        let _ = task.await;
+        timeout(Duration::from_secs(1), cancelled.notified())
+            .await
+            .expect("cancelling direct consume must drop its listener child");
+        release.notify_waiters();
+        tokio::task::yield_now().await;
+
+        assert!(!late_side_effect.load(Ordering::Acquire));
     }
 
     #[tokio::test]
@@ -16507,6 +16698,35 @@ mod tests {
         assert_eq!(consume_service.worker_count(), 0);
         assert_eq!(scheduler.worker_count(), 0);
         assert_eq!(pull_rpc_workers.worker_count(), 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn pop_shutdown_wait_budget_is_independent_of_worker_count() {
+        async fn elapsed_for(worker_count: usize) -> Duration {
+            let handles = (0..worker_count)
+                .map(|_| tokio::spawn(std::future::pending::<()>()))
+                .collect();
+            tokio::task::yield_now().await;
+            let started = Instant::now();
+            shutdown_pop_worker_handles(handles, 100).await;
+            started.elapsed()
+        }
+
+        let one_worker = elapsed_for(1).await;
+        let twenty_workers = elapsed_for(20).await;
+        let service_budget = Duration::from_millis(200);
+        assert!(
+            one_worker <= service_budget,
+            "one worker waited {one_worker:?}"
+        );
+        assert!(
+            twenty_workers <= service_budget,
+            "twenty workers waited {twenty_workers:?}"
+        );
+        assert!(
+            twenty_workers <= one_worker + Duration::from_millis(10),
+            "wait grew with worker count: one={one_worker:?}, twenty={twenty_workers:?}"
+        );
     }
 
     #[tokio::test(start_paused = true)]

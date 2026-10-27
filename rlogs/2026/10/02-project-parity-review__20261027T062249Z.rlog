@@ -14,3 +14,13 @@
 - The first Lite matrix run incorrectly marked stored offset `0` as missing; Java uses exactly `-1` for missing. Corrected the case inputs and reran successfully.
 - Focused checks passed: common decoder oversized-compressed-batch regression; PullAPIWrapper 24-record delivery regression; Lite initial-offset matrix; external Java/Rust probe. The probe now reports one 65 MiB compressed message decoded and delivered, and all 24 3 MiB messages delivered with `next_begin_offset=24`; Java reported the same counts and body sizes. Probe output retained at `/tmp/rocketmq-parity-review-remediated-phase1.json`.
 - `cargo fmt --all` and `git diff --check` passed. Commit: pending.
+
+## Phase 2 — POP control flow and lifecycle
+
+- POP orderly batches now stop before listener invocation, consume hooks, ACK, or visibility updates, matching the pinned Java `ConsumeRequest.run` path. An offline Java invocation confirmed zero orderly listener calls and an unchanged wait-ACK count; Rust regression checks the listener, hooks, and side-effect counters.
+- POP and direct-consume listener tasks now use the existing `AbortOnDrop` ownership pattern. The POP shutdown regression waits for a blocked listener's drop signal, releases its barrier after shutdown, and verifies no late side effect; direct-consume cancellation has the same drop-sentinel check.
+- POP shutdown now polls all worker handles against one service deadline, aborts remaining workers together, and observes the cancellation phase against one second shared deadline. Paused-time coverage verifies 1 and 20 pending workers stay within the same two-phase 200 ms budget.
+- To complete R01 call-site coverage, added Lite fetched-offset acceptance, compressed POP response, and compressed Admin query regressions; each verifies all 24 valid 3 MiB messages remain available.
+- One initial POP lifecycle assertion expected the wait-ACK counter to be zero after cancellation. Inspection showed Java/Rust counters track outstanding messages until ACK, so the test now verifies the count remains outstanding while the listener is dropped and no callback can produce a late ACK.
+- `cargo test -p rocketmq-classic-consumer --locked` passed (277 unit tests plus all package integration tests and doctests). Focused Core compressed-query test passed. The updated Java/Rust offline probe passed and reported `java_pop_orderly_listener_calls=0, wait_ack_count=1`; output retained at `/tmp/rocketmq-parity-review-remediated-phase2.json`.
+- `cargo fmt --all` passed. Commit: pending.
