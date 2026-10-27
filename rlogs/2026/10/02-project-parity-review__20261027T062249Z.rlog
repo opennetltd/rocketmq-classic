@@ -1,0 +1,16 @@
+# Project parity review remediation — 2026-10-27
+
+- Plan: `plan/2026/10/02-project-parity-review.md` and its existing Traditional Chinese companion; reviewed against Java client 5.5.1.
+- Branch: `fix/parity-review-2026-10-27`, created from `a91e91bcdcfe92b01a351c56c7ce0dd4ff393e96`.
+- User constraint: review plans may be committed; keep all files under `plan/2026/10/02-project-parity-review-evidence/` out of commits.
+- Repository instructions: no applicable `AGENTS.md` found in this repository. Applied the `coding` skill's phased workflow and append-only execution log.
+
+## Phase 1 — message integrity and Lite initial offsets
+
+- Changed compatibility decoder defaults to unbounded limits, retaining explicit internal limits for callers that opt into them. This preserves all valid Java-sized records and batches instead of returning a successful truncated prefix.
+- Added a Common regression for 24 compressed 3 MiB records and one compressed 65 MiB body; added PullAPIWrapper coverage asserting the 24 messages remain delivered with the Broker's `nextBeginOffset` unchanged.
+- Corrected Lite initial-offset selection for stored valid, missing, and unavailable offsets, retry-topic LAST/TIMESTAMP cases, and negative SEARCH_OFFSET results.
+- Added Lite policy-matrix coverage for the supported LAST, FIRST, and TIMESTAMP modes, retry/regular topics, and invalid timestamps.
+- The first Lite matrix run incorrectly marked stored offset `0` as missing; Java uses exactly `-1` for missing. Corrected the case inputs and reran successfully.
+- Focused checks passed: common decoder oversized-compressed-batch regression; PullAPIWrapper 24-record delivery regression; Lite initial-offset matrix; external Java/Rust probe. The probe now reports one 65 MiB compressed message decoded and delivered, and all 24 3 MiB messages delivered with `next_begin_offset=24`; Java reported the same counts and body sizes. Probe output retained at `/tmp/rocketmq-parity-review-remediated-phase1.json`.
+- `cargo fmt --all` and `git diff --check` passed. Commit: pending.

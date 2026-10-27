@@ -58,6 +58,48 @@ struct BufferedBatch {
     body_bytes: usize,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum LiteInitialOffsetAction {
+    Value(i64),
+    MaxOffset,
+    SearchTimestamp(i64),
+}
+
+fn lite_initial_offset_action(
+    policy: ConsumeFromWhere,
+    topic: &str,
+    stored_offset: i64,
+    consume_timestamp: &str,
+) -> Result<LiteInitialOffsetAction, LitePullConsumerError> {
+    if stored_offset >= 0 {
+        return Ok(LiteInitialOffsetAction::Value(stored_offset));
+    }
+    if stored_offset < -1 {
+        return Ok(LiteInitialOffsetAction::Value(-1));
+    }
+
+    let retry_topic = topic.starts_with("%RETRY%");
+    match policy {
+        ConsumeFromWhere::ConsumeFromLastOffset => {
+            if retry_topic {
+                Ok(LiteInitialOffsetAction::Value(0))
+            } else {
+                Ok(LiteInitialOffsetAction::MaxOffset)
+            }
+        }
+        ConsumeFromWhere::ConsumeFromFirstOffset => Ok(LiteInitialOffsetAction::Value(0)),
+        ConsumeFromWhere::ConsumeFromTimestamp if retry_topic => {
+            Ok(LiteInitialOffsetAction::MaxOffset)
+        }
+        ConsumeFromWhere::ConsumeFromTimestamp => {
+            let timestamp = parse_java_timestamp_millis(consume_timestamp)
+                .ok_or(LitePullConsumerError::InvalidConsumeTimestamp)?;
+            Ok(LiteInitialOffsetAction::SearchTimestamp(timestamp))
+        }
+        _ => Ok(LiteInitialOffsetAction::Value(-1)),
+    }
+}
+
 #[derive(Default)]
 struct MessageBuffer {
     batches: VecDeque<BufferedBatch>,
@@ -1644,27 +1686,17 @@ impl LitePullConsumer {
         queue: &MessageQueue,
     ) -> Result<i64, LitePullConsumerError> {
         let stored = engine.fetch_consume_offset(queue, false).await?;
-        if stored >= 0 {
-            return Ok(stored);
-        }
-        match self.config.consume_from_where() {
-            ConsumeFromWhere::ConsumeFromFirstOffset => Ok(0),
-            ConsumeFromWhere::ConsumeFromMinOffset
-            | ConsumeFromWhere::ConsumeFromLastOffsetAndFromMinWhenBootFirst => {
-                Ok(engine.get_min_offset(queue).await?)
-            }
-            ConsumeFromWhere::ConsumeFromTimestamp => {
-                let timestamp = parse_java_timestamp_millis(self.config.consume_timestamp())
-                    .ok_or(LitePullConsumerError::InvalidConsumeTimestamp)?;
-                let offset = engine.search_offset(queue, timestamp).await?;
-                if offset >= 0 {
-                    Ok(offset)
-                } else {
-                    Ok(engine.get_max_offset(queue).await?)
-                }
-            }
-            ConsumeFromWhere::ConsumeFromMaxOffset | ConsumeFromWhere::ConsumeFromLastOffset => {
-                Ok(engine.get_max_offset(queue).await?)
+        match lite_initial_offset_action(
+            self.config.consume_from_where(),
+            queue.topic().unwrap_or_default(),
+            stored,
+            self.config.consume_timestamp(),
+        )? {
+            LiteInitialOffsetAction::Value(offset) => Ok(offset),
+            LiteInitialOffsetAction::MaxOffset => Ok(engine.get_max_offset(queue).await?),
+            LiteInitialOffsetAction::SearchTimestamp(timestamp) => {
+                // Java preserves SEARCH_OFFSET's result, including -1.
+                Ok(engine.search_offset(queue, timestamp).await?)
             }
         }
     }
@@ -1880,6 +1912,95 @@ mod tests {
 
     fn consumer() -> LitePullConsumer {
         LitePullConsumer::new(LitePullConsumerConfig::new("lite-test").unwrap()).unwrap()
+    }
+
+    #[test]
+    fn lite_initial_offset_matrix_matches_java_missing_and_unavailable_branches() {
+        let timestamp = "20200101000000";
+        let regular = "orders";
+        let retry = "%RETRY%group";
+        let cases = [
+            (
+                ConsumeFromWhere::ConsumeFromLastOffset,
+                -1,
+                regular,
+                LiteInitialOffsetAction::MaxOffset,
+            ),
+            (
+                ConsumeFromWhere::ConsumeFromLastOffset,
+                -1,
+                retry,
+                LiteInitialOffsetAction::Value(0),
+            ),
+            (
+                ConsumeFromWhere::ConsumeFromFirstOffset,
+                -1,
+                regular,
+                LiteInitialOffsetAction::Value(0),
+            ),
+            (
+                ConsumeFromWhere::ConsumeFromFirstOffset,
+                -1,
+                retry,
+                LiteInitialOffsetAction::Value(0),
+            ),
+            (
+                ConsumeFromWhere::ConsumeFromTimestamp,
+                -1,
+                regular,
+                LiteInitialOffsetAction::SearchTimestamp(1_577_836_800_000),
+            ),
+            (
+                ConsumeFromWhere::ConsumeFromTimestamp,
+                -1,
+                retry,
+                LiteInitialOffsetAction::MaxOffset,
+            ),
+            (
+                ConsumeFromWhere::ConsumeFromTimestamp,
+                73,
+                retry,
+                LiteInitialOffsetAction::Value(73),
+            ),
+        ];
+
+        for (policy, stored_offset, topic, expected) in cases {
+            assert_eq!(
+                lite_initial_offset_action(policy, topic, stored_offset, timestamp).unwrap(),
+                expected,
+                "policy={policy:?}, stored={stored_offset}, topic={topic}"
+            );
+        }
+        for policy in [
+            ConsumeFromWhere::ConsumeFromLastOffset,
+            ConsumeFromWhere::ConsumeFromFirstOffset,
+            ConsumeFromWhere::ConsumeFromTimestamp,
+        ] {
+            assert_eq!(
+                lite_initial_offset_action(policy, regular, -2, timestamp).unwrap(),
+                LiteInitialOffsetAction::Value(-1),
+                "unavailable stored offset with {policy:?}"
+            );
+        }
+        assert!(matches!(
+            lite_initial_offset_action(
+                ConsumeFromWhere::ConsumeFromTimestamp,
+                regular,
+                -1,
+                "invalid"
+            ),
+            Err(LitePullConsumerError::InvalidConsumeTimestamp)
+        ));
+        assert_eq!(
+            lite_initial_offset_action(
+                ConsumeFromWhere::ConsumeFromTimestamp,
+                retry,
+                -1,
+                "invalid"
+            )
+            .unwrap(),
+            LiteInitialOffsetAction::MaxOffset
+        );
     }
 
     #[tokio::test]

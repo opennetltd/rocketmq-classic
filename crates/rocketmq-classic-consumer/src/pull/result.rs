@@ -471,8 +471,10 @@ fn read_i32(bytes: &[u8], offset: usize) -> Option<i32> {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::net::{IpAddr, Ipv4Addr};
 
     use super::*;
+    use rocketmq_classic_common::message::{MessageHostAddress, encode_message_ext};
 
     fn empty_pull_result(status: PullStatus) -> PullResultExt {
         PullResultExt {
@@ -484,6 +486,50 @@ mod tests {
             offset_delta: None,
             raw_messages: None,
         }
+    }
+
+    #[test]
+    fn pull_result_keeps_all_24_valid_compressed_records() {
+        const BODY_SIZE: usize = 3 * 1024 * 1024;
+
+        let mut message = MessageExt::new();
+        message.set_topic("orders");
+        message.set_body(vec![0x5a; BODY_SIZE]);
+        message.set_sys_flag(rocketmq_classic_common::sysflag::message::COMPRESSED_FLAG);
+        message.set_born_host(Some(MessageHostAddress::from_ip_address(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            10_911,
+        )));
+        message.set_store_host(Some(MessageHostAddress::from_ip_address(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            10_912,
+        )));
+        let record = encode_message_ext(&message, true).expect("compressed message encodes");
+        let mut raw_messages = Vec::new();
+        for _ in 0..24 {
+            raw_messages.extend_from_slice(&record);
+        }
+
+        let mut result = empty_pull_result(PullStatus::Found);
+        result.next_begin_offset = 24;
+        result.raw_messages = Some(raw_messages);
+        let processed = PullAPIWrapper::default()
+            .process_pull_result(
+                &MessageQueue::new("orders", "broker-a", 0),
+                result,
+                &SubscriptionData::default(),
+                DecodeOptions::default(),
+            )
+            .expect("valid compressed pull result decodes");
+
+        assert_eq!(processed.result.next_begin_offset, 24);
+        let messages = processed.messages.expect("FOUND returns messages");
+        assert_eq!(messages.len(), 24);
+        assert!(
+            messages
+                .iter()
+                .all(|message| message.body().len() == BODY_SIZE)
+        );
     }
 
     #[test]

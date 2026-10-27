@@ -4,10 +4,7 @@ use thiserror::Error;
 
 use super::message_id::encode_message_id;
 use super::{MessageExt, MessageHostAddress, MessageProperties, decode_properties};
-use crate::{
-    compression::{DEFAULT_MAX_DECOMPRESSED_BODY_BYTES, decompress_limited},
-    sysflag::message,
-};
+use crate::{compression::decompress_limited, sysflag::message};
 
 const MESSAGE_MAGIC_CODE_V1: i32 = -626_843_481;
 pub const MESSAGE_MAGIC_CODE_V2: i32 = -626_843_477;
@@ -209,9 +206,13 @@ struct DecodeLimits {
 impl Default for DecodeLimits {
     fn default() -> Self {
         Self {
-            max_record_bytes: 16 * 1024 * 1024,
-            max_decompressed_body_bytes: DEFAULT_MAX_DECOMPRESSED_BODY_BYTES,
-            max_total_decoded_bytes: 64 * 1024 * 1024,
+            // Java's MessageDecoder has no fixed record, body, or batch cap.
+            // Keep the explicit limits for internal callers that need a
+            // bounded parser, while the compatibility entrypoints accept any
+            // valid Java record and batch.
+            max_record_bytes: usize::MAX,
+            max_decompressed_body_bytes: usize::MAX,
+            max_total_decoded_bytes: usize::MAX,
         }
     }
 }
@@ -579,16 +580,16 @@ fn ensure_record_limit(
 }
 
 /// Decode a batch with Java `decodesBatch(..., isClient=false)` failure
-/// handling. Stops at the first invalid or over-limit record and returns the
-/// successfully decoded prefix, matching Java's `null`-then-break behavior.
+/// handling. Stops at the first invalid record and returns the successfully
+/// decoded prefix, matching Java's `null`-then-break behavior.
 pub fn decode_many_compatible(records: &[u8], options: DecodeOptions) -> Vec<MessageExt> {
     decode_many_prefix_with_limits(records, options, DecodeLimits::default()).0
 }
 
 /// Decode a batch using Java `MessageDecoder.decodesBatch(..., isClient=true)`
-/// failure handling. Decoding stops at the first invalid or over-limit record
-/// and returns the successfully decoded prefix, matching Java's `null`-then-
-/// break behavior while retaining Rust's per-record safety limits.
+/// failure handling. Decoding stops at the first invalid record and returns
+/// the successfully decoded prefix, matching Java's `null`-then-break
+/// behavior.
 pub fn decode_many_as_client_compatible(records: &[u8], options: DecodeOptions) -> Vec<MessageExt> {
     let mut messages = decode_many_compatible(records, options);
     for message in &mut messages {
@@ -836,6 +837,7 @@ impl<'a> Cursor<'a> {
 mod tests {
     use base64::{Engine as _, engine::general_purpose::STANDARD};
     use serde_json::Value;
+    use std::net::{IpAddr, Ipv4Addr};
 
     use super::*;
 
@@ -863,6 +865,46 @@ mod tests {
                 )
             })
             .collect()
+    }
+
+    fn compressed_record(body: Vec<u8>) -> Vec<u8> {
+        let mut message = MessageExt::new();
+        message.set_topic("orders");
+        message.set_body(body);
+        message.set_sys_flag(message::COMPRESSED_FLAG);
+        message.set_born_host(Some(MessageHostAddress::from_ip_address(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            10_911,
+        )));
+        message.set_store_host(Some(MessageHostAddress::from_ip_address(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            10_912,
+        )));
+        super::super::encode_message_ext(&message, true).expect("compressed message encodes")
+    }
+
+    #[test]
+    fn compatible_batch_decode_keeps_valid_records_past_rust_only_limits() {
+        const MIB: usize = 1024 * 1024;
+
+        let record = compressed_record(vec![0x5a; 3 * MIB]);
+        let mut batch = Vec::new();
+        for _ in 0..24 {
+            batch.extend_from_slice(&record);
+        }
+
+        let decoded = decode_many_compatible(&batch, DecodeOptions::default());
+        assert_eq!(decoded.len(), 24);
+        assert!(
+            decoded
+                .iter()
+                .all(|message| message.body().len() == 3 * MIB)
+        );
+
+        let large_record = compressed_record(vec![0xa5; 65 * MIB]);
+        let decoded = decode_many_compatible(&large_record, DecodeOptions::default());
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].body().len(), 65 * MIB);
     }
 
     #[test]
