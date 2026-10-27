@@ -5,7 +5,10 @@ use rocketmq_classic_consumer::process_queue::ProcessQueueError;
 use rocketmq_classic_consumer::{
     ConsumeMessageService, ConsumeMessageServiceFuture, ConsumerStatsManager, MqHelper,
     PopProcessQueue, PopRequest, ProcessQueue, PullConsumerConfig, PullRequest, PushConsumer,
-    PushConsumerConfig, pull::PullConsumer, rebalance::AllocateMessageQueueAveragely,
+    PushConsumerConfig,
+    lite::{LitePullConsumer, LitePullConsumerConfig},
+    pull::PullConsumer,
+    rebalance::AllocateMessageQueueAveragely,
 };
 use rocketmq_classic_core::{config::ClientConfig, runtime::ClientRuntimeManager};
 use rocketmq_classic_protocol::body::{
@@ -597,6 +600,50 @@ async fn rebalance_owner_controls_match_java_client_selection_and_settings() {
     assert!(push.remove_process_queue(&queue).await);
     assert!(process_queue.is_dropped());
     assert!(push.get_process_queue_table().read().unwrap().is_empty());
+}
+
+#[test]
+fn pull_and_lite_live_and_nullable_settings_are_publicly_callable() {
+    let mut pull = PullConsumer::new(PullConsumerConfig::new("facade-live-pull").unwrap());
+    pull.set_broker_suspend_max_time_millis(12_000);
+    pull.set_consumer_timeout_millis_when_suspend(14_000);
+    pull.set_consumer_pull_timeout_millis(8_000);
+    assert_eq!(pull.broker_suspend_max_time_millis(), 12_000);
+    assert_eq!(pull.consumer_timeout_millis_when_suspend(), 14_000);
+    assert_eq!(pull.consumer_pull_timeout_millis(), 8_000);
+    pull.set_consumer_group_nullable(None);
+    assert_eq!(pull.get_consumer_group_nullable(), None);
+    pull.set_consumer_group_nullable(Some("facade-pull-restored".to_owned()));
+    assert_eq!(
+        pull.get_consumer_group_nullable().as_deref(),
+        Some("facade-pull-restored")
+    );
+
+    let mut lite_config = LitePullConsumerConfig::new_nullable(None).unwrap();
+    assert_eq!(lite_config.get_consumer_group(), None);
+    lite_config.set_consumer_group_nullable(Some("facade-lite-config".to_owned()));
+    let lite = LitePullConsumer::new(lite_config).unwrap();
+    assert_eq!(
+        lite.get_consumer_group().as_deref(),
+        Some("facade-lite-config")
+    );
+    lite.set_consumer_group_nullable(None);
+    assert_eq!(lite.get_consumer_group(), None);
+    lite.set_consumer_group("facade-lite-live");
+    lite.set_consume_from_where(
+        rocketmq_classic_protocol::heartbeat::ConsumeFromWhere::ConsumeFromTimestamp,
+    )
+    .unwrap();
+    lite.set_consume_timestamp("20210102030405");
+    assert_eq!(
+        lite.get_consumer_group().as_deref(),
+        Some("facade-lite-live")
+    );
+    assert_eq!(
+        lite.consume_from_where(),
+        rocketmq_classic_protocol::heartbeat::ConsumeFromWhere::ConsumeFromTimestamp
+    );
+    assert_eq!(lite.consume_timestamp(), "20210102030405");
 }
 
 #[tokio::test]

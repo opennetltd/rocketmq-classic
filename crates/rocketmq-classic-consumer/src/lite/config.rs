@@ -49,7 +49,7 @@ pub(crate) const DEFAULT_LITE_CONSUMER_PULL_TIMEOUT_MILLIS: i64 = 10_000;
 pub struct LitePullConsumerConfig {
     client: ClientConfig,
     tls_config: Option<TlsConfig>,
-    consumer_group: String,
+    consumer_group: Option<String>,
     consumer_timeout_millis_when_suspend: i64,
     consumer_pull_timeout_millis: i64,
     message_model: MessageModel,
@@ -80,6 +80,12 @@ impl LitePullConsumerConfig {
     }
 
     pub fn new(consumer_group: impl Into<String>) -> Result<Self, ConfigError> {
+        Self::new_nullable(Some(consumer_group.into()))
+    }
+
+    /// Creates Lite configuration while preserving a Java `null` group until
+    /// the consumer's startup validation boundary.
+    pub fn new_nullable(consumer_group: Option<String>) -> Result<Self, ConfigError> {
         let mut client = ClientConfig::new_auto()?;
         // Java's DefaultLitePullConsumer constructors enable stream request
         // type before creating the underlying client runtime.
@@ -87,7 +93,7 @@ impl LitePullConsumerConfig {
         Ok(Self {
             client,
             tls_config: None,
-            consumer_group: consumer_group.into(),
+            consumer_group,
             consumer_timeout_millis_when_suspend: DEFAULT_LITE_CONSUMER_TIMEOUT_MILLIS_WHEN_SUSPEND,
             consumer_pull_timeout_millis: DEFAULT_LITE_CONSUMER_PULL_TIMEOUT_MILLIS,
             message_model: MessageModel::Clustering,
@@ -133,12 +139,26 @@ impl LitePullConsumerConfig {
         self.tls_config = value;
     }
 
+    /// Returns the convenience string view, or `""` when the Java group is
+    /// null. Use `consumer_group_option` to distinguish null from empty.
     pub fn consumer_group(&self) -> &str {
-        &self.consumer_group
+        self.consumer_group.as_deref().unwrap_or_default()
+    }
+
+    pub fn consumer_group_option(&self) -> Option<&str> {
+        self.consumer_group.as_deref()
+    }
+
+    pub fn get_consumer_group(&self) -> Option<String> {
+        self.consumer_group.clone()
     }
 
     pub fn set_consumer_group(&mut self, value: impl Into<String>) {
-        self.consumer_group = value.into();
+        self.consumer_group = Some(value.into());
+    }
+
+    pub fn set_consumer_group_nullable(&mut self, value: Option<String>) {
+        self.consumer_group = value;
     }
 
     pub const fn broker_suspend_max_time_millis(&self) -> i64 {
@@ -359,5 +379,15 @@ mod tests {
         config.set_tls_config(Some(tls));
         assert!(config.client_config().use_tls());
         assert!(!config.tls_config().unwrap().test_mode);
+    }
+
+    #[test]
+    fn nullable_consumer_group_is_distinct_from_empty_group() {
+        let mut config = LitePullConsumerConfig::new_nullable(None).unwrap();
+        assert_eq!(config.get_consumer_group(), None);
+        config.set_consumer_group_nullable(Some(String::new()));
+        assert_eq!(config.get_consumer_group().as_deref(), Some(""));
+        config.set_consumer_group("orders");
+        assert_eq!(config.get_consumer_group().as_deref(), Some("orders"));
     }
 }

@@ -17,8 +17,10 @@ use std::{
 };
 
 use rocketmq_classic_common::message::MessageQueue;
+use rocketmq_classic_core::error::RpcError;
 use rocketmq_classic_protocol::{
     SharedValue,
+    codes::response,
     heartbeat::{ConsumeFromWhere, ConsumerSubscriptionDataSet},
 };
 use rocketmq_classic_remoting::client::RpcHook;
@@ -32,7 +34,10 @@ use crate::{
     consume::{ConsumeMessageContext, ConsumeMessageHook, ConsumeMessageHookRegistry},
     error::{LitePullConsumerError, PullConsumerError},
     pull::{MessageSelector, ProcessedPullResult, PullConsumer, build_subscription},
-    push::{MessageQueueListener, parse_java_timestamp_millis},
+    push::{
+        MessageQueueListener, parse_java_timestamp_millis,
+        pull_service::PULL_TIME_DELAY_MILLIS_WHEN_BROKER_FLOW_CONTROL,
+    },
 };
 
 pub type TopicMessageQueueChangeListener = Arc<dyn Fn(&str, &BTreeSet<MessageQueue>) + Send + Sync>;
@@ -63,6 +68,23 @@ enum LiteInitialOffsetAction {
     Value(i64),
     MaxOffset,
     SearchTimestamp(i64),
+}
+
+fn lite_pull_error_delay_millis(
+    error: &LitePullConsumerError,
+    configured_delay_millis: i64,
+) -> u64 {
+    if matches!(
+        error,
+        LitePullConsumerError::Pull(PullConsumerError::Rpc(RpcError::Response {
+            code: response::FLOW_CONTROL,
+            ..
+        }))
+    ) {
+        PULL_TIME_DELAY_MILLIS_WHEN_BROKER_FLOW_CONTROL.max(0) as u64
+    } else {
+        configured_delay_millis.max(0) as u64
+    }
 }
 
 fn lite_initial_offset_action(
@@ -111,6 +133,10 @@ struct MessageBuffer {
 /// queue-scoped prefetch, and separate fetched/delivered/committed positions.
 pub struct LitePullConsumer {
     config: LitePullConsumerConfig,
+    consumer_group: RwLock<Option<String>>,
+    consume_from_where: RwLock<ConsumeFromWhere>,
+    consume_timestamp: RwLock<String>,
+    pull_time_delay_millis_when_exception: i64,
     rpc_hook: Option<Arc<dyn RpcHook>>,
     consume_message_hooks: ConsumeMessageHookRegistry,
     engine: RwLock<Option<Arc<PullConsumer>>>,
@@ -172,6 +198,12 @@ impl LitePullConsumer {
         config: LitePullConsumerConfig,
         rpc_hook: Option<Arc<dyn RpcHook>>,
     ) -> Result<Self, LitePullConsumerError> {
+        let consumer_group = config.get_consumer_group();
+        let consume_from_where = config.consume_from_where();
+        let consume_timestamp = config.consume_timestamp().to_owned();
+        let pull_time_delay_millis_when_exception = config
+            .client_config()
+            .pull_time_delay_millis_when_exception();
         let auto_commit = config.auto_commit();
         let pull_thread_nums = config.pull_thread_nums();
         let auto_commit_interval_millis = config.auto_commit_interval_millis();
@@ -192,6 +224,10 @@ impl LitePullConsumer {
         let pull_permits = Arc::new(tokio::sync::Semaphore::new(0));
         Ok(Self {
             config,
+            consumer_group: RwLock::new(consumer_group),
+            consume_from_where: RwLock::new(consume_from_where),
+            consume_timestamp: RwLock::new(consume_timestamp),
+            pull_time_delay_millis_when_exception,
             rpc_hook,
             consume_message_hooks: ConsumeMessageHookRegistry::default(),
             engine: RwLock::new(None),
@@ -245,6 +281,64 @@ impl LitePullConsumer {
     /// accessors after construction.
     pub fn config(&self) -> &LitePullConsumerConfig {
         &self.config
+    }
+
+    pub fn get_consumer_group(&self) -> Option<String> {
+        self.consumer_group
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    pub fn set_consumer_group(&self, value: impl Into<String>) {
+        self.set_consumer_group_nullable(Some(value.into()));
+    }
+
+    pub fn set_consumer_group_nullable(&self, value: Option<String>) {
+        *self
+            .consumer_group
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = value;
+    }
+
+    pub fn consume_from_where(&self) -> ConsumeFromWhere {
+        *self
+            .consume_from_where
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    pub fn set_consume_from_where(
+        &self,
+        value: ConsumeFromWhere,
+    ) -> Result<(), LitePullConsumerError> {
+        if !matches!(
+            value,
+            ConsumeFromWhere::ConsumeFromFirstOffset
+                | ConsumeFromWhere::ConsumeFromLastOffset
+                | ConsumeFromWhere::ConsumeFromTimestamp
+        ) {
+            return Err(LitePullConsumerError::InvalidConsumeFromWhere(value));
+        }
+        *self
+            .consume_from_where
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = value;
+        Ok(())
+    }
+
+    pub fn consume_timestamp(&self) -> String {
+        self.consume_timestamp
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    pub fn set_consume_timestamp(&self, value: impl Into<String>) {
+        *self
+            .consume_timestamp
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = value.into();
     }
 
     /// Installs an internal hook around each non-empty poll result.
@@ -638,11 +732,18 @@ impl LitePullConsumer {
                 Lifecycle::Created => *state = Lifecycle::Starting,
             }
         }
+        let raw_consumer_group = match self.get_consumer_group() {
+            Some(group) => group,
+            None => {
+                *self.lifecycle.lock().await = Lifecycle::StartFailed;
+                return Err(PullConsumerError::InvalidConsumerGroup.into());
+            }
+        };
         let effective_group = match self
             .config
             .client_config()
             .clone()
-            .with_namespace(Some(self.config.consumer_group()))
+            .with_namespace(Some(&raw_consumer_group))
         {
             Ok(Some(group)) => group,
             Ok(None) => {
@@ -687,7 +788,7 @@ impl LitePullConsumer {
         let trace_dispatcher = if self.config.enable_msg_trace() {
             match LiteTraceDispatcher::new(
                 self.config.client_config(),
-                self.config.consumer_group(),
+                &raw_consumer_group,
                 self.config.customized_trace_topic(),
                 self.rpc_hook.clone(),
             ) {
@@ -711,7 +812,7 @@ impl LitePullConsumer {
         if let Some(dispatcher) = trace_dispatcher.as_ref() {
             self.register_consume_message_hook(Arc::new(trace::LiteConsumeTraceHook::new(
                 dispatcher.clone(),
-                self.config.consumer_group(),
+                &raw_consumer_group,
                 self.config.client_config().clone(),
             )));
         }
@@ -903,7 +1004,10 @@ impl LitePullConsumer {
     }
 
     async fn prepare_engine(&self) -> Result<Arc<PullConsumer>, LitePullConsumerError> {
-        let mut pull_config = PullConsumerConfig::new(self.config.consumer_group())?;
+        let consumer_group = self
+            .get_consumer_group()
+            .ok_or(PullConsumerError::InvalidConsumerGroup)?;
+        let mut pull_config = PullConsumerConfig::new(consumer_group)?;
         *pull_config.client_config_mut() = self.config.client_config().clone();
         pull_config.set_tls_config(self.config.tls_config().cloned());
         pull_config
@@ -1027,9 +1131,12 @@ impl LitePullConsumer {
             if let Some((queue, batch)) = self.take_ready_batch_with_queue() {
                 let mut client_config = self.config.client_config().clone();
                 let namespace = client_config.get_namespace()?.map(str::to_owned);
+                let raw_consumer_group = self
+                    .get_consumer_group()
+                    .ok_or(PullConsumerError::InvalidConsumerGroup)?;
                 let consumer_group = client_config
-                    .with_namespace(Some(self.config.consumer_group()))?
-                    .unwrap_or_else(|| self.config.consumer_group().to_owned());
+                    .with_namespace(Some(&raw_consumer_group))?
+                    .unwrap_or(raw_consumer_group);
                 let mut consume_context =
                     ConsumeMessageContext::new(Some(consumer_group), Some(batch), queue, namespace);
                 self.consume_message_hooks
@@ -1580,6 +1687,14 @@ impl LitePullConsumer {
         }
     }
 
+    async fn wait_after_pull_error(&self, error: &LitePullConsumerError) {
+        sleep(Duration::from_millis(lite_pull_error_delay_millis(
+            error,
+            self.pull_time_delay_millis_when_exception,
+        )))
+        .await;
+    }
+
     async fn pull_loop(self: Arc<Self>, queue: MessageQueue, generation: u64) {
         loop {
             if !self.running.load(Ordering::Acquire) {
@@ -1622,7 +1737,11 @@ impl LitePullConsumer {
                             return;
                         }
                     }
-                    _ => {
+                    Err(error) => {
+                        self.wait_after_pull_error(&error).await;
+                        continue;
+                    }
+                    Ok(_) => {
                         sleep(Duration::from_secs(1)).await;
                         continue;
                     }
@@ -1651,7 +1770,10 @@ impl LitePullConsumer {
                     Some(false) => sleep(Duration::from_millis(10)).await,
                     Some(true) => {}
                 },
-                Err(_) => sleep(Duration::from_secs(1)).await,
+                Err(error) => {
+                    let error = LitePullConsumerError::Pull(error);
+                    self.wait_after_pull_error(&error).await;
+                }
             }
         }
     }
@@ -1687,10 +1809,10 @@ impl LitePullConsumer {
     ) -> Result<i64, LitePullConsumerError> {
         let stored = engine.fetch_consume_offset(queue, false).await?;
         match lite_initial_offset_action(
-            self.config.consume_from_where(),
+            self.consume_from_where(),
             queue.topic().unwrap_or_default(),
             stored,
-            self.config.consume_timestamp(),
+            &self.consume_timestamp(),
         )? {
             LiteInitialOffsetAction::Value(offset) => Ok(offset),
             LiteInitialOffsetAction::MaxOffset => Ok(engine.get_max_offset(queue).await?),
@@ -2001,6 +2123,180 @@ mod tests {
             .unwrap(),
             LiteInitialOffsetAction::MaxOffset
         );
+    }
+
+    #[test]
+    fn lite_consumer_reads_live_policy_and_timestamp_after_construction() {
+        let consumer = consumer();
+        consumer
+            .set_consume_from_where(ConsumeFromWhere::ConsumeFromTimestamp)
+            .unwrap();
+        consumer.set_consume_timestamp("20210102030405");
+
+        assert_eq!(
+            lite_initial_offset_action(
+                consumer.consume_from_where(),
+                "orders",
+                -1,
+                &consumer.consume_timestamp(),
+            )
+            .unwrap(),
+            LiteInitialOffsetAction::SearchTimestamp(1_609_556_645_000)
+        );
+    }
+
+    fn response_error(code: i32) -> LitePullConsumerError {
+        PullConsumerError::Rpc(RpcError::Response {
+            request_code: 11,
+            peer: "broker-a".to_owned(),
+            code,
+            remark: None,
+        })
+        .into()
+    }
+
+    #[test]
+    fn lite_pull_retry_delay_selects_configured_default_and_flow_control_branches() {
+        let configured_error = response_error(response::SYSTEM_ERROR);
+        let flow_control_error = response_error(response::FLOW_CONTROL);
+        assert_eq!(
+            lite_pull_error_delay_millis(&configured_error, 4_500),
+            4_500
+        );
+        assert_eq!(
+            lite_pull_error_delay_millis(&configured_error, 1_000),
+            1_000
+        );
+        assert_eq!(lite_pull_error_delay_millis(&flow_control_error, 4_500), 20);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn lite_pull_retry_delay_waits_for_configured_duration_and_is_cancellable() {
+        let mut config = LitePullConsumerConfig::new("lite-retry-delay").unwrap();
+        config
+            .client_config_mut()
+            .set_pull_time_delay_millis_when_exception(4_500);
+        let consumer = Arc::new(LitePullConsumer::new(config).unwrap());
+        let error = response_error(response::SYSTEM_ERROR);
+        let retry = {
+            let consumer = consumer.clone();
+            tokio::spawn(async move { consumer.wait_after_pull_error(&error).await })
+        };
+        tokio::task::yield_now().await;
+        tokio::time::advance(Duration::from_millis(4_499)).await;
+        tokio::task::yield_now().await;
+        assert!(!retry.is_finished());
+        tokio::time::advance(Duration::from_millis(1)).await;
+        retry.await.unwrap();
+
+        let pending = {
+            let consumer = consumer.clone();
+            let error = response_error(response::SYSTEM_ERROR);
+            tokio::spawn(async move { consumer.wait_after_pull_error(&error).await })
+        };
+        tokio::task::yield_now().await;
+        pending.abort();
+        assert!(pending.await.unwrap_err().is_cancelled());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn lite_pull_retry_delay_uses_one_second_default_and_twenty_ms_for_flow_control() {
+        let default_consumer = Arc::new(consumer());
+        let default_error = response_error(response::SYSTEM_ERROR);
+        let default_retry = {
+            let consumer = default_consumer.clone();
+            tokio::spawn(async move { consumer.wait_after_pull_error(&default_error).await })
+        };
+        tokio::task::yield_now().await;
+        tokio::time::advance(Duration::from_millis(999)).await;
+        tokio::task::yield_now().await;
+        assert!(!default_retry.is_finished());
+        tokio::time::advance(Duration::from_millis(1)).await;
+        default_retry.await.unwrap();
+
+        let configured_consumer = Arc::new({
+            let mut config = LitePullConsumerConfig::new("lite-flow-control-delay").unwrap();
+            config
+                .client_config_mut()
+                .set_pull_time_delay_millis_when_exception(4_500);
+            LitePullConsumer::new(config).unwrap()
+        });
+        let flow_error = response_error(response::FLOW_CONTROL);
+        let flow_retry = {
+            let consumer = configured_consumer.clone();
+            tokio::spawn(async move { consumer.wait_after_pull_error(&flow_error).await })
+        };
+        tokio::task::yield_now().await;
+        tokio::time::advance(Duration::from_millis(19)).await;
+        tokio::task::yield_now().await;
+        assert!(!flow_retry.is_finished());
+        tokio::time::advance(Duration::from_millis(1)).await;
+        flow_retry.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn lite_nullable_group_is_preserved_until_start_validation() {
+        let consumer = Arc::new(
+            LitePullConsumer::new(LitePullConsumerConfig::new_nullable(None).unwrap()).unwrap(),
+        );
+        assert_eq!(consumer.get_consumer_group(), None);
+        assert!(matches!(
+            consumer.start().await,
+            Err(LitePullConsumerError::Pull(
+                PullConsumerError::InvalidConsumerGroup
+            ))
+        ));
+        assert!(matches!(
+            consumer.start().await,
+            Err(LitePullConsumerError::StartFailed)
+        ));
+
+        consumer.set_consumer_group("lite-after-construction");
+        assert_eq!(
+            consumer.get_consumer_group().as_deref(),
+            Some("lite-after-construction")
+        );
+        consumer.set_consumer_group_nullable(None);
+        assert_eq!(consumer.get_consumer_group(), None);
+    }
+
+    #[tokio::test]
+    async fn lite_group_start_validation_distinguishes_null_empty_default_and_namespaced() {
+        for (group, expected_error) in [
+            (None, PullConsumerError::InvalidConsumerGroup.to_string()),
+            (
+                Some(String::new()),
+                PullConsumerError::InvalidConsumerGroup.to_string(),
+            ),
+            (
+                Some(crate::config::DEFAULT_CONSUMER_GROUP.to_owned()),
+                PullConsumerError::DefaultConsumerGroup.to_string(),
+            ),
+        ] {
+            let consumer = Arc::new(
+                LitePullConsumer::new(LitePullConsumerConfig::new_nullable(group).unwrap())
+                    .unwrap(),
+            );
+            let error = consumer.start().await.unwrap_err();
+            assert_eq!(error.to_string(), expected_error);
+            assert!(matches!(
+                consumer.start().await,
+                Err(LitePullConsumerError::StartFailed)
+            ));
+        }
+
+        let mut config = LitePullConsumerConfig::new("valid-lite-group").unwrap();
+        config
+            .client_config_mut()
+            .set_namespace(Some("tenant".to_owned()));
+        let consumer = LitePullConsumer::new(config).unwrap();
+        let mut client_config = consumer.config().client_config().clone();
+        let effective_group = client_config
+            .with_namespace(consumer.get_consumer_group().as_deref())
+            .unwrap()
+            .unwrap();
+        assert_eq!(effective_group, "tenant%valid-lite-group");
+        assert!(crate::config::validate_group(&effective_group).is_ok());
     }
 
     #[tokio::test]
@@ -2582,8 +2878,8 @@ mod tests {
         assert_eq!(state.delivered_offset, Some(21));
     }
 
-    #[test]
-    fn lite_accepts_the_complete_pull_batch_before_advancing_fetched_offset() {
+    #[tokio::test(start_paused = true)]
+    async fn lite_accepts_the_complete_pull_batch_before_advancing_fetched_offset() {
         let consumer = consumer();
         let queue = MessageQueue::new("orders", "broker-a", 0);
         consumer.queue_states.lock().unwrap().insert(
@@ -2616,7 +2912,9 @@ mod tests {
             messages: Some(messages),
         };
 
+        let accepted_at = Instant::now();
         assert_eq!(consumer.accept_pull_result(&queue, 7, result), Some(true));
+        assert_eq!(Instant::now(), accepted_at);
         let states = consumer.queue_states.lock().unwrap();
         assert_eq!(states.get(&queue).unwrap().fetched_offset, Some(24));
         drop(states);

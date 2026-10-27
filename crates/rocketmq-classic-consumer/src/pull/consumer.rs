@@ -128,6 +128,9 @@ enum State {
 pub struct PullConsumer {
     config: PullConsumerConfig,
     current_group_name: RwLock<String>,
+    broker_suspend_max_time_millis: AtomicI64,
+    consumer_timeout_millis_when_suspend: AtomicI64,
+    consumer_pull_timeout_millis: AtomicI64,
     rebalance_message_model: Arc<RwLock<MessageModel>>,
     rebalance_strategy: Arc<RwLock<Arc<dyn AllocateMessageQueueStrategy>>>,
     manager: ClientRuntimeManager,
@@ -180,6 +183,9 @@ impl PullConsumer {
         rpc_hook: Option<Arc<dyn RpcHook>>,
     ) -> Self {
         let current_group_name = config.consumer_group().to_owned();
+        let broker_suspend_max_time_millis = config.broker_suspend_max_time_millis();
+        let consumer_timeout_millis_when_suspend = config.consumer_timeout_millis_when_suspend();
+        let consumer_pull_timeout_millis = config.consumer_pull_timeout_millis();
         let rebalance_message_model = Arc::new(RwLock::new(config.message_model()));
         let rebalance_strategy = Arc::new(RwLock::new(config.allocate_message_queue_strategy()));
         let message_queue_listener = config.message_queue_listener();
@@ -187,6 +193,11 @@ impl PullConsumer {
         Self {
             config,
             current_group_name: RwLock::new(current_group_name),
+            broker_suspend_max_time_millis: AtomicI64::new(broker_suspend_max_time_millis),
+            consumer_timeout_millis_when_suspend: AtomicI64::new(
+                consumer_timeout_millis_when_suspend,
+            ),
+            consumer_pull_timeout_millis: AtomicI64::new(consumer_pull_timeout_millis),
             rebalance_message_model,
             rebalance_strategy,
             manager,
@@ -233,12 +244,49 @@ impl PullConsumer {
         self.group_name()
     }
 
+    pub fn get_consumer_group_nullable(&self) -> Option<String> {
+        self.config.get_consumer_group().map(|_| self.group_name())
+    }
+
     /// Pull configuration can be changed before startup, matching Java's
     /// rebalance group setter while keeping the Rust owner borrow-safe.
     pub fn set_consumer_group(&mut self, group: impl Into<String>) {
         let group = group.into();
         self.config.set_consumer_group(group.clone());
         *write_lock(&self.current_group_name) = group;
+    }
+
+    pub fn set_consumer_group_nullable(&mut self, group: Option<String>) {
+        self.config.set_consumer_group_nullable(group.clone());
+        *write_lock(&self.current_group_name) = group.unwrap_or_default();
+    }
+
+    pub fn broker_suspend_max_time_millis(&self) -> i64 {
+        self.broker_suspend_max_time_millis.load(Ordering::Acquire)
+    }
+
+    pub fn set_broker_suspend_max_time_millis(&self, value: i64) {
+        self.broker_suspend_max_time_millis
+            .store(value, Ordering::Release);
+    }
+
+    pub fn consumer_timeout_millis_when_suspend(&self) -> i64 {
+        self.consumer_timeout_millis_when_suspend
+            .load(Ordering::Acquire)
+    }
+
+    pub fn set_consumer_timeout_millis_when_suspend(&self, value: i64) {
+        self.consumer_timeout_millis_when_suspend
+            .store(value, Ordering::Release);
+    }
+
+    pub fn consumer_pull_timeout_millis(&self) -> i64 {
+        self.consumer_pull_timeout_millis.load(Ordering::Acquire)
+    }
+
+    pub fn set_consumer_pull_timeout_millis(&self, value: i64) {
+        self.consumer_pull_timeout_millis
+            .store(value, Ordering::Release);
     }
 
     pub fn message_model(&self) -> MessageModel {
@@ -1211,11 +1259,19 @@ impl PullConsumer {
         }
         self.set_service_state(Some(ConsumerServiceState::StartFailed));
         let mut client_config = self.config.client_config().clone();
+        let raw_consumer_group = self
+            .config
+            .consumer_group_option()
+            .ok_or(PullConsumerError::InvalidConsumerGroup)?;
         let consumer_group = client_config
-            .with_namespace(Some(self.config.consumer_group()))?
+            .with_namespace(Some(raw_consumer_group))?
             .ok_or(PullConsumerError::InvalidConsumerGroup)?;
         *write_lock(&self.current_group_name) = consumer_group.clone();
-        self.config.validate(&consumer_group)?;
+        crate::config::validate_pull_settings(
+            &consumer_group,
+            self.consumer_timeout_millis_when_suspend(),
+            self.broker_suspend_max_time_millis(),
+        )?;
 
         let runtime = self
             .manager
@@ -1367,7 +1423,7 @@ impl PullConsumer {
             subscription,
             offset,
             max_message_count,
-            self.config.consumer_pull_timeout_millis(),
+            self.consumer_pull_timeout_millis(),
         )
         .await
     }
@@ -1411,7 +1467,7 @@ impl PullConsumer {
             offset,
             max_message_count,
             max_size_in_bytes,
-            self.config.consumer_pull_timeout_millis(),
+            self.consumer_pull_timeout_millis(),
         )
         .await
     }
@@ -1450,7 +1506,7 @@ impl PullConsumer {
             selector,
             offset,
             max_message_count,
-            self.config.consumer_pull_timeout_millis(),
+            self.consumer_pull_timeout_millis(),
         )
         .await
     }
@@ -1490,7 +1546,7 @@ impl PullConsumer {
             offset,
             max_message_count,
             MAX_PULL_MESSAGE_BYTES,
-            self.config.consumer_pull_timeout_millis(),
+            self.consumer_pull_timeout_millis(),
             true,
         )
         .await
@@ -1510,7 +1566,7 @@ impl PullConsumer {
             offset,
             max_message_count,
             MAX_PULL_MESSAGE_BYTES,
-            self.config.consumer_pull_timeout_millis(),
+            self.consumer_pull_timeout_millis(),
             true,
         )
         .await
@@ -1873,7 +1929,7 @@ impl PullConsumer {
             lite_pull,
         );
         let pull_timeout_millis = if suspend && !lite_pull {
-            self.config.consumer_timeout_millis_when_suspend()
+            self.consumer_timeout_millis_when_suspend()
         } else {
             timeout_millis
         };
@@ -1929,7 +1985,7 @@ impl PullConsumer {
             __phase18_header_1.set_sys_flag(Some(sys_flag));
             __phase18_header_1.set_commit_offset(Some(0));
             __phase18_header_1
-                .set_suspend_timeout_millis(Some(self.config.broker_suspend_max_time_millis()));
+                .set_suspend_timeout_millis(Some(self.broker_suspend_max_time_millis()));
             __phase18_header_1.set_subscription(subscription.get_sub_string().map(str::to_owned));
             __phase18_header_1.set_sub_version(Some(sub_version));
             __phase18_header_1
@@ -2301,7 +2357,11 @@ impl PullConsumer {
     fn effective_consumer_group(&self) -> Result<String, PullConsumerError> {
         let mut client_config = self.config.client_config().clone();
         client_config
-            .with_namespace(Some(self.config.consumer_group()))?
+            .with_namespace(Some(
+                self.config
+                    .consumer_group_option()
+                    .ok_or(PullConsumerError::InvalidConsumerGroup)?,
+            ))?
             .ok_or(PullConsumerError::InvalidConsumerGroup)
     }
 
@@ -2314,7 +2374,11 @@ impl PullConsumer {
             return Ok(helper.clone());
         }
 
-        let mut config = PushConsumerConfig::new(self.config.consumer_group())?;
+        let consumer_group = self
+            .config
+            .consumer_group_option()
+            .ok_or(PullConsumerError::InvalidConsumerGroup)?;
+        let mut config = PushConsumerConfig::new(consumer_group)?;
         *config.client_config_mut() = self.config.client_config().clone();
         config.set_tls_config(self.config.tls_config().cloned());
         config.set_unit_mode(self.config.unit_mode());
@@ -2993,6 +3057,79 @@ mod tests {
         consumer.set_client_runtime(None);
         assert!(consumer.get_client_runtime().await.is_none());
         runtime.shutdown().await.unwrap();
+    }
+
+    #[test]
+    fn pull_timeouts_remain_live_after_facade_construction() {
+        let config = PullConsumerConfig::new("pull-live-timeouts").unwrap();
+        let consumer = PullConsumer::new(config);
+        assert_eq!(consumer.broker_suspend_max_time_millis(), 20_000);
+        assert_eq!(consumer.consumer_timeout_millis_when_suspend(), 30_000);
+        assert_eq!(consumer.consumer_pull_timeout_millis(), 10_000);
+
+        consumer.set_broker_suspend_max_time_millis(12_000);
+        consumer.set_consumer_timeout_millis_when_suspend(15_000);
+        consumer.set_consumer_pull_timeout_millis(7_500);
+        assert_eq!(consumer.broker_suspend_max_time_millis(), 12_000);
+        assert_eq!(consumer.consumer_timeout_millis_when_suspend(), 15_000);
+        assert_eq!(consumer.consumer_pull_timeout_millis(), 7_500);
+        assert_eq!(consumer.config().broker_suspend_max_time_millis(), 20_000);
+        assert_eq!(
+            consumer.config().consumer_timeout_millis_when_suspend(),
+            30_000
+        );
+        assert_eq!(consumer.config().consumer_pull_timeout_millis(), 10_000);
+    }
+
+    #[tokio::test]
+    async fn pull_nullable_group_is_preserved_until_start_validation() {
+        let consumer = Arc::new(PullConsumer::new(
+            PullConsumerConfig::new_nullable(None).unwrap(),
+        ));
+        assert_eq!(consumer.get_consumer_group_nullable(), None);
+        assert!(matches!(
+            consumer.start().await,
+            Err(PullConsumerError::InvalidConsumerGroup)
+        ));
+
+        for (group, expected_error) in [
+            (
+                Some(String::new()),
+                PullConsumerError::InvalidConsumerGroup.to_string(),
+            ),
+            (
+                Some(crate::config::DEFAULT_CONSUMER_GROUP.to_owned()),
+                PullConsumerError::DefaultConsumerGroup.to_string(),
+            ),
+        ] {
+            let consumer = Arc::new(PullConsumer::new(
+                PullConsumerConfig::new_nullable(group).unwrap(),
+            ));
+            assert_eq!(
+                consumer.start().await.unwrap_err().to_string(),
+                expected_error
+            );
+        }
+
+        let mut namespaced_config = PullConsumerConfig::new("valid-pull-group").unwrap();
+        namespaced_config
+            .client_config_mut()
+            .set_namespace(Some("tenant".to_owned()));
+        let namespaced_consumer = PullConsumer::new(namespaced_config);
+        assert_eq!(
+            namespaced_consumer.effective_consumer_group().unwrap(),
+            "tenant%valid-pull-group"
+        );
+
+        let mut empty = PullConsumer::new(PullConsumerConfig::new("").unwrap());
+        assert_eq!(empty.get_consumer_group_nullable().as_deref(), Some(""));
+        empty.set_consumer_group_nullable(Some("pull-after-construction".to_owned()));
+        assert_eq!(
+            empty.get_consumer_group_nullable().as_deref(),
+            Some("pull-after-construction")
+        );
+        empty.set_consumer_group_nullable(None);
+        assert_eq!(empty.get_consumer_group_nullable(), None);
     }
 
     #[test]

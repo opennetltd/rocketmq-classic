@@ -29,7 +29,7 @@ pub(crate) const DEFAULT_PULL_CONSUMER_ENABLE_REBALANCE: bool = true;
 pub struct PullConsumerConfig {
     client: ClientConfig,
     tls_config: Option<TlsConfig>,
-    consumer_group: String,
+    consumer_group: Option<String>,
     broker_suspend_max_time_millis: i64,
     consumer_timeout_millis_when_suspend: i64,
     consumer_pull_timeout_millis: i64,
@@ -45,6 +45,12 @@ pub struct PullConsumerConfig {
 
 impl PullConsumerConfig {
     pub fn new(consumer_group: impl Into<String>) -> Result<Self, PullConsumerError> {
+        Self::new_nullable(Some(consumer_group.into()))
+    }
+
+    /// Creates a Pull consumer configuration while preserving Java's nullable
+    /// consumer-group input. A missing group is retained until startup validation.
+    pub fn new_nullable(consumer_group: Option<String>) -> Result<Self, PullConsumerError> {
         let mut client = ClientConfig::new_auto()?;
         // DefaultMQPullConsumer enables the stream request type in its
         // constructor, although the shared Java ClientConfig default is false.
@@ -52,7 +58,7 @@ impl PullConsumerConfig {
         Ok(Self {
             client,
             tls_config: None,
-            consumer_group: consumer_group.into(),
+            consumer_group,
             broker_suspend_max_time_millis: DEFAULT_BROKER_SUSPEND_MAX_TIME_MILLIS,
             consumer_timeout_millis_when_suspend: DEFAULT_CONSUMER_TIMEOUT_MILLIS_WHEN_SUSPEND,
             consumer_pull_timeout_millis: DEFAULT_CONSUMER_PULL_TIMEOUT_MILLIS,
@@ -87,12 +93,26 @@ impl PullConsumerConfig {
         self.tls_config = value;
     }
 
+    /// Returns the convenience string view, or `""` when the Java group is
+    /// null. Use `consumer_group_option` to distinguish null from empty.
     pub fn consumer_group(&self) -> &str {
-        &self.consumer_group
+        self.consumer_group.as_deref().unwrap_or_default()
+    }
+
+    pub fn consumer_group_option(&self) -> Option<&str> {
+        self.consumer_group.as_deref()
+    }
+
+    pub fn get_consumer_group(&self) -> Option<String> {
+        self.consumer_group.clone()
     }
 
     pub fn set_consumer_group(&mut self, value: impl Into<String>) {
-        self.consumer_group = value.into();
+        self.consumer_group = Some(value.into());
+    }
+
+    pub fn set_consumer_group_nullable(&mut self, value: Option<String>) {
+        self.consumer_group = value;
     }
 
     pub const fn broker_suspend_max_time_millis(&self) -> i64 {
@@ -179,20 +199,24 @@ impl PullConsumerConfig {
     pub fn set_message_queue_listener(&mut self, value: Option<crate::push::MessageQueueListener>) {
         self.message_queue_listener = value;
     }
+}
 
-    pub(crate) fn validate(&self, effective_consumer_group: &str) -> Result<(), PullConsumerError> {
-        validate_group(effective_consumer_group)?;
-        if effective_consumer_group == DEFAULT_CONSUMER_GROUP {
-            return Err(PullConsumerError::DefaultConsumerGroup);
-        }
-        if self.consumer_timeout_millis_when_suspend < self.broker_suspend_max_time_millis {
-            return Err(PullConsumerError::InvalidSuspendTimeout {
-                consumer_timeout_millis: self.consumer_timeout_millis_when_suspend,
-                broker_suspend_millis: self.broker_suspend_max_time_millis,
-            });
-        }
-        Ok(())
+pub(crate) fn validate_pull_settings(
+    effective_consumer_group: &str,
+    consumer_timeout_millis: i64,
+    broker_suspend_millis: i64,
+) -> Result<(), PullConsumerError> {
+    validate_group(effective_consumer_group)?;
+    if effective_consumer_group == DEFAULT_CONSUMER_GROUP {
+        return Err(PullConsumerError::DefaultConsumerGroup);
     }
+    if consumer_timeout_millis < broker_suspend_millis {
+        return Err(PullConsumerError::InvalidSuspendTimeout {
+            consumer_timeout_millis,
+            broker_suspend_millis,
+        });
+    }
+    Ok(())
 }
 
 pub(crate) fn validate_group(group: &str) -> Result<(), PullConsumerError> {
@@ -258,16 +282,52 @@ mod tests {
     fn consumer_config_rejects_default_group_and_invalid_suspend_relationship() {
         let mut config = PullConsumerConfig::new("orders").unwrap();
         assert!(matches!(
-            config.validate(DEFAULT_CONSUMER_GROUP),
+            validate_pull_settings(DEFAULT_CONSUMER_GROUP, 30_000, 20_000),
             Err(PullConsumerError::DefaultConsumerGroup)
         ));
 
         config.set_broker_suspend_max_time_millis(30_001);
         assert!(matches!(
-            config.validate("orders"),
+            validate_pull_settings(
+                "orders",
+                config.consumer_timeout_millis_when_suspend(),
+                config.broker_suspend_max_time_millis(),
+            ),
             Err(PullConsumerError::InvalidSuspendTimeout { .. })
         ));
         config.set_consumer_timeout_millis_when_suspend(30_001);
-        assert!(config.validate("orders").is_ok());
+        assert!(
+            validate_pull_settings(
+                "orders",
+                config.consumer_timeout_millis_when_suspend(),
+                config.broker_suspend_max_time_millis(),
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn nullable_group_is_distinct_from_an_empty_group() {
+        let mut config = PullConsumerConfig::new_nullable(None).unwrap();
+        assert_eq!(config.get_consumer_group(), None);
+        assert!(matches!(
+            validate_pull_settings(
+                config.consumer_group(),
+                config.consumer_timeout_millis_when_suspend(),
+                config.broker_suspend_max_time_millis(),
+            ),
+            Err(PullConsumerError::InvalidConsumerGroup)
+        ));
+
+        config.set_consumer_group_nullable(Some(String::new()));
+        assert_eq!(config.get_consumer_group().as_deref(), Some(""));
+        assert!(matches!(
+            validate_pull_settings(
+                config.consumer_group(),
+                config.consumer_timeout_millis_when_suspend(),
+                config.broker_suspend_max_time_millis(),
+            ),
+            Err(PullConsumerError::InvalidConsumerGroup)
+        ));
     }
 }
