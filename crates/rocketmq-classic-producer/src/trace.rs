@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
+    panic::{AssertUnwindSafe, catch_unwind},
     sync::{
         Arc, Mutex, RwLock,
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -838,7 +839,12 @@ fn encode_trace_chunks(contexts: Vec<TraceContext>) -> Vec<(String, BTreeSet<Str
     let mut data = String::with_capacity(TRACE_MAX_MESSAGE_SIZE);
     let mut keys = BTreeSet::new();
     for context in contexts {
-        data.push_str(&context.encode());
+        let encoded = catch_unwind(AssertUnwindSafe(|| context.encode()));
+        let Ok(encoded) = encoded else {
+            tracing::warn!("dropping malformed trace context after encoding failure");
+            continue;
+        };
+        data.push_str(&encoded);
         keys.extend(context.transfer_keys());
         if data.encode_utf16().count() >= TRACE_MAX_MESSAGE_SIZE {
             chunks.push((std::mem::take(&mut data), std::mem::take(&mut keys)));
@@ -1081,6 +1087,44 @@ mod tests {
         );
         assert_eq!(chunks[1].1, BTreeSet::from([ids[2].clone()]));
         assert!(chunks.iter().all(|(data, _)| data.ends_with('\u{2}')));
+    }
+
+    #[test]
+    fn malformed_contexts_are_skipped_without_discarding_valid_trace_rows() {
+        let mut malformed_sub_after = TraceContext::new(TraceType::SubAfter);
+        malformed_sub_after.region_id = Some("region-a".into());
+        malformed_sub_after.trace_beans = Some(vec![TraceBean {
+            topic: Some("orders".into()),
+            ..TraceBean::default()
+        }]);
+
+        let mut malformed_pub = TraceContext::new(TraceType::Pub);
+        malformed_pub.region_id = Some("region-a".into());
+        malformed_pub.trace_beans = Some(vec![TraceBean {
+            topic: Some("orders".into()),
+            ..TraceBean::default()
+        }]);
+
+        let mut malformed_transaction = TraceContext::new(TraceType::EndTransaction);
+        malformed_transaction.region_id = Some("region-a".into());
+        malformed_transaction.trace_beans = Some(vec![TraceBean {
+            topic: Some("orders".into()),
+            ..TraceBean::default()
+        }]);
+
+        let chunks = encode_trace_chunks(vec![
+            malformed_sub_after,
+            malformed_pub,
+            malformed_transaction,
+            recall_trace("valid-after-malformed"),
+        ]);
+
+        assert_eq!(chunks.len(), 1);
+        assert!(chunks[0].0.starts_with("Recall\u{1}"));
+        assert_eq!(
+            chunks[0].1,
+            BTreeSet::from(["valid-after-malformed".into()])
+        );
     }
 
     #[test]
