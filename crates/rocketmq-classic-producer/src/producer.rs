@@ -1248,12 +1248,10 @@ impl Producer {
         }
         self.register_send_message_hook(Arc::new(crate::trace::ProducerSendTraceHook::new(
             dispatcher.clone(),
-            producer_group,
         )));
         self.register_end_transaction_hook(Arc::new(
             crate::trace::ProducerEndTransactionTraceHook::new(
                 dispatcher.clone(),
-                producer_group,
                 self.config.client.clone(),
             ),
         ));

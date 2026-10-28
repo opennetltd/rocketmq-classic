@@ -160,7 +160,7 @@ impl SendMessageHook for ProducerSendTraceHook {
             return;
         }
         let mut trace_context = TraceContext::new(TraceType::Pub);
-        trace_context.group_name = Some(without_namespace(&self.producer_group));
+        trace_context.group_name = context.producer_group.as_deref().map(without_namespace);
         trace_context.trace_beans = Some(vec![TraceBean {
             topic: Some(without_namespace(context.message.topic())),
             message_id: None,
@@ -227,7 +227,7 @@ impl EndTransactionHook for ProducerEndTransactionTraceHook {
         }
         let trace = end_transaction_trace_context(
             &self.client_config,
-            &self.producer_group,
+            context.producer_group.as_deref(),
             context.message,
             EndTransactionTraceData {
                 message_id: &context.message_id,
@@ -251,7 +251,7 @@ struct EndTransactionTraceData<'a> {
 
 fn end_transaction_trace_context(
     client_config: &ClientConfig,
-    producer_group: &str,
+    producer_group: Option<&str>,
     message: &Message,
     data: EndTransactionTraceData<'_>,
 ) -> TraceContext {
@@ -266,7 +266,7 @@ fn end_transaction_trace_context(
         timestamp_millis: epoch_millis(),
         region_id: Some(region_id),
         region_name: Some(String::new()),
-        group_name: Some(without_namespace(producer_group)),
+        group_name: producer_group.map(without_namespace),
         cost_time_millis: 0,
         success: true,
         request_id: None,
@@ -919,7 +919,7 @@ mod tests {
 
         let context = end_transaction_trace_context(
             &client_config,
-            "other%producer-group",
+            Some("other%producer-group"),
             &message,
             EndTransactionTraceData {
                 message_id: "message-id",
@@ -941,6 +941,50 @@ mod tests {
             context.trace_beans.as_ref().unwrap()[0].topic.as_deref(),
             Some("orders")
         );
+    }
+
+    #[test]
+    fn end_transaction_hook_captures_the_current_nullable_group() {
+        let client_config = ClientConfig::default();
+        let dispatcher = Arc::new(
+            TraceDispatcher::new(
+                &client_config,
+                "startup-group",
+                TraceProducerKind::Produce,
+                None,
+                ClientRuntimeManager::new(),
+                None,
+            )
+            .unwrap(),
+        );
+        let hook = ProducerEndTransactionTraceHook::new(dispatcher.clone(), client_config);
+        let mut message = Message::new("orders", b"transaction".to_vec());
+        let mut context = EndTransactionContext {
+            producer_group: Some("nested%current-group".into()),
+            message: &mut message,
+            broker_addr: "broker:10911".into(),
+            message_id: "message-id".into(),
+            transaction_id: Some("transaction-id".into()),
+            transaction_state: crate::LocalTransactionState::Commit,
+            from_transaction_check: false,
+        };
+
+        hook.end_transaction(&mut context);
+        let mut receiver = dispatcher
+            .receiver
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(TraceCommand::Append(trace)) = receiver.as_mut().unwrap().try_recv().ok() else {
+            panic!("end-transaction hook did not append its trace context");
+        };
+        assert_eq!(trace.group_name.as_deref(), Some("current-group"));
+
+        context.producer_group = None;
+        hook.end_transaction(&mut context);
+        let Some(TraceCommand::Append(trace)) = receiver.as_mut().unwrap().try_recv().ok() else {
+            panic!("nullable end-transaction group was not appended");
+        };
+        assert_eq!(trace.group_name, None);
     }
 
     #[test]
@@ -1143,7 +1187,7 @@ mod tests {
             )
             .unwrap(),
         );
-        let hook = ProducerSendTraceHook::new(dispatcher.clone(), "other%workers");
+        let hook = ProducerSendTraceHook::new(dispatcher.clone());
         let mut message = Message::new("other%orders", b"body".to_vec());
         message.set_tags("paid").unwrap();
         message.set_keys("order-1").unwrap();
@@ -1217,6 +1261,15 @@ mod tests {
             trace.timestamp_millis + i64::from(trace.cost_time_millis) / 2
         );
         assert_eq!(bean.message_type, Some(SendMessageType::Normal));
+
+        context.trace_context = None;
+        context.producer_group = None;
+        hook.send_message_before(&mut context);
+        hook.send_message_after(&mut context);
+        let Some(TraceCommand::Append(trace)) = receiver.as_mut().unwrap().try_recv().ok() else {
+            panic!("producer hook did not preserve a nullable callback group");
+        };
+        assert_eq!(trace.group_name, None);
 
         let mut not_traced = Message::new("other%orders", b"body".to_vec());
         context.message = &mut not_traced;
