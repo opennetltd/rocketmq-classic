@@ -6,3 +6,29 @@
 - Evidence remains under ignored `/evidence/`; it will not be staged or committed.
 - No repository-local `AGENTS.md` applies. Coding workflow requires phase commits, validation, and a full-plan final audit.
 
+
+## I02 — bounded, cancellation-safe dispatcher shutdown
+- Updated producer and Lite trace dispatchers to stop accepting appends atomically with shutdown, and move draining/cleanup into a shared supervisor task that survives cancellation of a caller.
+- Applied a single five-second drain deadline and a five-second producer-cleanup deadline; after the drain deadline the worker is aborted and joined, then the owned trace producer is unregistered and stopped. Fixed the worker-start failure cleanup path and added a Push consumer owner shutdown regression test.
+- Added full-queue and cancelled-caller tests for both dispatchers. Focused tests passed: producer `trace::tests` (10), Lite `lite::trace::tests` (9), and Push owner shutdown (1). Full workspace and integration gates are recorded below after all phases.
+
+## I03 — isolate malformed trace encoding failures
+- Wrapped each `TraceContext::encode` call at the batch boundary with panic isolation. An invalid context is logged and skipped while later valid contexts in the same batch remain eligible for delivery; public encoding semantics are unchanged.
+- Added a mixed malformed/valid unit test covering invalid SubAfter, Pub, and EndTransaction contexts followed by a valid Recall row. The focused producer trace test suite passed (10 tests), and the loopback evidence probe confirmed that valid records still send after malformed records.
+
+## I02 committed-boundary completion
+- Final commit review found the producer dispatcher import, flush rejection, and worker-owned shutdown integration still unstaged in the phase commit; completed those hunks in follow-up commit 3314237b. The final committed tree was then rebuilt and all workspace checks passed.
+
+## I01 — use callback-time producer group
+- Removed startup-time group capture from both producer hooks. Pub captures the callback context group before send and retains it for the paired after hook; EndTransaction reads its own callback context. Both paths remove one namespace prefix and preserve a nullable group.
+- Added regression coverage for a changed/nested group, hook mutation between callbacks, actual trace sends, independent business send group, and null callback groups.
+
+## Final verification
+- cargo fmt --all -- --check — passed.
+- cargo clippy --workspace --all-targets --all-features --locked -- -D warnings — passed.
+- cargo test --workspace --locked — passed, including the new dispatcher/owner tests, scripted broker delivery, and doc tests.
+- mvn -o -f compat/java-reference/pom.xml verify — BUILD SUCCESS. The existing message-decode probes reported two intentionally lingering threads for zero/negative inner-count nontermination cases; Maven completed successfully.
+- scripts/check-workspace-metadata.py — passed.
+- run_probes.py — passed against code revision 224b5c26f2f52ef87ff7f97069a2946dd7e48601. Producer and Lite shutdown finished in about 5 seconds for batch sizes 1 and 4 and stopped their trace producers; malformed contexts did not prevent a subsequent valid trace send; callback-group probes observed the current group while preserving the business SEND group.
+- git diff --check and the final ignored-evidence audit are recorded at completion. Evidence remains under evidence/plan/2026/10/06-project-parity-fifth-review-fix-evidence/; /evidence/ is ignored and git ls-files evidence/ is empty.
+- Re-audited both supplied fifth-review plan files against the implemented fixes. All three items I01, I02, and I03 are addressed; the plan files remain unchanged.
