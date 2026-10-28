@@ -1363,6 +1363,68 @@ impl Producer {
         }
     }
 
+    /// Stops an owned internal trace producer after its worker was cancelled.
+    /// This intentionally omits trace-dispatcher shutdown to avoid recursive
+    /// worker ownership during forced cleanup.
+    #[doc(hidden)]
+    pub async fn shutdown_owned_trace_producer(
+        &self,
+        cleanup_deadline: tokio::time::Instant,
+    ) -> Result<(), ProducerError> {
+        match self.service_state() {
+            Some(ProducerServiceState::Running) => {}
+            Some(
+                ProducerServiceState::CreateJust
+                | ProducerServiceState::StartFailed
+                | ProducerServiceState::ShutdownAlready,
+            ) => return Ok(()),
+            None => return Err(ProducerError::ServiceStateNotReady(None)),
+        }
+
+        let mut state = self.state.lock().await;
+        match &*state {
+            State::Created => {
+                return Err(ProducerError::ServiceStateNotReady(Some(
+                    ProducerServiceState::Running,
+                )));
+            }
+            State::Shutdown => return Err(ProducerError::Shutdown),
+            State::Started { .. } => {}
+        }
+        let (runtime_arc, registered_group) = match &*state {
+            State::Started { runtime, lease } => {
+                (runtime.upgrade(), Some(lease.group().to_owned()))
+            }
+            State::Created | State::Shutdown => (None, None),
+        };
+        let Some(runtime_arc) = runtime_arc else {
+            RequestFutureHolder::get_instance().shutdown(self).await;
+            self.remove_recall_trace_hook(None).await;
+            self.stop_auto_batch().await;
+            self.stop_detector_task().await;
+            self.retire_request_callback_tasks().await;
+            *state = State::Shutdown;
+            self.set_service_state(Some(ProducerServiceState::ShutdownAlready));
+            return Ok(());
+        };
+
+        let deadline = self.unregister_deadline().min(cleanup_deadline);
+        let registered_group = registered_group.expect("started producer retains its group lease");
+        runtime_arc
+            .unregister_producer_by_group(&registered_group, deadline)
+            .await
+            .map_err(ProducerError::from)?;
+        self.remove_recall_trace_hook(Some(&runtime_arc)).await;
+        RequestFutureHolder::get_instance().shutdown(self).await;
+        self.stop_auto_batch().await;
+        self.stop_detector_task().await;
+        self.retire_request_callback_tasks().await;
+        runtime_arc.shutdown().await?;
+        *state = State::Shutdown;
+        self.set_service_state(Some(ProducerServiceState::ShutdownAlready));
+        Ok(())
+    }
+
     async fn remove_recall_trace_hook(&self, runtime: Option<&ClientRuntime>) {
         let hook = self.recall_trace_hook.lock().await.take();
         if let (Some(runtime), Some(hook)) = (runtime, hook.as_ref()) {

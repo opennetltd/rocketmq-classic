@@ -7654,6 +7654,34 @@ mod tests {
         assert!(consumer.trace_dispatcher().is_none());
     }
 
+    #[tokio::test]
+    async fn push_owner_shutdown_stops_its_trace_dispatcher() {
+        let config = PushConsumerConfig::new("push-trace-owner-shutdown").unwrap();
+        let manager = ClientRuntimeManager::new();
+        let dispatcher = Arc::new(
+            rocketmq_classic_producer::TraceDispatcher::new(
+                config.client_config(),
+                "push-trace-owner-shutdown",
+                rocketmq_classic_producer::TraceProducerKind::Consume,
+                None,
+                manager.clone(),
+                None,
+            )
+            .unwrap(),
+        );
+        let consumer = PushConsumer::with_manager(config, manager);
+        assert!(consumer.trace_dispatcher.set(dispatcher.clone()).is_ok());
+
+        consumer.shutdown_trace_dispatcher().await;
+
+        assert!(
+            !dispatcher.append(rocketmq_classic_core::trace::TraceContext::new(
+                rocketmq_classic_core::trace::TraceType::Recall,
+            ))
+        );
+        dispatcher.shutdown().await.unwrap();
+    }
+
     #[test]
     fn raw_push_implementation_accessor_retains_identity() {
         let group = "phase18-push-implementation-accessor";

@@ -15,9 +15,9 @@ use rocketmq_classic_core::{
 use rocketmq_classic_producer::{Producer, ProducerConfig, ProducerError};
 use rocketmq_classic_protocol::NamespaceUtil;
 use tokio::{
-    sync::{mpsc, oneshot},
+    sync::{mpsc, oneshot, watch},
     task::JoinHandle,
-    time::{Instant, interval_at},
+    time::{Instant, interval_at, timeout_at},
 };
 
 use crate::consume::{ConsumeMessageContext, ConsumeMessageHook};
@@ -29,6 +29,8 @@ const TRACE_CONTEXT_CAPACITY: usize = 2_048;
 const TRACE_MAX_BATCH_SIZE: usize = 20;
 const TRACE_MAX_MESSAGE_SIZE: usize = 128_000;
 const TRACE_FLUSH_INTERVAL: Duration = Duration::from_secs(5);
+const TRACE_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
+const TRACE_SHUTDOWN_CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
 const FIELD_SEPARATOR: char = '\u{1}';
 const RECORD_SEPARATOR: char = '\u{2}';
 
@@ -292,9 +294,11 @@ pub struct LiteTraceDispatcher {
     sender: mpsc::Sender<TraceCommand>,
     receiver: Mutex<Option<mpsc::Receiver<TraceCommand>>>,
     start_gate: tokio::sync::Mutex<()>,
+    accept_gate: Mutex<()>,
     started: AtomicBool,
     shutdown: AtomicBool,
     worker: Mutex<Option<JoinHandle<()>>>,
+    shutdown_done: watch::Sender<Option<bool>>,
 }
 
 impl LiteTraceDispatcher {
@@ -330,6 +334,8 @@ impl LiteTraceDispatcher {
             .unwrap_or(1)
             .clamp(1, TRACE_MAX_BATCH_SIZE);
         let (sender, receiver) = mpsc::channel(TRACE_CONTEXT_CAPACITY);
+        let (shutdown_done, shutdown_waiter) = watch::channel(None);
+        drop(shutdown_waiter);
         Ok(Self {
             producer_config,
             rpc_hook,
@@ -339,9 +345,11 @@ impl LiteTraceDispatcher {
             sender,
             receiver: Mutex::new(Some(receiver)),
             start_gate: tokio::sync::Mutex::new(()),
+            accept_gate: Mutex::new(()),
             started: AtomicBool::new(false),
             shutdown: AtomicBool::new(false),
             worker: Mutex::new(None),
+            shutdown_done,
         })
     }
 
@@ -390,8 +398,17 @@ impl LiteTraceDispatcher {
             .receiver
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take()
-            .ok_or(LiteTraceError::WorkerUnavailable)?;
+            .take();
+        let Some(receiver) = receiver else {
+            self.trace_producer
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take();
+            let _ = producer
+                .shutdown_owned_trace_producer(Instant::now() + TRACE_SHUTDOWN_CLEANUP_TIMEOUT)
+                .await;
+            return Err(LiteTraceError::WorkerUnavailable);
+        };
         let trace_topic_name = self.trace_topic_name.clone();
         let batch_size = self.batch_size;
         let worker = tokio::spawn(async move {
@@ -407,6 +424,10 @@ impl LiteTraceDispatcher {
 
     /// Adds a consume trace context without blocking the polling path.
     pub fn append(&self, context: LiteTraceContext) -> bool {
+        let _accept_gate = self
+            .accept_gate
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if self.shutdown.load(Ordering::Acquire) {
             return false;
         }
@@ -415,6 +436,9 @@ impl LiteTraceDispatcher {
 
     /// Sends all contexts queued before this call.
     pub async fn flush(&self) -> Result<(), LiteTraceError> {
+        if self.shutdown.load(Ordering::Acquire) {
+            return Err(LiteTraceError::Shutdown);
+        }
         if !self.started.load(Ordering::Acquire) {
             return Ok(());
         }
@@ -430,34 +454,108 @@ impl LiteTraceDispatcher {
 
     /// Flushes queued contexts and stops the trace producer.
     pub async fn shutdown(&self) -> Result<(), LiteTraceError> {
-        let _start_gate = self.start_gate.lock().await;
-        if self.shutdown.swap(true, Ordering::AcqRel) {
-            return Ok(());
-        }
-        let worker = self
-            .worker
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take();
-        let Some(mut worker) = worker else {
-            return Ok(());
-        };
-        let (reply, response) = oneshot::channel();
-        self.sender
-            .send(TraceCommand::Shutdown(reply))
-            .await
-            .map_err(|_| LiteTraceError::WorkerUnavailable)?;
-        response
-            .await
-            .map_err(|_| LiteTraceError::WorkerUnavailable)?;
-        if tokio::time::timeout(Duration::from_secs(6), &mut worker)
-            .await
-            .is_err()
+        let mut completion = self.shutdown_done.subscribe();
         {
-            worker.abort();
-            let _ = worker.await;
+            let _start_gate = self.start_gate.lock().await;
+            let _accept_gate = self
+                .accept_gate
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if !self.shutdown.swap(true, Ordering::AcqRel) {
+                let worker = self
+                    .worker
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .take();
+                let producer = self
+                    .trace_producer
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .clone();
+                let sender = self.sender.clone();
+                let shutdown_done = self.shutdown_done.clone();
+                tokio::spawn(async move {
+                    let result = finish_trace_shutdown(worker, sender, producer).await;
+                    shutdown_done.send_replace(Some(result));
+                });
+            }
         }
-        Ok(())
+        match wait_for_shutdown(&mut completion).await {
+            Ok(()) => Ok(()),
+            Err(()) => Err(LiteTraceError::WorkerUnavailable),
+        }
+    }
+}
+
+async fn finish_trace_shutdown(
+    worker: Option<JoinHandle<()>>,
+    sender: mpsc::Sender<TraceCommand>,
+    producer: Option<Arc<Producer>>,
+) -> bool {
+    let started_at = Instant::now();
+    let graceful_deadline = started_at + TRACE_SHUTDOWN_TIMEOUT;
+    let shutdown_deadline = graceful_deadline + TRACE_SHUTDOWN_CLEANUP_TIMEOUT;
+    let mut producer_stopped = false;
+
+    if let Some(mut worker_handle) = worker {
+        let (reply, response) = oneshot::channel();
+        let admitted = matches!(
+            timeout_at(
+                graceful_deadline,
+                sender.send(TraceCommand::Shutdown(reply))
+            )
+            .await,
+            Ok(Ok(()))
+        );
+        if admitted {
+            let _ = timeout_at(graceful_deadline, response).await;
+        }
+        match timeout_at(graceful_deadline, &mut worker_handle).await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => {
+                tracing::debug!(error = %error, "Lite trace dispatcher worker stopped unexpectedly");
+                worker_handle.abort();
+                let _ = worker_handle.await;
+            }
+            Err(_) => {
+                worker_handle.abort();
+                let _ = worker_handle.await;
+            }
+        }
+    }
+
+    if !producer_stopped {
+        if let Some(producer) = producer {
+            match timeout_at(
+                shutdown_deadline,
+                producer.shutdown_owned_trace_producer(shutdown_deadline),
+            )
+            .await
+            {
+                Ok(Ok(())) => producer_stopped = true,
+                Ok(Err(error)) => {
+                    tracing::debug!(error = %error, "Lite trace producer cleanup failed");
+                }
+                Err(_) => {
+                    tracing::warn!(
+                        "Lite trace producer cleanup exceeded the shared shutdown deadline"
+                    );
+                }
+            }
+        } else {
+            producer_stopped = true;
+        }
+    }
+
+    producer_stopped
+}
+
+async fn wait_for_shutdown(completion: &mut watch::Receiver<Option<bool>>) -> Result<(), ()> {
+    loop {
+        if let Some(stopped) = *completion.borrow() {
+            return stopped.then_some(()).ok_or(());
+        }
+        completion.changed().await.map_err(|_| ())?;
     }
 }
 
@@ -487,9 +585,6 @@ async fn trace_worker(
                     }
                     Some(TraceCommand::Shutdown(reply)) => {
                         send_contexts(&producer, &default_trace_topic, std::mem::take(&mut pending)).await;
-                        if let Err(error) = producer.shutdown().await {
-                            tracing::debug!(error = %error, "Lite trace producer shutdown failed");
-                        }
                         let _ = reply.send(());
                         return;
                     }
@@ -575,6 +670,7 @@ pub(crate) fn epoch_millis() -> i64 {
 mod tests {
     use super::*;
     use rocketmq_classic_common::message::Message;
+    use std::sync::atomic::AtomicUsize;
 
     struct NoopRpcHook;
 
@@ -846,6 +942,106 @@ mod tests {
             &trace_producer,
             &dispatcher.trace_producer().unwrap()
         ));
+    }
+
+    #[tokio::test]
+    async fn shutdown_owns_worker_across_caller_cancellation_and_full_queue() {
+        let dispatcher = Arc::new(
+            LiteTraceDispatcher::new(
+                &ClientConfig::new("lite-trace-shutdown-cancel-test"),
+                "workers",
+                None,
+                None,
+            )
+            .unwrap(),
+        );
+        for index in 0..TRACE_CONTEXT_CAPACITY {
+            assert!(dispatcher.append(LiteTraceContext {
+                trace_kind: LiteTraceKind::SubBefore,
+                timestamp_millis: 1,
+                region_id: Some("region-a".into()),
+                group_name: "workers".into(),
+                request_id: format!("request-{index}"),
+                cost_time_millis: 0,
+                success: true,
+                context_code: 0,
+                access_channel: None,
+                trace_beans: vec![LiteTraceBean {
+                    topic: "orders".into(),
+                    message_id: Some(index.to_string()),
+                    tags: None,
+                    keys: None,
+                    store_time_millis: 0,
+                    body_length: 1,
+                    retry_times: 0,
+                }],
+            }));
+        }
+
+        let mut receiver = dispatcher
+            .receiver
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+            .unwrap();
+        let processed = Arc::new(AtomicUsize::new(0));
+        let worker_finished = Arc::new(AtomicBool::new(false));
+        let processed_worker = processed.clone();
+        let finished_worker = worker_finished.clone();
+        let worker = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            while let Some(command) = receiver.recv().await {
+                match command {
+                    TraceCommand::Append(_) => {
+                        processed_worker.fetch_add(1, Ordering::Relaxed);
+                    }
+                    TraceCommand::Flush(reply) => {
+                        let _ = reply.send(());
+                    }
+                    TraceCommand::Shutdown(reply) => {
+                        let _ = reply.send(());
+                        break;
+                    }
+                }
+            }
+            finished_worker.store(true, Ordering::Release);
+        });
+        *dispatcher
+            .worker
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(worker);
+        dispatcher.started.store(true, Ordering::Release);
+
+        let caller_dispatcher = dispatcher.clone();
+        let caller = tokio::spawn(async move { caller_dispatcher.shutdown().await });
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while !dispatcher.shutdown.load(Ordering::Acquire) {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("shutdown should stop accepting appends before awaiting drain");
+        caller.abort();
+
+        assert!(!dispatcher.append(LiteTraceContext {
+            trace_kind: LiteTraceKind::SubBefore,
+            timestamp_millis: 1,
+            region_id: Some("region-a".into()),
+            group_name: "workers".into(),
+            request_id: "after-shutdown".into(),
+            cost_time_millis: 0,
+            success: true,
+            context_code: 0,
+            access_channel: None,
+            trace_beans: Vec::new(),
+        }));
+        tokio::time::timeout(Duration::from_secs(2), dispatcher.shutdown())
+            .await
+            .expect("shutdown supervisor should outlive its caller")
+            .unwrap();
+        assert_eq!(processed.load(Ordering::Acquire), TRACE_CONTEXT_CAPACITY);
+        assert!(worker_finished.load(Ordering::Acquire));
+        dispatcher.shutdown().await.unwrap();
     }
 
     #[test]

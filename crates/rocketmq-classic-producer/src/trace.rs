@@ -42,41 +42,32 @@ const TRACE_GROUP_PREFIX: &str = "_INNER_TRACE_PRODUCER";
 const TRACE_FLUSH_INTERVAL: Duration = Duration::from_secs(5);
 const TRACE_SEND_TIMEOUT_MILLIS: i32 = 5_000;
 const TRACE_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
+const TRACE_SHUTDOWN_CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
 const RECALL_TRACE_ENABLE_KEY: &str = "com.rocketmq.recall.default.trace.enable";
 
 static TRACE_PRODUCER_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) struct ProducerSendTraceHook {
     dispatcher: Arc<TraceDispatcher>,
-    producer_group: String,
 }
 
 pub(crate) struct ProducerEndTransactionTraceHook {
     dispatcher: Arc<TraceDispatcher>,
-    producer_group: String,
     client_config: ClientConfig,
 }
 
 impl ProducerEndTransactionTraceHook {
-    pub(crate) fn new(
-        dispatcher: Arc<TraceDispatcher>,
-        producer_group: impl Into<String>,
-        client_config: ClientConfig,
-    ) -> Self {
+    pub(crate) fn new(dispatcher: Arc<TraceDispatcher>, client_config: ClientConfig) -> Self {
         Self {
             dispatcher,
-            producer_group: producer_group.into(),
             client_config,
         }
     }
 }
 
 impl ProducerSendTraceHook {
-    pub(crate) fn new(dispatcher: Arc<TraceDispatcher>, producer_group: impl Into<String>) -> Self {
-        Self {
-            dispatcher,
-            producer_group: producer_group.into(),
-        }
+    pub(crate) fn new(dispatcher: Arc<TraceDispatcher>) -> Self {
+        Self { dispatcher }
     }
 }
 
@@ -382,9 +373,11 @@ pub struct TraceDispatcher {
     sender: mpsc::Sender<TraceCommand>,
     receiver: Mutex<Option<mpsc::Receiver<TraceCommand>>>,
     start_gate: tokio::sync::Mutex<()>,
+    accept_gate: Mutex<()>,
     started: AtomicBool,
     shutdown: AtomicBool,
     worker: Mutex<Option<JoinHandle<()>>>,
+    shutdown_done: watch::Sender<Option<bool>>,
 }
 
 impl TraceDispatcher {
@@ -425,6 +418,8 @@ impl TraceDispatcher {
             .unwrap_or(1)
             .clamp(1, TRACE_MAX_BATCH_SIZE);
         let (sender, receiver) = mpsc::channel(TRACE_QUEUE_CAPACITY);
+        let (shutdown_done, shutdown_waiter) = watch::channel(None);
+        drop(shutdown_waiter);
         Ok(Self {
             producer_config: RwLock::new(producer_config),
             manager,
@@ -436,9 +431,11 @@ impl TraceDispatcher {
             sender,
             receiver: Mutex::new(Some(receiver)),
             start_gate: tokio::sync::Mutex::new(()),
+            accept_gate: Mutex::new(()),
             started: AtomicBool::new(false),
             shutdown: AtomicBool::new(false),
             worker: Mutex::new(None),
+            shutdown_done,
         })
     }
 
@@ -531,8 +528,17 @@ impl TraceDispatcher {
             .receiver
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take()
-            .ok_or(TraceDispatcherError::WorkerUnavailable)?;
+            .take();
+        let Some(receiver) = receiver else {
+            self.trace_producer
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take();
+            let _ = producer
+                .shutdown_owned_trace_producer(Instant::now() + TRACE_SHUTDOWN_CLEANUP_TIMEOUT)
+                .await;
+            return Err(TraceDispatcherError::WorkerUnavailable);
+        };
         let trace_topic_name = self.trace_topic_name.clone();
         let access_channel = self.access_channel.clone();
         let batch_size = self.batch_size;
@@ -556,6 +562,10 @@ impl TraceDispatcher {
 
     /// Adds a context without blocking the business send or consume path.
     pub fn append(&self, context: TraceContext) -> bool {
+        let _accept_gate = self
+            .accept_gate
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if self.shutdown.load(Ordering::Acquire) {
             return false;
         }
@@ -577,34 +587,105 @@ impl TraceDispatcher {
     }
 
     pub async fn shutdown(&self) -> Result<(), TraceDispatcherError> {
-        let _start_gate = self.start_gate.lock().await;
-        if self.shutdown.swap(true, Ordering::AcqRel) {
-            return Ok(());
-        }
-        let worker = self
-            .worker
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take();
-        let Some(mut worker) = worker else {
-            return Ok(());
-        };
-        let (reply, response) = oneshot::channel();
-        self.sender
-            .send(TraceCommand::Shutdown(reply))
-            .await
-            .map_err(|_| TraceDispatcherError::WorkerUnavailable)?;
-        response
-            .await
-            .map_err(|_| TraceDispatcherError::WorkerUnavailable)?;
-        if tokio::time::timeout(TRACE_SHUTDOWN_TIMEOUT, &mut worker)
-            .await
-            .is_err()
+        let mut completion = self.shutdown_done.subscribe();
         {
-            worker.abort();
-            let _ = worker.await;
+            let _start_gate = self.start_gate.lock().await;
+            let _accept_gate = self
+                .accept_gate
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if !self.shutdown.swap(true, Ordering::AcqRel) {
+                let worker = self
+                    .worker
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .take();
+                let producer = self
+                    .trace_producer
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .clone();
+                let sender = self.sender.clone();
+                let shutdown_done = self.shutdown_done.clone();
+                tokio::spawn(async move {
+                    let result = finish_trace_shutdown(worker, sender, producer).await;
+                    shutdown_done.send_replace(Some(result));
+                });
+            }
         }
-        Ok(())
+        match wait_for_shutdown(&mut completion).await {
+            Ok(()) => Ok(()),
+            Err(()) => Err(TraceDispatcherError::WorkerUnavailable),
+        }
+    }
+}
+
+async fn finish_trace_shutdown(
+    worker: Option<JoinHandle<()>>,
+    sender: mpsc::Sender<TraceCommand>,
+    producer: Option<Arc<Producer>>,
+) -> bool {
+    let started_at = Instant::now();
+    let graceful_deadline = started_at + TRACE_SHUTDOWN_TIMEOUT;
+    let shutdown_deadline = graceful_deadline + TRACE_SHUTDOWN_CLEANUP_TIMEOUT;
+    let mut producer_stopped = false;
+    if let Some(mut worker_handle) = worker {
+        let (reply, response) = oneshot::channel();
+        let admitted = matches!(
+            timeout_at(
+                graceful_deadline,
+                sender.send(TraceCommand::Shutdown(reply))
+            )
+            .await,
+            Ok(Ok(()))
+        );
+        if admitted {
+            let _ = timeout_at(graceful_deadline, response).await;
+        }
+        match timeout_at(graceful_deadline, &mut worker_handle).await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => {
+                tracing::debug!(error = %error, "trace dispatcher worker stopped unexpectedly");
+                worker_handle.abort();
+                let _ = worker_handle.await;
+            }
+            Err(_) => {
+                worker_handle.abort();
+                let _ = worker_handle.await;
+            }
+        }
+    }
+
+    if !producer_stopped {
+        if let Some(producer) = producer {
+            match timeout_at(
+                shutdown_deadline,
+                producer.shutdown_owned_trace_producer(shutdown_deadline),
+            )
+            .await
+            {
+                Ok(Ok(())) => producer_stopped = true,
+                Ok(Err(error)) => {
+                    tracing::debug!(error = %error, "trace producer cleanup failed");
+                }
+                Err(_) => {
+                    tracing::warn!("trace producer cleanup exceeded the shared shutdown deadline");
+                }
+            }
+        } else {
+            producer_stopped = true;
+        }
+    }
+
+    producer_stopped
+}
+
+async fn wait_for_shutdown(completion: &mut watch::Receiver<Option<bool>>) -> Result<(), ()> {
+    loop {
+        if let Some(stopped) = *completion.borrow() {
+            return stopped.then_some(()).ok_or(());
+        }
+        completion.changed().await.map_err(|_| ())?;
     }
 }
 
@@ -791,7 +872,10 @@ async fn send_trace_message(
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, sync::Arc};
+    use std::{
+        collections::HashMap,
+        sync::{Arc, atomic::AtomicUsize},
+    };
 
     use crate::CommunicationMode;
     use rocketmq_classic_common::message::MessageQueue;
@@ -868,6 +952,78 @@ mod tests {
             assert!(dispatcher.append(recall_trace(index.to_string())));
         }
         assert!(!dispatcher.append(recall_trace("overflow")));
+    }
+
+    #[tokio::test]
+    async fn shutdown_owns_worker_across_caller_cancellation_and_full_queue() {
+        let dispatcher = Arc::new(
+            TraceDispatcher::new(
+                &ClientConfig::default(),
+                "trace-shutdown-cancel-test",
+                TraceProducerKind::Produce,
+                None,
+                ClientRuntimeManager::new(),
+                None,
+            )
+            .unwrap(),
+        );
+        for index in 0..TRACE_QUEUE_CAPACITY {
+            assert!(dispatcher.append(recall_trace(index.to_string())));
+        }
+
+        let mut receiver = dispatcher
+            .receiver
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+            .unwrap();
+        let processed = Arc::new(AtomicUsize::new(0));
+        let worker_finished = Arc::new(AtomicBool::new(false));
+        let processed_worker = processed.clone();
+        let finished_worker = worker_finished.clone();
+        let worker = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            while let Some(command) = receiver.recv().await {
+                match command {
+                    TraceCommand::Append(_) => {
+                        processed_worker.fetch_add(1, Ordering::Relaxed);
+                    }
+                    TraceCommand::Flush(reply) => {
+                        let _ = reply.send(());
+                    }
+                    TraceCommand::Shutdown(reply) => {
+                        let _ = reply.send(());
+                        break;
+                    }
+                }
+            }
+            finished_worker.store(true, Ordering::Release);
+        });
+        *dispatcher
+            .worker
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(worker);
+        dispatcher.started.store(true, Ordering::Release);
+
+        let caller_dispatcher = dispatcher.clone();
+        let caller = tokio::spawn(async move { caller_dispatcher.shutdown().await });
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while !dispatcher.shutdown.load(Ordering::Acquire) {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("shutdown should stop accepting appends before awaiting drain");
+        caller.abort();
+
+        assert!(!dispatcher.append(recall_trace("after-shutdown")));
+        tokio::time::timeout(Duration::from_secs(2), dispatcher.shutdown())
+            .await
+            .expect("shutdown supervisor should outlive its caller")
+            .unwrap();
+        assert_eq!(processed.load(Ordering::Acquire), TRACE_QUEUE_CAPACITY);
+        assert!(worker_finished.load(Ordering::Acquire));
+        dispatcher.shutdown().await.unwrap();
     }
 
     #[test]
