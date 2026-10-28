@@ -14,3 +14,6 @@
 - Updated local probe passed against the code commit. Its Java/Rust encoder records matched byte-for-byte, including 0/1/2 bean fixtures and malformed tails; the dispatcher wire rows and transfer keys matched expected Java selection, and invalid selected work did not prevent a later valid Recall. Evidence records `reviewed_revision` as `a15533ef2983d4b005bfdeaf51eef89ef748d8bd`.
 - Evidence remains under ignored `evidence/plan/2026/10/07-project-parity-sixth-review-evidence/`; `git check-ignore` matched `.gitignore:180:/evidence/`, and `git ls-files evidence/` returned no tracked files.
 - Re-read both plan documents and verified each J01 acceptance item against the fixtures, Core test, dispatcher regression, local probe, and completed gates.
+
+## Verification note
+- Clarification: the six-way 0/1/2-bean selection matrix is asserted by the Core test against Java-generated fixtures. The standalone `run_probes.py` direct encoder/wire replay covers its listed multi-bean and malformed-tail scenarios, rather than every 0/1/2 case.
