@@ -5,3 +5,12 @@
 - Read the English and Traditional Chinese sixth-review plans. Scope is J01 trace-type serialization bean selection and all-bean transfer-key collection.
 - Reusing the ignored `/evidence/plan/2026/10/07-project-parity-sixth-review-evidence/` bundle. Evidence must remain untracked and uncommitted.
 - Plan calls for Core/Java fixture coverage, a production dispatcher loopback regression, and the full Rust, Java, and metadata gates.
+
+## Implementation and verification
+- Implemented J01 in `TraceContext::encode`: Pub, EndTransaction, and Recall serialize only the first bean; SubBefore/SubAfter keep serializing every bean. Transfer keys still come from every bean. Empty-list and selected-first-field Java-compatible failures remain covered.
+- Added Java-pinned selection fixtures for 0/1/2 beans across all five trace types, malformed trailing Pub/EndTransaction beans, and invalid selected fields. Added Core fixture assertions and a general dispatcher loopback regression covering Pub, EndTransaction, Recall, SubBefore, trailing invalid fields, all-bean keys, and I03 recovery after an invalid selected record.
+- Code commit: `a15533ef2983d4b005bfdeaf51eef89ef748d8bd` (`fix(trace): match Java bean selection for trace types`).
+- Validation passed: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `cargo test --workspace --locked` (including doc tests); `mvn -o -f compat/java-reference/pom.xml verify`; `scripts/check-workspace-metadata.py`; and the focused Core/producer regressions. Maven reported the existing lingering threads in message-decode probes, but completed with BUILD SUCCESS.
+- Updated local probe passed against the code commit. Its Java/Rust encoder records matched byte-for-byte, including 0/1/2 bean fixtures and malformed tails; the dispatcher wire rows and transfer keys matched expected Java selection, and invalid selected work did not prevent a later valid Recall. Evidence records `reviewed_revision` as `a15533ef2983d4b005bfdeaf51eef89ef748d8bd`.
+- Evidence remains under ignored `evidence/plan/2026/10/07-project-parity-sixth-review-evidence/`; `git check-ignore` matched `.gitignore:180:/evidence/`, and `git ls-files evidence/` returned no tracked files.
+- Re-read both plan documents and verified each J01 acceptance item against the fixtures, Core test, dispatcher regression, local probe, and completed gates.
