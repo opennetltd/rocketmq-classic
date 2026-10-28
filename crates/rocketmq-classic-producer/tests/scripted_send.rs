@@ -8,11 +8,13 @@ use std::{
 
 use bytes::BytesMut;
 use rocketmq_classic_common::message::{
-    Message, MessageQueue, constants::PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX, decode_properties,
+    Message, MessageQueue,
+    constants::{KEY_SEPARATOR, PROPERTY_KEYS, PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX},
+    decode_properties,
 };
 use rocketmq_classic_core::{
     runtime::{ClientRuntimeManager, ProducerRuntime},
-    trace::{MessageType, TraceBean, TraceContext, TraceType},
+    trace::{LocalTransactionState, MessageType, TraceBean, TraceContext, TraceType},
 };
 use rocketmq_classic_producer::{
     Producer, ProducerConfig, ProducerError, RecallMessageHandle, SendStatus, TraceDispatcher,
@@ -61,6 +63,42 @@ async fn wait_for_attempts(attempts: &AtomicUsize, expected: usize) {
     })
     .await
     .expect("broker peer did not receive the expected request");
+}
+
+fn trace_rows(requests: &[SentRequest]) -> Vec<String> {
+    requests
+        .iter()
+        .filter(|request| {
+            matches!(
+                request.request_code,
+                request::SEND_MESSAGE_V2 | request::SEND_MESSAGE
+            )
+        })
+        .filter_map(|request| request.body.as_deref())
+        .flat_map(|body| {
+            String::from_utf8_lossy(body)
+                .split('\u{2}')
+                .filter(|row| !row.is_empty())
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+fn trace_message_keys(request: &SentRequest) -> BTreeSet<String> {
+    request
+        .properties
+        .as_deref()
+        .map(decode_properties)
+        .unwrap_or_default()
+        .get(PROPERTY_KEYS)
+        .map(|keys| {
+            keys.split(KEY_SEPARATOR)
+                .filter(|key| !key.is_empty())
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 async fn write_response(
@@ -507,6 +545,168 @@ async fn trace_flush_waits_for_scripted_broker_delivery() {
     let body = String::from_utf8(delivered[0].body.clone().unwrap()).unwrap();
     assert!(body.contains("Pub\u{1}"));
     assert!(body.contains("message-id"));
+    dispatcher.shutdown().await.unwrap();
+    nameserver_task.abort();
+    broker_task.abort();
+}
+
+#[tokio::test]
+async fn trace_dispatcher_uses_java_bean_selection_and_preserves_all_keys() {
+    let attempts = Arc::new(AtomicUsize::new(0));
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let (broker, broker_task) = broker_peer("broker-a", attempts, 0, false, requests.clone()).await;
+    let route = route_body(&[("broker-a", &broker)]);
+    let (nameserver, nameserver_task, _) = name_server_peer(route, BTreeSet::new()).await;
+    let config = producer_config("trace-bean-selection", &nameserver);
+    let dispatcher = TraceDispatcher::new(
+        config.client_config(),
+        "trace-bean-selection",
+        TraceProducerKind::Produce,
+        None,
+        ClientRuntimeManager::new(),
+        None,
+    )
+    .unwrap();
+    dispatcher.start().await.unwrap();
+
+    let make_bean = |id: &str| TraceBean {
+        topic: Some("orders".into()),
+        message_id: Some(id.into()),
+        keys: Some(format!("{id}-key")),
+        store_host: Some("127.0.0.1:10911".into()),
+        message_type: Some(MessageType::Normal),
+        transaction_id: Some(format!("transaction-{id}")),
+        transaction_state: Some(LocalTransactionState::Commit),
+        ..TraceBean::default()
+    };
+    let make_context = |trace_type, beans| {
+        let mut context = TraceContext::new(trace_type);
+        context.timestamp_millis = 1000;
+        context.region_id = Some("region-a".into());
+        context.group_name = Some("trace-bean-selection".into());
+        context.trace_beans = Some(beans);
+        context
+    };
+
+    let mut invalid_pub_tail = make_bean("pub-second");
+    invalid_pub_tail.message_type = None;
+    let mut invalid_transaction_tail = make_bean("transaction-second");
+    invalid_transaction_tail.message_type = None;
+    invalid_transaction_tail.transaction_state = None;
+
+    let cases = [
+        (
+            "Pub",
+            make_context(
+                TraceType::Pub,
+                vec![make_bean("pub-first"), make_bean("pub-second")],
+            ),
+            1,
+            ["pub-first", "pub-second"],
+        ),
+        (
+            "EndTransaction",
+            make_context(
+                TraceType::EndTransaction,
+                vec![
+                    make_bean("transaction-first"),
+                    make_bean("transaction-second"),
+                ],
+            ),
+            1,
+            ["transaction-first", "transaction-second"],
+        ),
+        (
+            "Recall",
+            make_context(
+                TraceType::Recall,
+                vec![make_bean("recall-first"), make_bean("recall-second")],
+            ),
+            1,
+            ["recall-first", "recall-second"],
+        ),
+        (
+            "SubBefore",
+            make_context(
+                TraceType::SubBefore,
+                vec![make_bean("sub-first"), make_bean("sub-second")],
+            ),
+            2,
+            ["sub-first", "sub-second"],
+        ),
+        (
+            "Pub",
+            make_context(
+                TraceType::Pub,
+                vec![make_bean("pub-tail-first"), invalid_pub_tail],
+            ),
+            1,
+            ["pub-tail-first", "pub-second"],
+        ),
+        (
+            "EndTransaction",
+            make_context(
+                TraceType::EndTransaction,
+                vec![
+                    make_bean("transaction-tail-first"),
+                    invalid_transaction_tail,
+                ],
+            ),
+            1,
+            ["transaction-tail-first", "transaction-second"],
+        ),
+    ];
+
+    for (trace_type, context, expected_row_count, message_ids) in cases {
+        requests.lock().unwrap().clear();
+        assert!(dispatcher.append(context));
+        dispatcher.flush().await.unwrap();
+
+        let delivered = requests.lock().unwrap().clone();
+        assert_eq!(delivered.len(), 1, "{trace_type}");
+        let rows = trace_rows(&delivered);
+        assert_eq!(rows.len(), expected_row_count, "{trace_type}");
+        assert!(rows[0].starts_with(&format!("{trace_type}\u{1}")));
+        assert!(rows[0].contains(message_ids[0]));
+        if expected_row_count == 2 {
+            assert!(rows[1].contains(message_ids[1]));
+        } else {
+            assert!(!rows[0].contains(message_ids[1]));
+        }
+
+        let expected_keys = message_ids
+            .into_iter()
+            .flat_map(|id| [id.to_owned(), format!("{id}-key")])
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            trace_message_keys(&delivered[0]),
+            expected_keys,
+            "{trace_type}"
+        );
+    }
+
+    let mut invalid_selected_pub = make_bean("invalid-selected");
+    invalid_selected_pub.message_type = None;
+    requests.lock().unwrap().clear();
+    assert!(dispatcher.append(make_context(TraceType::Pub, vec![invalid_selected_pub],)));
+    assert!(dispatcher.append(make_context(
+        TraceType::Pub,
+        vec![make_bean("valid-after-invalid")],
+    )));
+    dispatcher.flush().await.unwrap();
+    let delivered = requests.lock().unwrap().clone();
+    assert_eq!(delivered.len(), 1);
+    let rows = trace_rows(&delivered);
+    assert_eq!(rows.len(), 1);
+    assert!(rows[0].contains("valid-after-invalid"));
+    assert_eq!(
+        trace_message_keys(&delivered[0]),
+        BTreeSet::from([
+            "valid-after-invalid".to_owned(),
+            "valid-after-invalid-key".to_owned(),
+        ])
+    );
+
     dispatcher.shutdown().await.unwrap();
     nameserver_task.abort();
     broker_task.abort();

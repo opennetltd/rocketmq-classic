@@ -374,8 +374,12 @@ impl TraceContext {
         {
             panic!("Java TraceDataEncoder reads the first trace bean for this trace type");
         }
+        let beans_to_encode = match trace_type {
+            TraceType::Pub | TraceType::EndTransaction | TraceType::Recall => &trace_beans[..1],
+            TraceType::SubBefore | TraceType::SubAfter => trace_beans.as_slice(),
+        };
         let mut output = String::new();
-        for bean in trace_beans {
+        for bean in beans_to_encode {
             let fields = match trace_type {
                 TraceType::Pub => {
                     let message_type = bean
@@ -547,6 +551,48 @@ mod tests {
                 .map(|key| key.as_str().unwrap().to_owned())
                 .collect::<Vec<_>>();
             assert_eq!(keys, expected_keys, "{}", case["name"]);
+        }
+    }
+
+    #[test]
+    fn trace_types_select_java_serialization_beans_and_keep_all_transfer_keys() {
+        let fixtures = fixtures();
+        let cases = fixtures["selectionCases"].as_array().unwrap();
+        assert_eq!(cases.len(), 20);
+
+        for case in cases {
+            let context = context_from_fixture(case);
+            let encoded = std::panic::catch_unwind(|| context.encode());
+            if case["error"].is_null() {
+                let encoded = encoded
+                    .unwrap_or_else(|_| panic!("{} unexpectedly failed encoding", case["name"]));
+                assert_eq!(
+                    encoded,
+                    case["encoded"].as_str().unwrap(),
+                    "{}",
+                    case["name"]
+                );
+                let row_count = encoded
+                    .split(TRACE_RECORD_SEPARATOR)
+                    .filter(|row| !row.is_empty())
+                    .count();
+                assert_eq!(
+                    row_count,
+                    case["rowCount"].as_u64().unwrap() as usize,
+                    "{}",
+                    case["name"]
+                );
+                let keys = context.transfer_keys().into_iter().collect::<Vec<_>>();
+                let expected_keys = case["transferKeys"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|key| key.as_str().unwrap().to_owned())
+                    .collect::<Vec<_>>();
+                assert_eq!(keys, expected_keys, "{}", case["name"]);
+            } else {
+                assert!(encoded.is_err(), "{} should fail like Java", case["name"]);
+            }
         }
     }
 

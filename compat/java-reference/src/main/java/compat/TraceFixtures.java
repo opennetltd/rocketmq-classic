@@ -98,7 +98,122 @@ public final class TraceFixtures {
         result.put("identityEquality", identityEquality());
         result.put("invalidInputThrows", invalidInputThrows());
         result.put("cases", cases);
+        result.put("selectionCases", selectionCases());
         return result;
+    }
+
+    private static List<Map<String, Object>> selectionCases() {
+        List<Map<String, Object>> cases = new ArrayList<>();
+        for (TraceType type : TraceType.values()) {
+            for (int beanCount = 0; beanCount <= 2; beanCount++) {
+                cases.add(renderSelection(
+                    "selection_" + type.name().toLowerCase() + "_" + beanCount,
+                    selectionContext(type, beanCount, false)));
+            }
+        }
+        cases.add(renderSelection("pub_invalid_tail", selectionContext(TraceType.Pub, 2, true)));
+        cases.add(renderSelection("end_transaction_invalid_tail",
+            selectionContext(TraceType.EndTransaction, 2, true)));
+
+        TraceContext pubMissingType = selectionContext(TraceType.Pub, 1, false);
+        pubMissingType.getTraceBeans().get(0).setMsgType(null);
+        cases.add(renderSelection("pub_selected_missing_message_type", pubMissingType));
+
+        TraceContext transactionMissingType = selectionContext(TraceType.EndTransaction, 1, false);
+        transactionMissingType.getTraceBeans().get(0).setMsgType(null);
+        cases.add(renderSelection("end_transaction_selected_missing_message_type",
+            transactionMissingType));
+
+        TraceContext transactionMissingState = selectionContext(TraceType.EndTransaction, 1, false);
+        transactionMissingState.getTraceBeans().get(0).setTransactionState(null);
+        cases.add(renderSelection("end_transaction_selected_missing_state",
+            transactionMissingState));
+        return cases;
+    }
+
+    private static TraceContext selectionContext(TraceType type, int beanCount, boolean invalidTail) {
+        List<TraceBean> beans = new ArrayList<>();
+        for (int index = 0; index < beanCount; index++) {
+            String messageId = index == 0 ? "first" : "second";
+            boolean invalid = invalidTail && index == 1;
+            MessageType messageType = null;
+            if (!invalid && type == TraceType.Pub) {
+                messageType = MessageType.Normal_Msg;
+            } else if (!invalid && type == TraceType.EndTransaction) {
+                messageType = MessageType.Trans_msg_Commit;
+            }
+            LocalTransactionState transactionState = type == TraceType.EndTransaction && !invalid
+                ? LocalTransactionState.COMMIT_MESSAGE
+                : null;
+            beans.add(message("orders", messageId, null, "paid", messageId + "-key",
+                "broker:10911", 12, 1, messageType,
+                type == TraceType.EndTransaction ? "transaction-" + messageId : null,
+                transactionState, false));
+        }
+        TraceContext context = context(type, "selection-group", "region-selection", 5000,
+            true, beans.toArray(TraceBean[]::new));
+        context.setCostTime(6);
+        context.setAccessChannel(AccessChannel.LOCAL);
+        return context;
+    }
+
+    private static Map<String, Object> renderSelection(String name, TraceContext context) {
+        Map<String, Object> result = new TreeMap<>();
+        result.put("name", name);
+        result.put("context", selectionContextJson(context));
+        try {
+            TraceTransferBean transfer = TraceDataEncoder.encoderFromContextBean(context);
+            String encoded = transfer.getTransData();
+            result.put("encoded", encoded);
+            result.put("rowCount", encoded.chars().filter(ch -> ch == '\u0002').count());
+            result.put("error", null);
+            result.put("transferKeys", new TreeSet<>(transfer.getTransKey()));
+        } catch (RuntimeException error) {
+            result.put("encoded", null);
+            result.put("rowCount", null);
+            result.put("error", error.getClass().getSimpleName());
+            result.put("transferKeys", null);
+        }
+        return result;
+    }
+
+    private static Map<String, Object> selectionContextJson(TraceContext context) {
+        Map<String, Object> value = new TreeMap<>();
+        value.put("traceType", context.getTraceType().name());
+        value.put("timestampMillis", context.getTimeStamp());
+        value.put("regionId", context.getRegionId());
+        value.put("regionName", context.getRegionName());
+        value.put("groupName", context.getGroupName());
+        value.put("costTimeMillis", context.getCostTime());
+        value.put("success", context.isSuccess());
+        value.put("requestId", context.getRequestId());
+        value.put("contextCode", context.getContextCode());
+        value.put("accessChannel", context.getAccessChannel() == null
+            ? null : context.getAccessChannel().name());
+        value.put("text", context.toString());
+        List<Map<String, Object>> beans = new ArrayList<>();
+        for (TraceBean bean : context.getTraceBeans()) {
+            Map<String, Object> beanJson = new TreeMap<>();
+            beanJson.put("topic", bean.getTopic());
+            beanJson.put("messageId", bean.getMsgId());
+            beanJson.put("offsetMessageId", bean.getOffsetMsgId());
+            beanJson.put("tags", bean.getTags());
+            beanJson.put("keys", bean.getKeys());
+            beanJson.put("storeHost", bean.getStoreHost());
+            beanJson.put("clientHost", bean.getClientHost());
+            beanJson.put("storeTime", bean.getStoreTime());
+            beanJson.put("bodyLength", bean.getBodyLength());
+            beanJson.put("retryTimes", bean.getRetryTimes());
+            beanJson.put("messageTypeOrdinal", bean.getMsgType() == null
+                ? null : bean.getMsgType().ordinal());
+            beanJson.put("transactionId", bean.getTransactionId());
+            beanJson.put("transactionState", bean.getTransactionState() == null
+                ? null : bean.getTransactionState().name());
+            beanJson.put("fromTransactionCheck", bean.isFromTransactionCheck());
+            beans.add(beanJson);
+        }
+        value.put("traceBeans", beans);
+        return value;
     }
 
     private static Map<String, Object> identityEquality() {
