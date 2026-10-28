@@ -21,9 +21,9 @@ use rocketmq_classic_protocol::{
 };
 use rocketmq_classic_remoting::{RemotingCommand, client::RpcHook};
 use tokio::{
-    sync::{mpsc, oneshot},
+    sync::{mpsc, oneshot, watch},
     task::JoinHandle,
-    time::{Instant, interval_at},
+    time::{Instant, interval_at, timeout_at},
 };
 
 const TRACE_QUEUE_CAPACITY: usize = 2_048;
@@ -574,6 +574,9 @@ impl TraceDispatcher {
     }
 
     pub async fn flush(&self) -> Result<(), TraceDispatcherError> {
+        if self.shutdown.load(Ordering::Acquire) {
+            return Err(TraceDispatcherError::Shutdown);
+        }
         if !self.started.load(Ordering::Acquire) {
             return Ok(());
         }
@@ -747,9 +750,6 @@ async fn trace_worker(
                             std::mem::take(&mut pending),
                         )
                         .await;
-                        if let Err(error) = producer.shutdown().await {
-                            tracing::debug!(error = %error, "trace producer shutdown failed");
-                        }
                         let _ = reply.send(());
                         return;
                     }
