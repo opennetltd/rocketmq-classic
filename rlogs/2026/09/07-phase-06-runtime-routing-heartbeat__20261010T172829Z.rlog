@@ -1,0 +1,6 @@
+# Phase 6 table-read compatibility session — 2026-10-10T17:28Z
+
+- Extended the pinned Java 5.5.1 table oracle: `containsValue(null)` throws; `getOrDefault(key, null)` returns the mapped value on a hit and null on a miss for the factory, producer, and consumer tables.
+- Rust nullable adapters now represent nullable lookup defaults/results and reject a null value for `containsValue` with typed `InvalidRoute`.
+- Validation: full locked workspace/all-target tests; strict workspace/all-target/all-feature Clippy; pinned offline Maven verify (22 scenarios and Java cross-decodes); comparator self-test/manifest22; formatting and diff checks.
+- Updated the public API/config map and requirement audit. Other table mutation/view inputs and broader Phase 6 reconciliation remain open; P6-V04 remains a Phase 19 handoff.

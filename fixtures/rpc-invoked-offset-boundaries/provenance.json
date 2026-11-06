@@ -1,0 +1,75 @@
+{
+  "client": "org.apache.rocketmq:rocketmq-client:5.5.1",
+  "sourceCommit": "efa1be59d6fc747ad220f036c86030f05f0419f9",
+  "serverBaseline": "V5_3_4 (5.3.4)",
+  "serverBaselineContacted": false,
+  "generation": "Pinned Java source-derived request headers and scripted offline Broker response cases; no Broker contacted.",
+  "fixtures": {
+    "search-offset-lower-empty.json": {
+      "sha256": "0c52eff82c8d4a87d97ca7a1ac04c5ce956fc2da7f67a1d923e29d07588adbf0",
+      "entrypoint": "MQClientAPIImpl.searchOffset",
+      "requestCode": 29,
+      "responseCode": 0,
+      "sources": [
+        "client/src/main/java/org/apache/rocketmq/client/impl/MQClientAPIImpl.java",
+        "remoting/src/main/java/org/apache/rocketmq/remoting/protocol/header/",
+        "common/src/main/java/org/apache/rocketmq/common/BoundaryType.java"
+      ]
+    },
+    "search-offset-upper.json": {
+      "sha256": "bb6b80c3f4ebf43f6d6b706bdaed582d29974dc1e40c640d522e97e33b1ddc99",
+      "entrypoint": "MQClientAPIImpl.searchOffset",
+      "requestCode": 29,
+      "responseCode": 0,
+      "sources": [
+        "client/src/main/java/org/apache/rocketmq/client/impl/MQClientAPIImpl.java",
+        "remoting/src/main/java/org/apache/rocketmq/remoting/protocol/header/",
+        "common/src/main/java/org/apache/rocketmq/common/BoundaryType.java"
+      ]
+    },
+    "max-offset-committed-empty.json": {
+      "sha256": "ebc61f63c4cf0f5c028fb4ec612f928257094a58c2f385c8c93cbe4189cdb337",
+      "entrypoint": "MQClientAPIImpl.getMaxOffset",
+      "requestCode": 30,
+      "responseCode": 0,
+      "sources": [
+        "client/src/main/java/org/apache/rocketmq/client/impl/MQClientAPIImpl.java",
+        "remoting/src/main/java/org/apache/rocketmq/remoting/protocol/header/",
+        "common/src/main/java/org/apache/rocketmq/common/BoundaryType.java"
+      ]
+    },
+    "min-offset.json": {
+      "sha256": "b1f4ee718dca47eeff98a5723eeb5f548a94120b6dc4764275c53d824b4e294e",
+      "entrypoint": "MQClientAPIImpl.getMinOffset",
+      "requestCode": 31,
+      "responseCode": 0,
+      "sources": [
+        "client/src/main/java/org/apache/rocketmq/client/impl/MQClientAPIImpl.java",
+        "remoting/src/main/java/org/apache/rocketmq/remoting/protocol/header/",
+        "common/src/main/java/org/apache/rocketmq/common/BoundaryType.java"
+      ]
+    },
+    "earliest-storetime-signed.json": {
+      "sha256": "6d6269f9e98a7f4e85a70a8c4f9ea19547e9376f5e135371f0b9b481aef7101b",
+      "entrypoint": "MQClientAPIImpl.getEarliestMsgStoretime",
+      "requestCode": 32,
+      "responseCode": 0,
+      "sources": [
+        "client/src/main/java/org/apache/rocketmq/client/impl/MQClientAPIImpl.java",
+        "remoting/src/main/java/org/apache/rocketmq/remoting/protocol/header/",
+        "common/src/main/java/org/apache/rocketmq/common/BoundaryType.java"
+      ]
+    },
+    "search-offset-error.json": {
+      "sha256": "be6d6a0cb1b9017b394affd642aa87de061699a2672bb5ef303fc9de95e8cff4",
+      "entrypoint": "MQClientAPIImpl.searchOffset",
+      "requestCode": 29,
+      "responseCode": 1,
+      "sources": [
+        "client/src/main/java/org/apache/rocketmq/client/impl/MQClientAPIImpl.java",
+        "remoting/src/main/java/org/apache/rocketmq/remoting/protocol/header/",
+        "common/src/main/java/org/apache/rocketmq/common/BoundaryType.java"
+      ]
+    }
+  }
+}

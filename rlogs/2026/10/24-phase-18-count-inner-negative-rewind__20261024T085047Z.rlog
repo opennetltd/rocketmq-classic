@@ -1,0 +1,45 @@
+# Phase 18 finite negative inner-message cursor rewind
+
+Recorded: 2026-10-24 08:50 UTC
+Branch: phase/18-phase-18-compatibility-closure
+Code commit: 924466d6 fix(common): follow finite inner message cursor rewinds
+Pinned Java reference: RocketMQ 5.5.1 at efa1be59d6fc747ad220f036c86030f05f0419f9
+
+## Change
+
+`MessageDecoder.countInnerMsgNum` follows in-range negative-size cursor
+rewinds. The invoked Java case advances from position 0 to 8, rewinds to 5
+with size -3, reads the overlapping size 255, and fails while setting the
+out-of-range position; Java leaves the cursor at 9. Rust returns the typed
+incomplete-record error at position 9. Rust tracks visited offsets after the
+first negative size and returns a typed error at a repeated position to avoid
+Java's infinite loop for cyclic input. Zero-size input is also bounded at its
+original position.
+
+Fixture SHA-256:
+
+- `fixtures/messages/records.json`: `e96844dffe42973d3ea77255b197f2d8f5ccb1c43fd3674eacd500687afa8ea7`
+- `MessageDecodeFixtures.java`: `31018415889b798bf558ae3e8e5e13ab513aaaed9af26b082609dcc1b00b7a82`
+
+## Verification
+
+- Focused Common `message_decode` integration suite: 27 passed.
+- Common default and all-feature tests/doctests: passed.
+- Workspace all-feature tests/doctests: passed.
+- Strict workspace all-target/all-feature Clippy: passed.
+- Strict Common all-target/all-feature Clippy: passed.
+- Release facade examples: passed.
+- Windows GNU all-target/all-feature workspace check and strict Clippy: passed as compile-only evidence.
+- Differential comparator self-test and 37-scenario manifest validation: passed.
+- Pinned offline Maven `verify`: passed, 37 scenarios, 11 message fixtures, 106 typed headers and 19 typed bodies.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+
+## Scope
+
+This closes the finite negative-rewind branch only. Zero-size and cyclic
+counting remain bounded Rust outcomes because Java does not make progress on
+those inputs. Broad P18-V01 source/API/settings/input/error/control-flow and
+reverse-export reconciliation remains PARTIAL. Native Windows runtime and
+current-revision remote Ubuntu CI remain unverified; Phase 19 Broker/Docker
+validation remains separate. No push or remote CI was run. Protected Phase 19
+worktree paths remain unstaged and unchanged.

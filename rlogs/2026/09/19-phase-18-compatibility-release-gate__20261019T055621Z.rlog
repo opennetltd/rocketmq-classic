@@ -1,0 +1,24 @@
+# Phase 18 compatibility release gate — execution 2026-10-19T05:56:21Z
+
+- Resumed on `phase/18-phase-18-compatibility-closure` at `b32a7913`; the pre-existing Phase 19 files remain untouched and unstaged. The Phase 18 plan is unchanged.
+- Read the complete Phase 18 plan and Rust coding/testing guidance. P18-V01 remains a substantive open audit; P18-V02 current-revision workspace verification is incomplete; P18-V03/V04 also require current evidence.
+- Reproduced handoff diagnosis from source: the TLS property snapshot test constructs a verifying TLS client without its own trust anchor, making its property-only assertion depend on host trust roots. Added a self-signed test CA to the test's first properties file; no production TLS behavior changed.
+- Next: run the focused remoting security test, then the requested workspace, oracle, race/fuzz, package, benchmark, and cross-target gates. Continue the P18-V01 source/API/configuration reconciliation and record evidence here append-only.
+- Focused verification: `cargo test --locked -p rocketmq-classic-remoting --test security tls_property_file_settings_are_process_wide_across_config_sources -- --exact` passed (1 test).
+
+## P18-V02/V03/V04 server-free checks on `1067685d`
+
+- `cargo fmt --all -- --check`, strict all-target/all-feature Clippy, default and all-feature locked workspace tests passed. The two workspace test runs included all crate integration targets and rustdoc API guards; the remoting trust-root case passed after the test-only fix.
+- Offline Maven `verify` passed: 37 scenarios, 67 typed-header and 15 typed-body cross-decodes, plus the pinned Java fixture checks. Differential comparator self-test and manifest validation passed (37 scenarios).
+- The Asia/Taipei Unique ID fixture passed. Bounded fuzz smoke passed (121 frame seeds, 11 message seeds, 2,112 mutations, 170 frame decodes, 109 message decodes). Offline deterministic race/leak smoke passed 16 cases × 3.
+- Release facade examples built. The offline benchmark compiled and ran on Apple M5 Max (18 logical CPUs), macOS ARM64, Rust 1.85.0. Observations (ns/iteration; allocation calls and allocated bytes per iteration): frame encode/decode 2,467.3 (40 / 4,676); Zstd record decode 1,740.3 (17 / 197,493); Producer request construction 2,003.7 (54 / 3,665); 128-entry route lookup 26.8 (0 / 0); loopback pending completion 58,156.2 (81 / 9,546). Fixed iteration/input sizes are emitted by the benchmark itself; these are observations, not thresholds.
+- Locked Cargo metadata: 216 total packages, 8 workspace packages and 208 registry packages. `scripts/check-workspace-metadata.py` passed. Each of the seven product crate package listings includes LICENSE and NOTICE; file counts were 30, 30, 42, 80, 34, 52, and 10 respectively.
+- Windows `x86_64-pc-windows-gnu` cross-check passed for the full workspace, all targets and all features. The attempted MSVC cross-check could not run on this host because the 1.85.0 MSVC target standard library/SDK is unavailable to the macOS C build toolchain; native Windows execution and current-revision GitHub CI were not run, and no push was made.
+- P18-V01 remains under source/API/configuration and reverse-export review; V03/V04 evidence summaries and manifest check still need the final documentation update.
+
+## P18-V01 Rustdoc public-field inventory and `ClientGroup` closure
+
+- Generated workspace Rustdoc JSON and counted 245 public fields across Common 4, Consumer 30, Core 66, Producer 32, Protocol 58, and Remoting 55. There are no named public enum-variant fields; the handoff's total of 340 was an addition error. The API map now names all 41 affected struct types and records each type's field count and Java/property disposition.
+- Pinned Lite topic-info fixture evidence says `ClientGroup.clientId` and `group` are `public final String` with no setters. Commit `f44b942a` hides the Rust fields and adds read-only `client_id()`/`group()` accessors. The change removes the only identified Java-absent field mutation capability in this inventory.
+- `cargo fmt --all -- --check` passed. `cargo test --tests --locked -p rocketmq-classic-protocol` passed 145 unit and 39 integration tests. `cargo test --doc --locked -p rocketmq-classic-protocol ClientGroup` passed both new compile-fail guards. `RUSTDOCFLAGS='-Z unstable-options --output-format json' cargo +nightly doc --workspace --no-deps --locked` passed and the refreshed inventory reports 243 public fields after the fix; existing workspace `publish` and `AtomicU64::fetch_update` warnings remain.
+- Broad P18-V01 method/input/error/flow reconciliation and final current-revision P18-V02/V03/V04 documentation are still outstanding; Phase 19 live validation was not run.

@@ -1,0 +1,34 @@
+Phase 12 orderly consumption — 2026-10-12 05:57 UTC
+
+Objective: implement Phase 12 against pinned RocketMQ Java client 5.5.1 while preserving prior uncommitted Phase 0–11 audit work. Work branch is `phase/13-phase-12-orderly-consumption`, based on Phase 11 HEAD `51965301`; no Phase 12 code has been committed at session start. Java reference repository: `/Users/bruce.tsai/Projects/3rd/rocketmq`, pinned source commit `efa1be59d6fc747ad220f036c86030f05f0419f9` (`rocketmq-all-5.5.1`).
+
+Repository guidance: applied `coding-general`; do not modify plan files; implement each phase step as a separately reviewed commit, add automated tests, run native format/build/lint/test gates, update project documentation, re-read the full plan before completion, and keep this log append-only.
+
+Working tree already contains unrelated uncommitted Phase 0–11 audit changes across Rust, Java fixtures, docs, plans and fixtures. Do not reset, revert, stage, or commit those changes. Java reference repository also has an unrelated untracked `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java`; preserve it.
+
+Plan scope: P12-01 batched Broker queue locks and managed renewal; P12-02/03 per-queue ordered consumption gate and generation/lock freshness checks; P12-04 Java listener status/context, auto-commit, rollback, retry/fallback and suspend bounds; P12-05 lock-aware gain/loss, safe offset persistence, unlock retry and shutdown. P12-V03 remains a Phase 19 live Broker/mixed-client handoff.
+
+Pinned Java source inspection confirms `ProcessQueue.REBALANCE_LOCK_MAX_LIVE_TIME=30000ms`, `REBALANCE_LOCK_INTERVAL=20000ms`, strict expiry predicate `(now-lastLockTimestamp)>maxLiveTime`, renewal starts after 1000ms in clustering mode; orderly status includes deprecated `COMMIT` and `ROLLBACK`; `ConsumeOrderlyContext` defaults `autoCommit=true` and suspend time `-1`; queue suspend requests clamp to `[10,30000]ms`; `DefaultMQPushConsumer.suspendCurrentQueueTimeMillis` defaults to 1000ms; orderly `maxReconsumeTimes=-1` means `Integer.MAX_VALUE` (unlike concurrent mode's 16).
+
+Initial validation has not been rerun for Phase 12. Continue by reading the complete consumer path and implement source-backed tests before behavior changes.
+
+Phase 12 implementation and local-gate continuation — 2026-10-12 06:40–07:13 UTC
+
+- Consumer-suite validation first exposed four orderly tests whose test helper passed no lock settings to an orderly service. Production startup always supplies Java defaults; the helper now supplies the Java `30000ms` max lock age and `20000ms` renewal interval when omitted. The consumer package suite then passed.
+- The initial strict Clippy run found a collapsible conditional, a renewal mutex guard held across awaits, a complex scripted lock type, and two scripted-test guards crossing awaits. These were corrected; strict workspace Clippy passes.
+- A source-path audit found existing queue renewals were applying freshness at the end of a multi-Broker batch. Lock results now retain their monotonic and wall-clock response times and apply them to the matching queue generation. Added `orderly_batch_lock_age_starts_at_each_broker_response`: with a paused clock and delayed second Broker response, the first Broker's lock expires at its own 30-second boundary while the second remains fresh.
+- Added `orderly_callbacks_on_same_queue_are_serialized_in_offset_order`, which holds the first callback open and confirms a second concurrent request cannot invoke another callback until the first finishes. The independent-queue progress test proves different queues can advance in parallel.
+- Final `cargo test --workspace --locked` — PASS; the consumer library has 102 passing unit tests, consumer integration tests pass, and all workspace doctests pass.
+- Final `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — PASS.
+- `cargo build -p rocketmq-classic --examples --locked` — PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS; pinned fixture drift checks, all 31 differential scenarios, and Java cross-decodes completed.
+- `python3 tests/differential/compare.py --self-test` and `--validate-manifest` — PASS; 31 scenarios. `cargo fmt --all -- --check` and `git diff --check` — PASS.
+- Updated the Phase 12 matrix and Java compatibility summary with local evidence. Phase 12 changes have not yet been committed at this checkpoint. P12-V03 mixed Java/Rust live Broker contention remains PENDING_PHASE_19; no live Broker or TLS cluster was exercised.
+
+Phase 12 completion audit and commits — 2026-10-12
+
+- Re-read the complete Phase 12 plan and checked the source against the pinned Java object `efa1be59d6fc747ad220f036c86030f05f0419f9` in `/Users/bruce.tsai/Projects/3rd/rocketmq`. Confirmed the 30s lock age, 20s renewal interval, 1s initial delay, strict expiry comparison, orderly status handling, retry limit and suspend-delay clamp. The Java checkout's unrelated untracked `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java` was left untouched.
+- Final `cargo test --workspace --locked` passed after the last code edit; the consumer crate suite also passed independently (107 library tests, integration tests and doctests). Strict workspace/all-target/all-feature Clippy passed after replacing one test's explicit mutex-guard drop with a lexical scope; no lint suppression was added.
+- `cargo build -p rocketmq-classic --examples --locked`, offline Maven verify, differential comparator self-test, manifest validation (32 scenarios), `cargo fmt --all -- --check` and `git diff --check` passed. Maven verified fixture drift and Java cross-decoding. No live Broker was started.
+- Phase 12 commits on `phase/13-phase-12-orderly-consumption`: `85706ef5` Java/Rust orderly fixture; `fa5eca72` orderly processing and lock lifecycle; `b78e36ff` example; `39fb5b36` compatibility matrix and P12-V03 Phase 19 registration. This log is committed separately.
+- The pre-existing Phase 0–11 compatibility audit changes remain unstaged and uncommitted; they were not included in the Phase 12 commits. P12-V03 remains `PENDING_PHASE_19` as specified by the plan.

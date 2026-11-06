@@ -1,0 +1,60 @@
+# Phase 18 Producer accumulator and common thread-pool dispositions
+
+- Recorded: 2026-10-24 16:42:58 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Inventory/test revision: `945812b4`
+- Host: macOS AArch64, Rust 1.85.0
+- Java reference: RocketMQ 5.5.1, source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Producer `ProduceAccumulator`
+
+- Added `produceAccumulatorApi` to the invoked Producer core fixture. Java has
+  one public `ProduceAccumulator(String)` constructor and zero declared public
+  methods. The inherited `Object` methods do not expose batching operations.
+- Rust keeps the corresponding accumulator private within `Producer`; the
+  public mapped batching controls and send APIs remain on `Producer`.
+- Focused test:
+  `pinned_java_produce_accumulator_declared_surface_is_constructor_only`.
+- Producer fixture SHA-256:
+  `e7756ff8a7da4bac09de942e5eebf3e4886f933fb5f8483e4c7c7a8f61e228ff`.
+- Java fixture source SHA-256:
+  `3cbfb2c20ac7cc799331c24a5e1c9c9f999e908c899d009fe4cd9c3c7f1b3102`.
+- Pinned `ProduceAccumulator.java` SHA-256:
+  `89f2fcb62e9654aed52a190aa040ce4fd80eb62779e607910fdccb328d08df1b`.
+
+## Common thread-pool diagnostics
+
+- Pinned common Java source declares `ThreadPoolMonitor`,
+  `ThreadPoolWrapper`, and `ThreadPoolStatusMonitor`. Rust has no matching
+  utility types.
+- A production source search across pinned client, remoting, and common Java
+  sources found no client/remoting use of the monitor; references are confined
+  to its common-package implementation.
+- Source SHA-256 values: `91a953b534d3a753d2b1085cb08705cfd212ebd5e5fd7a7c5a254608fd155df9`
+  (`ThreadPoolMonitor.java`),
+  `244773886ec16a908ab031b447951070d74a2cae9abe20e49b982f9741ec4f76`
+  (`ThreadPoolWrapper.java`), and
+  `d8d9983890425406e26665e357a45186b7ec8ca9cb194135dfb6a7c7b0e86c2a`
+  (`ThreadPoolStatusMonitor.java`).
+- The diagnostic utility remains an unimplemented public common API; this
+  disposition only establishes the lack of client/remoting execution call
+  sites.
+
+## Verification
+
+- Focused Producer API inventory test passes.
+- Strict Producer all-target/all-feature Clippy passes.
+- Pinned offline Maven `verify` passes all 37 scenarios, fixture drift checks,
+  11 message fixtures, 106 typed headers and 19 typed bodies.
+- `cargo fmt --all -- --check` and `git diff --check` pass.
+
+## Remaining audit status
+
+- These are source inventory and ownership dispositions, not full public API
+  parity for the concrete `ProduceAccumulator` constructor or common
+  thread-pool diagnostic utilities. Broad P18-V01 reconciliation remains
+  PARTIAL.
+- Native Windows runtime and current-revision remote Ubuntu CI remain
+  unverified. No push or remote CI ran.
+- Phase 19 user-owned paths remain unchanged and unstaged.

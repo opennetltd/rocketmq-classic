@@ -1,0 +1,49 @@
+# P18-V01 SEND_MESSAGE_V2 header decode slice — 2026-10-17T19:11:41Z
+
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Code commit: `227876c1 fix(protocol): match Java send v2 header decoding`.
+- Java oracle: RocketMQ client 5.5.1, inspected read-only.
+- Fixture `fixtures/remoting/send-message-request-v2-decode-modes.json`
+  SHA-256: `dcf64f14fd84859e5a731d46368b59fc1c850bb511b38c6e16e398bacd153098`.
+
+## Changes recorded
+
+- Captured invoked Java fast and reflective decoding for nullable V2 compact
+  fields, inherited `RpcRequestHeader` fields, malformed numbers, and
+  V1-to-V2 conversion.
+- Rust V2 fields `a`–`n` now retain nullable states. Fast mode ignores the
+  inherited fields while reflection mode reads `ns`, `nsd`, `bname`, `oway`,
+  and `lo`; fast malformed-number errors and reflective per-field null results
+  match Java.
+- V1-to-V2 conversion maps `brokerName` to compact field `n` and does not copy
+  inherited RPC fields. Removed the Rust-only public `normalized_v1` helper.
+- Updated the request-code inventory and Phase 6 P18-V01 audit disposition.
+
+## Verification
+
+- `mvn -q -f compat/java-reference/pom.xml verify`: PASS; all 37 scenarios,
+  Java fixture drift checks, and Java/Rust cross-decodes, including the new V2
+  decoder/conversion fixture.
+- Linux Docker `cargo test --locked -p rocketmq-classic-protocol
+  -p rocketmq-classic-remoting -- --test-threads=1`: PASS. Protocol: 128 unit
+  tests plus all integration and documentation tests. Remoting: 129 unit tests,
+  8 codec, 1 fuzz regression, 7 security, 107 transport, and 18 documentation
+  tests.
+- `cargo fmt --all -- --check`: PASS.
+- `git diff --check`: PASS before commit.
+
+## Remaining work
+
+- Broad bidirectional P18-V01 source/API/settings/overload input/error/flow
+  reconciliation and Rust reverse-export audit remain open.
+- Current-revision GitHub Ubuntu/native Windows evidence for P18-V04 remains
+  open.
+- Phase 19 still has 30 locally runnable Docker/Broker scenarios, full-runner
+  work, and multi-Broker/TLS/ACL and feature-specific profiles outstanding.
+- Release version intent and registry dependency-resolution checks remain
+  open.
+- Owner-only production connectivity, credential/CA, approved HA/fault
+  injection, and capacity/soak checks remain separate final manual items.
+- No plan, Java oracle, remote branch, tag, publication, Broker operation, or
+  deployment was changed.

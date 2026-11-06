@@ -1,0 +1,54 @@
+# Phase 18 user-property/transaction virtual methods and P18-V02 server-free refresh — 2026-10-21T20:00:32Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `27c872bc` (`feat(common): dispatch subtype user property methods`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `33de50fa577340aa50df1637f1d2f6aa32ae8d23e5e03ba21a2a012630e37542`.
+
+## Change
+
+- Added subtype hooks for Java `getUserProperty`, `hasProperty`,
+  `getTransactionId`, `setTransactionId`, `putUserProperty`, `setTags` and
+  `setKeys` methods.
+- The Java `setKeys(Collection)` overload is modeled as a dynamic call to the
+  String setter overload. `hasProperty` falls back to the stored base map,
+  matching Java's direct field lookup rather than virtual `getProperty`.
+- The invoked direct-consume fixture compares subtype getter values and write
+  counts. It exercises blank and null `putUserProperty` inputs accepted by a
+  custom override before base validation.
+
+## Verification
+
+- PASS: focused direct-consume integration tests (3 cases).
+- PASS: serial `cargo test --workspace --locked --quiet` and
+  `cargo test --workspace --all-features --locked --quiet`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: pinned Maven `verify`: 37 scenarios, 9 Running Info, 27 direct-consume,
+  15 reset cases, 83 typed headers, 16 typed bodies and Java/Rust
+  cross-decodes. Existing JDK Unsafe and reflective-final-field warnings were
+  emitted.
+- PASS: differential comparator self-test and 37-scenario manifest validation.
+- PASS: offline deterministic race/leak smoke, 16 cases × 3 repetitions.
+- PASS: release fuzz smoke, 137 frame seeds, 11 message seeds, 2,368 bounded
+  mutations, 201 frame decodes and 118 message decodes.
+- PASS: release workspace examples and `cargo bench --workspace --no-run
+  --locked`.
+- PASS: locked Cargo metadata (8 workspace members, 216 total packages,
+  208 registry packages), no-deps metadata (8 packages), workspace
+  metadata/license/dependency checks, and seven publishable package listings
+  containing `LICENSE` and `NOTICE`.
+- PASS: four Core Unique ID tests under both `TZ=UTC` and `TZ=Asia/Taipei`.
+- PASS: offline benchmark on Apple M5 Max, macOS aarch64, Rust 1.85.0:
+  frame encode/decode 2,402.6 ns/iteration; zstd decode 1,169.0 ns; producer
+  request construction 1,273.6 ns; 128-entry route lookup 16.2 ns; loopback
+  pending completion 62,964.1 ns. These are observations, not thresholds.
+
+## Current status
+
+This refresh closes current-revision server-free P18-V02 gates on `27c872bc`.
+Broad P18-V01 API/settings/input/error/control-flow/reverse-export
+reconciliation, Java live `getProperties()` map identity and current-revision
+GitHub Ubuntu/native Windows P18-V04 runtime evidence remain open. No push,
+remote CI, Broker or Docker run was performed. Pre-existing Phase 19 paths
+were left untouched and unstaged.

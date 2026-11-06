@@ -1,0 +1,57 @@
+# Phase 18 subtype priority override closure and server-free refresh — 2026-10-21T21:06:07Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `da1f4b1e` (`feat(common): dispatch subtype priority accessors`).
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture: `fixtures/runtime/consumer-operations.json`, SHA-256
+`44eb8359e7df5735cb527a59942190fb74dd4191306a4290ea3bba644a777a5c`.
+
+## Change
+
+- Added `MessageExtSubtype` hooks for Java's virtual `getPriority()` and
+  `setPriority(int)` methods. The inherited getter continues through virtual
+  `getProperty(PROPERTY_PRIORITY)`; the base setter retains the negative-value
+  error and property write.
+- The invoked Java direct-consume fixture overrides both priority methods,
+  accepts `-7`, and compares the result, property view, and getter/setter
+  counts. A second subtype overrides only `getProperty`; the fixture verifies
+  inherited getter dispatch, base storage for priority `17`, and negative
+  setter rejection.
+
+## Verification
+
+- PASS: focused Consumer direct-consume tests and Common Java 5.5.1 public
+  message API fixture test.
+- PASS: `cargo test --workspace --locked --quiet` and
+  `cargo test --workspace --all-features --locked --quiet`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: pinned `mvn -q -f compat/java-reference/pom.xml verify`: 37 scenarios,
+  9 Running Info, 27 direct-consume, 15 reset cases, 83 typed headers, 16
+  typed bodies and Java/Rust cross-decodes. Existing JDK Unsafe, Netty Unsafe
+  and reflective-final-field warnings were emitted.
+- PASS: differential comparator self-test and validation of the 37-scenario
+  manifest.
+- PASS: offline deterministic race/leak smoke, 16 cases × 3 repetitions.
+- PASS: release fuzz smoke, 137 frame seeds, 11 message seeds, 2,368 bounded
+  mutations, 201 frame decodes and 118 message decodes.
+- PASS: release facade examples, workspace bench compilation and release
+  benchmark execution.
+- PASS: locked Cargo metadata; workspace metadata/license/dependency checks;
+  seven product package listings containing `LICENSE` and `NOTICE`.
+- PASS: four Core Unique ID tests under each of `TZ=UTC` and
+  `TZ=Asia/Taipei`.
+- PASS: offline benchmark on Apple M5 Max, macOS aarch64, Rust 1.85.0:
+  frame encode/decode 2,266.9 ns/iteration; zstd decode 1,153.2 ns; producer
+  request construction 1,297.8 ns; route lookup 15.7 ns; loopback completion
+  69,060.5 ns. Allocation counts/bytes per iteration: 40/4,676; 17/197,493;
+  54/3,665; 0/0; 81/9,546. These are observations, not thresholds.
+
+## Current status
+
+This refresh closes the server-free P18-V02 gates on `da1f4b1e`. The
+caller-defined priority override slice is covered; broad P18-V01 source/API/
+settings/input/error/control-flow/reverse-export reconciliation remains open.
+Current-revision GitHub Ubuntu/native Windows P18-V04 evidence also remains
+open. No push, remote CI, Broker or Docker run was performed. Pre-existing
+Phase 19 paths were left untouched and unstaged.

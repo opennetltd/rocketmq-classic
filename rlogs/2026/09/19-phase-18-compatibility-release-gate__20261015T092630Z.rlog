@@ -1,0 +1,19 @@
+# Phase 18 protocol header API reverse-export — 20261015T092630Z
+
+- Audited the public `rocketmq-classic-protocol::header` surface against the
+  pinned Java 5.5.1 remoting header API and workspace call sites. The public
+  Rust-only header field parsers were used only within the Protocol crate;
+  `ProofHeader` was synthetic test support.
+- Made the field parsers private and removed `ProofHeader`. Remoting codec and
+  fuzz tests now decode the real Java-mapped `GetRouteInfoRequestHeader` from
+  the existing Java fixture. Added an external-crate compile-fail doctest for
+  all removed exports.
+- PASS: `cargo fmt --all -- --check`; `cargo test --workspace --locked`;
+  `cargo test --workspace --all-features --locked`;
+  `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`;
+  `git diff --check`.
+- Code commit: `60a62324 fix(compat): hide test-only protocol header helpers`.
+- Updated the Phase 6 requirement audit and release checklist. This closes the
+  surfaced header exports only; broad P18-V01 reconciliation remains open.
+- No plan or Java reference files were modified. No push, tag, publication, or
+  Broker validation was performed.

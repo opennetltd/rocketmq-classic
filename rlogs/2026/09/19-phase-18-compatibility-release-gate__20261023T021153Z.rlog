@@ -1,0 +1,35 @@
+# Phase 18 queue Default-adapter reverse audit — 2026-10-23T02:11:53Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Commit: `6371afa5` (`test(consumer): audit queue Default adapters`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Base environment: macOS AArch64, Apple M5 Max, Rust 1.85.0.
+
+## Decision and change
+
+The reverse API audit already mapped `ProcessQueue::new()` and
+`PopProcessQueue::new()` to Java no-argument constructors, but omitted each
+type's public Rust `Default` implementation. Source inspection confirmed both
+`Default::default()` implementations call `Self::new()`. The crosswalk now
+records those aliases as idiomatic Rust construction adapters with no extra
+queue capability. The facade regression compares their stable initial flags,
+ready-message state, and counters to `new()`.
+
+## Checks
+
+- `cargo test --offline -p rocketmq-classic-consumer --test facade_api_surface --locked` — 17 passed.
+- `cargo test --offline -p rocketmq-classic-consumer --all-targets --all-features --locked` — 260 library tests and 74 integration tests passed.
+- `cargo clippy --offline -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+The initial draft compared constructor timestamps and correctly exposed a
+1-millisecond construction-time difference. Those transient fields were
+removed from the comparison; the test now compares stable queue state only.
+An initial typed tuple-list draft also failed to compile because the snapshot
+mixes boolean and integer fields; it was changed to typed per-field
+assertions. Final checks pass.
+
+This closes only the two queue `Default` reverse-audit rows. Broad P18-V01
+source/API/settings/input/error/control-flow and reverse-export reconciliation
+remains PARTIAL. Remote Ubuntu CI, native Windows runtime execution, and Phase
+19 Broker/Docker evidence remain open.

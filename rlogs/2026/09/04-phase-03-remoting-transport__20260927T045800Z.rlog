@@ -1,0 +1,13 @@
+# Phase 3 remoting parity review — 2026-09-27T04:58:00Z
+
+- Continued source comparison against pinned Java RocketMQ 5.5.1; did not modify either Phase 3 plan.
+- Confirmed Java `NettyRemotingAbstract.processRequestCommand` uses unsupported remark `" request type " + code + " not supported`; Rust used generic `request code not supported`.
+- Changed Rust unsupported request remarks to Java's code-bearing text and extended scripted loopback assertion for request code 888888; retained response code/opaque and existing oneway suppression behavior.
+- Added client-level shutdown regression test: an actual `invoke_async` is observed by a loopback peer, then `client.shutdown()` fails its pending request and the callback receives Shutdown with complete-before-fail order before shutdown returns.
+- Validation: `cargo fmt --all`; targeted callback shutdown test passed; targeted inbound dispatch/unsupported request test passed after correcting expected code to the actual fixture request code.
+- Full workspace tests, Clippy, and final plan acceptance have not yet been run. Phase 3 remains in progress; P3-V04 remains Phase 19.
+- Extended `PHASE_3_REMOTING_INVENTORY.md` and `KNOWN_DIFFERENCES.md` with named shutdown/unsupported-remark evidence and the remaining exception-stack distinction.
+- Full validation passed: `cargo test --workspace --offline` (11 common, 9 protocol, 1 protocol fixture, 39 remoting unit, 4 codec, 68 transport; doc tests pass), `cargo clippy --workspace --all-targets --offline -- -D warnings`, `cargo fmt --all --check`, workspace metadata, differential comparator self-test, and `git diff --check`.
+- Source comparison of `NettyRemotingClient.NettyConnectManageHandler` found fatal exception lifecycle queues EXCEPTION and then closes the channel, whose close handler queues CLOSE. Rust previously emitted only EXCEPTION for fatal frame/write errors.
+- Implemented fatal failure event sequence EXCEPTION then CLOSE; ordinary EOF and explicit close remain CLOSE. Added loopback malformed-frame test asserting ordered `connect, active, exception, close`. Also moved CONNECT notification until address/proxy route validation has succeeded, so invalid local routing does not masquerade as an attempted socket connect.
+- Validation passed after these changes: targeted malformed-frame/connect-failure/raw-route tests; full workspace tests (69 transport), Clippy with `-D warnings`, fmt check, metadata, differential self-test and diff check.

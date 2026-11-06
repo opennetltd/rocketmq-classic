@@ -1,0 +1,1 @@
+{"case":"invoke-raw-error-response","mode":"ASYNC","outcome":"rawCode=1;remark=raw","provenance":{"client":"org.apache.rocketmq:rocketmq-client:5.5.1","entrypoint":"MQClientAPIExt.invoke","serverBaselineContacted":false,"transport":"mock RemotingClient"},"request":{"bodyBase64":"AQID","code":987,"ext":{},"version":515},"response":{"code":1,"ext":{},"remark":"raw","version":515}}

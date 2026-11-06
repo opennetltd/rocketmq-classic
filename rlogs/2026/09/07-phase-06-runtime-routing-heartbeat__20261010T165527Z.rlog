@@ -1,0 +1,6 @@
+# Phase 6 execution session — 2026-10-10T16:55Z
+
+- Reconciled the NameServer `start()` audit statement with the actual Java fixture and native config coverage.
+- The pinned forked Java probe verifies null-at-construction → configured-before-start (zero discovery, no active address snapshot) and configured-at-construction → null-before-start (one discovery call, constructor-time address list retained). Native differentials now count and match both calls; `start.json` SHA-256 is `ae2ad5f193e4082a4c8e3c4bfb17165d0437b306d4bf6aaa8599daf8e5941b6c`.
+- Updated the API map, runtime inventory, and existing requirement-audit entry with these outcomes, the new test commit `60e4e9d2`, and the scope limit. Other setting activation and full Phase 6 reconciliation remain open; P6-V04 remains `PENDING_PHASE_19`.
+- Validation: two focused native start tests, strict Clippy for the config test target, format/diff checks, and pinned offline Maven verify passed; Java fixture gate verified and Maven reported 22 scenarios.

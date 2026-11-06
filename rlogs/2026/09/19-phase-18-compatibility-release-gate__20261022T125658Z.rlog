@@ -1,0 +1,35 @@
+Phase 18 compatibility closure session — 2026-10-22 12:56 UTC
+
+Environment: macOS AArch64, Apple M5 Max (18 logical CPUs), rustc 1.85.0; pinned RocketMQ Java client 5.5.1 artifact, Java runtime 27.0.
+
+Completed server-free gates on code revision c38f4bc9; documentation-only commits followed:
+- `cargo test --workspace --locked` — PASS.
+- `cargo test --workspace --all-features --locked` — PASS after the Lite route observer test was made tolerant of duplicate route notifications.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — PASS.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+- `mvn -f compat/java-reference/pom.xml verify` — PASS; 37-scenario manifest, fixture verification, invoked Java fixtures, and Java/Rust cross-decodes completed.
+- `python3 tests/differential/compare.py --self-test` and `--validate-manifest` — PASS; 37 scenarios.
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` — PASS; 163 frame seeds, 11 message seeds, 2,784 bounded mutations.
+- `bash tests/stress/run-offline-smoke.sh` — PASS; 16 cases x 3 repetitions.
+- Release facade examples and offline benchmark compiled. Benchmark executed; current observations are appended to `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+- Workspace metadata/dependency-direction/license checks, Cargo metadata (8 workspace packages), all seven product `cargo package --list` checks, and the Asia/Taipei Unique ID fixture — PASS.
+- Consumer all-target/all-feature Windows GNU `cargo check` — PASS. Native Windows CI and current-revision Ubuntu CI remain unverified.
+
+Open audit item selected for this continuation: pinned Java `MQClientAPIImpl.listUser` uses `RemotingSerializable.decodeList`; Fastjson 2.0.63 returns a one-element list containing the original object-root text for `{}`. Rust currently reports `MalformedResponse`. The existing Java fixture and core integration test capture this mismatch. Plan: preserve this raw list value through the Rust `UserInfo` serialization adapter, update the existing end-to-end differential, and rerun affected protocol/core tests and broader gates.
+
+Scope status: P18-V02 local server-free gates are now recorded in `docs/compatibility/PHASE_6_REQUIREMENT_AUDIT.md`. Broad P18-V01 source/API/settings/input/error/control-flow/reverse-export reconciliation, native/current CI evidence, and Phase 19 Broker/Docker execution remain open. No push performed. Protected Phase 19 worktree changes were left untouched.
+
+P18-V01 listUser object-root parity implementation completed in the working tree:
+- `UserInfo::java_decode_list_nullable` now detects a Fastjson object root and stores the original UTF-8-decoded JSON text as an internal raw list value. Its custom serializer emits that stored value as a JSON string; ordinary `UserInfo` object field names/omission behavior remains unchanged.
+- Updated the existing end-to-end `list_user_matches_java_requests_responses_and_outcomes` differential. Before the fix, case `object-root` asserted a Rust `MalformedResponse` despite Java's fixture result `["{}"]`; after the fix, the common returned-result assertion passes for all eight Java cases.
+- `cargo test -p rocketmq-classic-core --test admin_rpc list_user_matches_java_requests_responses_and_outcomes --locked` — PASS.
+- `cargo test -p rocketmq-classic-protocol --all-features --locked` — PASS (156 unit tests, integration tests, 157 doctests).
+- `cargo test --workspace --locked` — PASS; `cargo test --workspace --all-features --locked` — PASS.
+- `cargo fmt --all -- --check`, `git diff --check`, and `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — PASS.
+- `cargo build -p rocketmq-classic --examples --release --locked`, `cargo bench -p rocketmq-classic --bench offline --locked --no-run` — PASS.
+- `mvn -f compat/java-reference/pom.xml verify` — PASS (37 scenarios, fixture verification, invoked Java checks, Java/Rust typed header/body cross-decodes).
+- Differential self-test and manifest (37 scenarios), workspace metadata/license/dependency checks, fuzz smoke (163 frame seeds, 11 message seeds, 2,784 mutations), race/leak smoke (16 cases x 3), and Consumer all-target/all-feature Windows GNU cross-check — PASS.
+
+No Java fixture change was required. Native Windows execution, current-revision Ubuntu CI, remaining broad P18-V01 source/API/settings/input/error/control-flow/reverse-export audit, and Phase 19 live Broker/Docker checks remain open.
+
+Post-commit package-content recheck on source revision c6ffd6bf: `cargo package --list --locked` passed for all seven product crates (`rocketmq-classic-common`, `rocketmq-classic-consumer`, `rocketmq-classic-core`, `rocketmq-classic-protocol`, `rocketmq-classic-remoting`, `rocketmq-classic-producer`, and `rocketmq-classic`); each listing includes `LICENSE` and `NOTICE`.

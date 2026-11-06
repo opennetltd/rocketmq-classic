@@ -1,0 +1,56 @@
+# Phase 18 born/store host-byte override closure and P18-V02 server-free refresh — 2026-10-21T20:44:24Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `625e80c6` (`feat(common): dispatch subtype host byte helpers`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `30af1bcbb2cfbf967f636fbbf7cbf9d54ba886a68c25fbe92df5ddf88000946c`.
+
+## Change
+
+- Added runtime-subtype dispatch for Java's virtual no-argument
+  `MessageExt.getBornHostBytes()` and `getStoreHostBytes()` methods and both
+  `ByteBuffer` overloads.
+- The invoked Java/Rust direct-consume fixture compares custom getter bytes
+  and writes to the caller-provided output buffer.
+- Rust maps each `ByteBuffer` overload to a mutable byte slice and returns the
+  number of bytes written. Java buffer identity and position metadata are not
+  represented.
+
+## Verification
+
+- PASS: focused direct-consume Java/Rust differential.
+- PASS: serial `cargo test --workspace --locked --quiet` and
+  `cargo test --workspace --all-features --locked --quiet`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: pinned `mvn -q -f compat/java-reference/pom.xml verify`: 37 scenarios,
+  9 Running Info, 27 direct-consume, 15 reset cases, 83 typed headers, 16
+  typed bodies and Java/Rust cross-decodes. Existing JDK Unsafe, Netty Unsafe
+  and reflective-final-field warnings were emitted.
+- PASS: differential comparator self-test and manifest validation (37
+  scenarios).
+- PASS: offline deterministic race/leak smoke, 16 cases × 3 repetitions.
+- PASS: release fuzz smoke, 137 frame seeds, 11 message seeds, 2,368 bounded
+  mutations, 201 frame decodes and 118 message decodes.
+- PASS: release facade examples and `cargo bench --workspace --no-run
+  --locked`.
+- PASS: locked Cargo metadata (8 workspace members, 216 total packages,
+  208 registry packages), no-deps metadata (8 workspace members), workspace
+  metadata/license/dependency checks, and seven product package listings
+  containing `LICENSE` and `NOTICE`.
+- PASS: four Core Unique ID tests under both `TZ=UTC` and `TZ=Asia/Taipei`.
+- PASS: offline benchmark on Apple M5 Max, macOS aarch64, Rust 1.85.0:
+  frame encode/decode 2,228.9 ns/iteration; zstd decode 1,140.1 ns; producer
+  request construction 1,182.9 ns; 128-entry route lookup 14.7 ns; loopback
+  pending completion 62,624.2 ns. Allocation counts/bytes per iteration:
+  40/4,676; 17/197,493; 54/3,665; 0/0; 81/9,546. These are observations,
+  not thresholds.
+
+## Current status
+
+This refresh closes current-revision server-free P18-V02 gates on `625e80c6`.
+Remaining inherited methods, broad P18-V01 API/settings/input/error/control-
+flow/reverse-export reconciliation, and current-revision GitHub Ubuntu/native
+Windows P18-V04 runtime evidence remain open. No push, remote CI, Broker or
+Docker run was performed. Pre-existing Phase 19 paths were left untouched and
+unstaged.

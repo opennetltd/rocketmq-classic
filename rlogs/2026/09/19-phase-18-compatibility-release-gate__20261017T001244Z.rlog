@@ -1,0 +1,60 @@
+# Phase 18 compatibility release gate — non-serializable writer features
+
+Date: 2026-10-17 UTC
+Branch: `phase/19-phase-18-compatibility-release-gate`
+Code commit: `bc5642df feat(protocol): map non-serializable JSON writer features`
+Plan: `plan/2026/09/19-phase-18-compatibility-release-gate.md`
+
+## Scope and constraints
+
+Continue P18-V01 Java RocketMQ 5.5.1 parity against the pinned Fastjson2 2.0.63
+oracle. Keep the Java oracle read-only; do not change plans, start Docker,
+contact a Broker, push, tag, publish, or deploy. Keep code and documentation in
+separate commits.
+
+## Changes and evidence
+
+- Implemented `IgnoreNoneSerializable` and `ErrorOnNoneSerializable` in the
+  shared body and route writer paths. When both policies are supplied,
+  `IgnoreNoneSerializable` takes precedence and emits `null`.
+- Added fixture-backed output/error/precedence assertions across body, route,
+  and heartbeat serialization cases, including default, explicit-null, and
+  populated DTOs.
+- Writer-feature behavior mappings increased from 13/48 to 15/48; 33 remain
+  explicitly unmapped.
+- `TZ=UTC cargo test -p rocketmq-classic-protocol --all-features --locked`:
+  passed (123 unit tests, all Protocol integration targets, 42 doctests).
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features
+  --locked -- -D warnings`: passed.
+- `cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked`: passed.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`: passed.
+- `TZ=UTC mvn -o -q -f compat/java-reference/pom.xml verify`: passed all 37
+  scenarios, fixture-drift checks, and Java/Rust cross-decodes.
+- Differential comparator self-test passed; the manifest validated all 37
+  Phase 19 scenarios.
+- `bash tests/stress/run-offline-smoke.sh`: passed all 16 deterministic
+  race/leak cases, each repeated three times.
+- `cargo run --locked -p rocketmq-classic-remoting --example fuzz_smoke`:
+  passed 105 frame seeds, 11 message seeds, 1,856 bounded mutations, 146 frame
+  decodes, and 113 message decodes.
+- Release examples built; `cargo bench --workspace --no-run --locked` compiled
+  all workspace benchmarks without running measurements.
+- Workspace metadata/dependency-direction check and all seven package-content
+  listings passed. `cargo fmt --all -- --check` and `git diff --check` passed.
+
+## Remaining Phase 18 and release work
+
+- Broad bidirectional P18-V01 API, settings, overload/input/error/control-flow,
+  inherited API, and reverse-export reconciliation remains open. The remaining
+  33 writer features still need source-backed behavior mapping or disposition.
+- P18-V04 current-revision GitHub Ubuntu address-profile and native Windows
+  stack-runtime evidence remains outstanding.
+- Phase 19 local Docker/Broker automation and scenario execution remain
+  required automatic work, not manual-validation exceptions.
+- `docs/owner-validation.md` and owner-provided deployment/environment inputs
+  are still outstanding for the final handoff.
+- Before publication, confirm the intended `0.1.0` version set and registry
+  dependency resolution. No Docker/Broker validation, push, tag, publication,
+  or deployment occurred.

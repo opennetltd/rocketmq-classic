@@ -1,0 +1,48 @@
+# Phase 18 Remoting outbound write-flow parity
+
+Date: 2026-10-24
+Branch: phase/18-phase-18-compatibility-closure
+Code commit: 719e5aa3 fix(remoting): match Java outbound write flow
+Pinned Java reference: rocketmq-all-5.5.1 at efa1be59d6fc747ad220f036c86030f05f0419f9
+
+## Change
+
+Pinned Java 5.5.1 EmbeddedChannel oracle now verifies the outbound write-flow
+boundary: sync RPC receives an inbound response before its local outbound
+write promise completes; one-way returns before its local write completes and
+holds its semaphore until that completion. Rust's connection task now advances
+partial outbound writes with a retained offset while continuing to read inbound
+frames. Sync/callback/future invoke paths enqueue without applying the operation
+deadline to socket progress and immediately wait for response/failure. The
+client-owned one-way operation likewise leaves its queued write active after
+the call deadline and retains admission through local write completion/failure.
+
+The initial select-loop experiment recreated `write_all` after each inbound
+read and failed `p3_inbound_responses_survive_unbounded_outbound_backlog`.
+Retaining an offset and using cancellation-safe single writes fixed the byte
+replay; the stress regression and full workspace gates passed on final source.
+
+Runtime hook fixture SHA-256:
+6818a879b34ecab39936c1636c659ca3157e2d52fbd4f9e50f5bcadc49a9e09d
+
+## Verification
+
+- Focused tests: sync_response_is_read_while_request_write_is_pending;
+  oneway_write_remains_queued_after_the_call_deadline; and
+  p3_inbound_responses_survive_unbounded_outbound_backlog — passed.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo test --offline --locked --workspace` — passed, including all package tests and doctests.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo test --offline --locked --workspace --all-features` — passed, including all package tests and doctests.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo clippy --offline --locked --workspace --all-targets --all-features -- -D warnings` — passed.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo build --offline --locked -p rocketmq-classic --examples --release` — passed.
+- `cargo fmt --all -- --check`; `git diff --check`; `python3 tests/differential/compare.py --self-test` — passed.
+- `mvn -o -f compat/java-reference/pom.xml verify` — passed; 36 runtime hook cases, 37 differential scenarios, fixture drift, 11 message fixtures, 106 typed headers, 19 typed bodies.
+
+## Scope and remaining audit
+
+This closes the outbound RPC deadline/local-write completion behavior slice.
+Queued-byte writability accounting and framework-specific write-completion
+visibility remain documented. Broad P18-V01 source/API/settings/input/error/
+control-flow and reverse-export reconciliation remains PARTIAL. Native Windows
+runtime, current-revision remote Ubuntu CI, and Phase 19 Broker/Docker validation
+remain separate/unverified. No push or remote CI was run. Protected Phase 19
+worktree files were not staged or modified by this work.

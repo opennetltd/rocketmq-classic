@@ -1,0 +1,471 @@
+# Phase 18 current-tree verification — 2026-10-23T03:45:16Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision under verification: `05e51237`
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`
+Environment: macOS 26.6.1, Apple M5 Max (AArch64, 18 logical CPUs), Rust 1.85.0, Maven 3.10.0 with OpenJDK 27.
+
+## Phase 18 code changes already committed at this revision
+
+- Preserved Java's signed synchronous RPC timeout ordering: connect/reuse first, subtract elapsed whole milliseconds, and send no frame when the remaining timeout is nonpositive. Core runtime lookup methods now retain signed i32 timeouts.
+- Added `MQClientApi` access to the shared remoting client and a lock-scoped mutable NameServer address-list adapter, preserving Java getter/list alias behavior without exposing an unlocked mutable reference.
+- Focused runtime, remoting, API-surface, and timeout regressions were already run during those implementation commits. Current workspace validation below covers the committed changes together.
+
+## Validation
+
+- `cargo test --offline --workspace --locked` passed. An initial attempt had a codec test child remain at macOS `dyld` startup with no Rust test code running; it was interrupted, the isolated codec suite passed (8/8), and a complete workspace rerun passed.
+- `cargo test --offline --workspace --all-features --locked` passed.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` passed.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+- `mvn -o -f compat/java-reference/pom.xml verify` passed (37 differential scenarios, 73 ClientConfig identity/default/clone checks, runtime fixtures, Java decode of Rust-generated typed headers and bodies).
+- `python3 tests/differential/compare.py --self-test` and `python3 tests/differential/compare.py --validate-manifest` passed; the manifest has 37 scenarios.
+- `cargo run --offline -p rocketmq-classic-remoting --example fuzz_smoke --locked` passed: 163 frame seeds, 11 message seeds, 2,784 bounded mutations, 245 frame decodes, 192 message decodes.
+- `bash tests/stress/run-offline-smoke.sh` passed 17 deterministic race/leak cases × 3 repetitions.
+- `env TZ=Asia/Taipei cargo test --offline -p rocketmq-classic-core --lib unique_id::tests::public_unique_id_helpers_match_the_pinned_java_fixture --locked` passed.
+- `cargo build --offline -p rocketmq-classic --examples --release --locked` passed.
+- `cargo bench --offline -p rocketmq-classic --bench offline --locked` passed. Fixed-input timings and allocation observations are recorded in `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+- `python3 scripts/check-workspace-metadata.py` passed, including package license files and dependency direction.
+
+## Acceptance boundary and preserved state
+
+P18-V02 local server-free evidence is refreshed at this revision. P18-V03 example/package metadata checks passed. The 37-scenario Phase 19 handoff manifest validates. Broad P18-V01 Java source/API/settings/input/error/control-flow and Rust reverse-export reconciliation remains open; exact public method-name coverage is not behavior proof. Current-revision remote Ubuntu CI and native Windows runtime execution remain pending. Phase 19 Broker/Docker evidence is not claimed. No push, remote CI, Broker/Docker validation, publication, or release action was performed.
+
+The following pre-existing Phase 19 user-owned paths remain unchanged and unstaged:
+- `integration-tests/README.md`
+- `tests/differential/run.sh`
+- `integration-tests/run-local.sh`
+- `rlogs/2026/09/20-phase-19-docker-local-validation__20261017T224455Z.rlog`
+
+## Windows cross-target follow-up — 2026-10-23T03:47:32Z
+
+On code revision `05e51237`, both current-tree compile checks passed:
+- `cargo check --offline -p rocketmq-classic-core --all-targets --target x86_64-pc-windows-gnu --locked`
+- `cargo test --offline --target x86_64-pc-windows-gnu -p rocketmq-classic-consumer --lib stack::tests::jstack_includes_current_and_other_named_threads --no-run --locked`
+
+The test binary was cross-compiled only; native Windows execution and remote Ubuntu CI remain pending. The results were added to `docs/release-checklist.md`.
+
+## MQClientInstance scheduled-executor caller API — 2026-10-23T03:57:38Z
+
+Pinned source audit confirmed that `MQClientInstance.getScheduledExecutorService()` returns the same single-thread executor used by its periodic client callbacks. `PullMessageService` has a separate executor and a separate getter. Rust now exposes `ClientRuntime::scheduled_executor_service() -> RuntimeScheduler` for immediate/delayed async work, fixed-rate/fixed-delay callbacks, per-task cancellation, and runtime-owned shutdown. The public handle uses the owned client scheduler and accepts work before runtime start.
+
+Code revision: `5c808754` (`feat(runtime): expose client task scheduler handle`). Validation passed: `cargo test -p rocketmq-classic-core --lib` (218 tests), `cargo clippy -p rocketmq-classic-core --all-targets --all-features -- -D warnings`, `cargo fmt --all`, and `git diff --check`. The new paused-time test covers pre-start work, one-shot delay, both repeating modes, cancellation, and shutdown.
+
+The row remains partial: Java's result-bearing `Future` and executor-wide lifecycle APIs are not yet exposed, and the separate `PullMessageService.getScheduledExecutorService()` handle remains unmapped. Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export reconciliation, current-revision remote Ubuntu CI, native Windows execution, and Phase 19 Broker/Docker validation remain open. No remote CI, push, Broker, or Docker action was performed; protected Phase 19 worktree files remain unchanged and unstaged.
+
+## PullMessageService scheduled-executor getter — 2026-10-23T04:02:31Z
+
+Pinned source confirms a second, independent `ScheduledExecutorService` owned by `PullMessageService`. Code revision `2c52ac4d` adds `ClientRuntime::pull_scheduled_executor_service() -> RuntimeScheduler`, routed through the pull service's own scheduled queue. The handle supports immediate/delayed async work, fixed-rate/fixed-delay callbacks, per-task cancellation, and the PullMessageService shutdown path. Its pre-start regression verifies delayed execution and prompt queue removal after cancellation.
+
+Validation passed on `2c52ac4d`: `cargo test -p rocketmq-classic-core --lib` (219 tests), `cargo clippy -p rocketmq-classic-core --all-targets --all-features -- -D warnings`, `cargo fmt --all`, and `git diff --check`. The executor-wide Java methods, result-bearing `Future`, and inherited thread controls remain unmapped, so both scheduler rows remain partial under P18-V01. Broad Java source/API/settings/input/error/control-flow and Rust reverse-export reconciliation, remote Ubuntu CI, native Windows execution, and Phase 19 Broker/Docker validation remain open. No external actions were run, and the four protected Phase 19 paths remain unchanged and unstaged.
+
+## Result-bearing scheduled calls — 2026-10-23T04:09:09Z
+
+Code revision `235d05c9` adds `RuntimeScheduler::submit` and `schedule_call_after`, returning `RuntimeScheduledCall<T>` with async `join()`. The same interface works on the client and PullMessageService schedulers. Its paused-time regression cases compare the returned value and cancellation outcome on each owner.
+
+Validation passed on `235d05c9`: `cargo test -p rocketmq-classic-core --lib` (220 tests), strict all-target/all-feature Core Clippy, `cargo fmt --all`, and `git diff --check`. This closes the result-bearing callback slice only. Executor-wide lifecycle/status methods and the broad P18-V01 audit remain open; no remote CI, push, Broker, or Docker action was performed, and Phase 19 worktree files remain unchanged.
+
+## Scheduled-executor lifecycle controls — 2026-10-23T04:19:56Z
+
+Pinned Java `efa1be59d6fc747ad220f036c86030f05f0419f9` confirms the client and PullMessageService getters return distinct `ScheduledExecutorService` instances. Commit `4c337b1e` adds Rust lifecycle controls to both `RuntimeScheduler` handles: graceful and immediate shutdown, shutdown/termination status, and async termination wait. Graceful shutdown retains queued one-shots while ending periodic registrations; immediate shutdown drops queued work, signals cancellation to the active Rust future, and reports the pending queue size without self-joining. Pull scheduler shutdown is independent from immediate FIFO pull dispatch. Regressions cover both owners, status/wait timeout and transitions, returned/cancelled work, full runtime shutdown, and worker-initiated immediate shutdown.
+
+Validation on `4c337b1e`: `cargo test --offline -p rocketmq-classic-core --lib --locked` (227 passed), `cargo clippy --offline -p rocketmq-classic-core --all-targets --all-features --locked -- -D warnings`, `cargo fmt --all -- --check`, and `git diff --check` passed. `docs/compatibility/PHASE_6_API_CONFIG_MAP.md`, `docs/compatibility/PHASE_6_RUNTIME_INVENTORY.md`, and `docs/release-checklist.md` record the scheduler closure. Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export reconciliation, current-revision remote Ubuntu CI, native Windows execution, and Phase 19 Broker/Docker validation remain open. No remote CI, push, Broker, or Docker action was performed; the four Phase 19 user-owned worktree paths remain untouched.
+
+## Current-tree P18-V02 server-free gate — 2026-10-23T04:30:57Z
+
+Code revision under validation: `4c337b1e`; documentation revision: `dbbf0663`; pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`. Current-tree gates passed:
+- `cargo test --offline --workspace --locked`
+- `cargo test --offline --workspace --all-features --locked`
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings`
+- `mvn -o -f compat/java-reference/pom.xml verify` (37 differential scenarios and generated Java decode checks, including 106 typed headers and 19 typed bodies)
+- `python3 tests/differential/compare.py --self-test`; `python3 tests/differential/compare.py --validate-manifest` (37 scenarios)
+- `python3 scripts/check-workspace-metadata.py`
+- `cargo run --offline -p rocketmq-classic-remoting --example fuzz_smoke --locked` (163 frame seeds, 11 message seeds, 2,784 bounded mutations)
+- `bash tests/stress/run-offline-smoke.sh` (17 deterministic cases × 3 repetitions)
+- `cargo build --offline -p rocketmq-classic --examples --release --locked`
+- `cargo bench --offline -p rocketmq-classic --bench offline --locked`
+- `cargo fmt --all -- --check`; `git diff --check`
+
+The benchmark current-tree sample is appended to `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md` with environment, input sizes, iterations, timings, and allocator counts. Current remote Ubuntu CI, native Windows execution, and Phase 19 Broker/Docker validation remain pending. Broad P18-V01 bidirectional source/API/settings/input/error/control-flow/reverse-export reconciliation also remains open; V02 evidence does not close the phase. No push, remote CI, Broker, or Docker action was performed. The four Phase 19 user-owned paths remain untouched and unstaged.
+
+## ExecutorService bulk invocation mapping — 2026-10-23T04:42:34Z
+
+Pinned Java `efa1be59d6fc747ad220f036c86030f05f0419f9` returns
+`ScheduledExecutorService` from both runtime scheduler getters, inheriting
+`ExecutorService.invokeAll` and `invokeAny`. Code revisions `6a960144` and
+`e5bbe8df` add Rust async `RuntimeScheduler::invoke_all` and `invoke_any` for
+both the client and pull owners. `invoke_all` returns each callback value or
+oneshot receive error in submission order. `invoke_any` continues after
+panics, returns the first normal task value, and prevents later queued
+callbacks from beginning after that value is produced. Empty input and input
+where no callback returns a value use explicit `RuntimeError` variants;
+dropping the bulk-call future cancels accepted tasks. A Tokio timeout supplies
+the Rust caller deadline; Java's timed `invokeAll` partial-future-list result
+is not represented as such.
+
+Current Core validation passed on `e5bbe8df`: `cargo test --offline -p
+rocketmq-classic-core --lib --locked` (230 tests), all 23
+`runtime::tasks::tests`, strict all-target/all-feature Core Clippy,
+`cargo fmt --all -- --check`, and `git diff --check`. Broad P18-V01
+bidirectional source/API/settings/input/error/control-flow/reverse-export
+reconciliation remains open, as do current-revision remote Ubuntu CI, native
+Windows runtime execution, and Phase 19 Broker/Docker validation. No external
+CI, push, Broker, or Docker action was performed; the four protected Phase 19
+worktree paths remain unchanged and unstaged.
+
+## Timed ExecutorService calls and ScheduledFuture waits — 2026-10-23T04:54:53Z
+
+Code revision `c0cb787b` adds timed `invoke_all_with_timeout` and
+`invoke_any_with_timeout` to both `RuntimeScheduler` owners, plus per-task
+cancelled/finished status, remaining-delay inspection, async wait and
+wait-with-timeout methods. `RuntimeScheduledCall` also supports cancellation
+status and repeatable result waits with deadlines. The async equivalents retain
+completed timed-invoke-all values and identify callback failures and deadline
+cancellations; timed invoke-any reports `RuntimeError::InvocationTimeout` and
+cancels accepted tasks. Callback panics now have a distinct handle failure
+state from cancellation.
+
+Current Core validation passed on `c0cb787b`: `cargo test --offline -p
+rocketmq-classic-core --lib --locked` (233 tests), all 26
+`runtime::tasks::tests`, strict all-target/all-feature Core Clippy,
+`cargo fmt --all -- --check`, and `git diff --check`. The timed bulk and handle
+wait regressions use paused Tokio time on both client and pull scheduler owners.
+Broad P18-V01 bidirectional source/API/settings/input/error/control-flow/
+reverse-export reconciliation, current-revision remote Ubuntu CI, native
+Windows runtime execution, and Phase 19 Broker/Docker validation remain open.
+No external CI, push, Broker, or Docker action was performed; the four
+protected Phase 19 paths remain unchanged and unstaged.
+
+## Timed bulk calls on the pull scheduler — 2026-10-23T04:56:09Z
+
+Test-only revision `04eec879` adds success-path assertions for timed
+`invoke_all_with_timeout` and `invoke_any_with_timeout` through the independent
+PullMessageService scheduler. The pull-owner regression and all 26
+`runtime::tasks::tests` passed, as did strict all-target/all-feature Core
+Clippy, formatting, and `git diff --check`. The separate client and pull
+scheduler handles therefore exercise the timed bulk methods on their own
+queues. Broad P18-V01 and current-revision platform/live evidence remain open.
+
+## P18-V02 server-free refresh — 2026-10-23T05:07:52Z
+
+Current code revision `04eec879` passed `cargo test --offline --workspace
+--locked`, `cargo test --offline --workspace --all-features --locked`, and
+strict all-target/all-feature workspace Clippy. Offline Maven verify passed
+with all 37 scenarios. The differential comparator self-test, manifest
+validation (37 scenarios), workspace metadata check, fuzz smoke (163 frame
+seeds, 11 message seeds, 2,784 bounded mutations, 245 frame decodes, 192
+message decodes), and deterministic race/leak smoke (17 cases × 3 repetitions)
+passed. Release examples built, the offline benchmark completed, and formatter
+and `git diff --check` passed.
+
+The latest benchmark sample is recorded in
+`docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`. Its timings remain
+machine-specific observations, not thresholds. Broad P18-V01 bidirectional
+source/API/settings/input/error/control-flow/reverse-export reconciliation,
+including inherited `ServiceThread` controls, remains open, as do
+current-revision remote Ubuntu CI, native Windows runtime execution, and Phase
+19 Broker/Docker validation. No remote CI, push, Broker, or Docker action was
+performed; the four protected Phase 19 worktree paths remain unchanged and
+unstaged.
+
+## Inherited ServiceThread controls — 2026-10-23T05:38:02Z
+
+Code commit `bd4e073c` maps the pinned Java public `ServiceThread` controls on
+runtime-owned RebalanceService and PullMessageService handles. The Rust API
+covers async start/shutdown, the 90,000ms join interval, stop and wake
+semantics, stopped state, daemon getter/setter with a start-time snapshot,
+PullMessageService queue interruption, and its scheduled-executor shutdown
+override. Tests cover service controls, pre-start PullMessageService shutdown,
+stopped-service task admission, and service restart after full runtime
+shutdown.
+
+Current-tree validation passed: default and all-feature locked workspace tests;
+strict all-target/all-feature workspace Clippy; format and diff checks; offline
+Maven `verify` (37 scenarios, 106 typed headers, 19 typed bodies); differential
+self-test and 37-scenario manifest validation; workspace metadata; fuzz smoke
+(163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes, 192
+message decodes); deterministic race/leak smoke (17 cases × 3 repetitions);
+release examples; and the offline benchmark. The sample is appended to
+`docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+
+This closes the inherited ServiceThread API/control slice only. Broad P18-V01
+bidirectional source/API/settings/input/error/control-flow and reverse-export
+reconciliation remains PARTIAL. Current-revision remote Ubuntu CI, native
+Windows execution, and Phase 19 Broker/Docker validation remain open. No
+remote CI, push, Broker, or Docker action was performed; protected Phase 19
+worktree paths remain unchanged and unstaged.
+
+## Windows GNU cross-compilation and targeted Core rustdoc — 2026-10-23T05:40:03Z
+
+On `bd4e073c`,
+`CC_x86_64_pc_windows_gnu=/opt/homebrew/bin/x86_64-w64-mingw32-gcc cargo
+check --offline --workspace --all-targets --all-features --locked --target
+x86_64-pc-windows-gnu` passes, compiling all workspace, test, and example
+targets. `RUSTDOCFLAGS='-D warnings' cargo doc --offline
+-p rocketmq-classic-core --all-features --locked --no-deps` also passes with
+the newly exported service handle. These checks add cross-compilation and
+targeted documentation evidence only. Native Windows execution and
+current-revision remote Ubuntu CI remain pending; no external CI or push was
+run, and the four protected Phase 19 paths remain unchanged and unstaged.
+
+## Service handle strong owner retention — 2026-10-23T05:51:23Z
+
+Code commit `1f6cd086` changes `RuntimeServiceThread` from a weak to a strong
+client-runtime reference. The pinned `PullMessageService` and `RebalanceService`
+each retain their `MQClientInstance`; the regression
+`pull_service_handle_retains_its_client_runtime_owner` drops the manager/runtime
+variables and then starts and shuts down the retained PullMessageService.
+
+Current-tree checks passed: default and all-feature locked workspace tests,
+strict all-target/all-feature workspace Clippy, format and diff checks, offline
+Maven `verify` (37 scenarios, 106 typed headers and 19 typed bodies),
+differential self-test and 37-scenario manifest validation, metadata, fuzz
+smoke (163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes,
+192 message decodes), deterministic race/leak smoke (17 cases × 3), release
+examples, offline benchmark, Windows GNU all-target/all-feature cross-check,
+and targeted warning-free Core rustdoc. The current benchmark sample is in
+`docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+
+This closes the service-handle owner-retention slice only. Broad P18-V01
+Java/Rust source/API/settings/input/error/control-flow and reverse-export
+reconciliation remains PARTIAL. Remote Ubuntu CI, native Windows runtime, and
+Phase 19 Broker/Docker validation remain open. No external CI, push, Broker,
+or Docker action was performed; protected Phase 19 paths remain unchanged and
+unstaged.
+
+## Windows stack alignment and CI disk usage — 2026-10-23T06:54:16Z
+
+Remote GitHub run `39730752050` at `662d98c5` showed the native Windows
+stack-capture regression failing: `jstack-worker` was listed but its next line
+was `<native stack unavailable>`. The windows-sys `CONTEXT` layout lacks the
+16-byte native alignment needed by Windows x64 `GetThreadContext`; see the
+Microsoft Windows SDK alignment requirement in the
+[GetThreadContext documentation](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getthreadcontext)
+and the upstream [windows-rs metadata issue](https://github.com/microsoft/win32metadata/issues/1477).
+Commit `f375e3f0` wraps the context in `#[repr(C, align(16))]` storage on both
+x64 and ARM64 before capture and unwinding. Native macOS stack regression:
+1 passed. Full Windows GNU workspace check across all targets and features:
+passed. A focused ARM64/MSVC compile of the context and unwind calls passed.
+The full ARM64/MSVC workspace check is unavailable on this Mac because the
+Windows ARM64 C toolchain and standard headers required by aws-lc-sys and
+zstd-sys are absent.
+
+The same remote Ubuntu run failed while linking the Remoting security target
+with `No space left on device` after Clippy and workspace tests had produced
+large debug artifacts. Commit `7a4f132e` sets Cargo dev/test debug information
+to zero and disables incremental compilation in the Ubuntu CI job. With the
+reduced test profile, all seven Remoting security integration tests passed
+locally. The amended GitHub job was not run or pushed.
+
+Before these Windows-only and workflow commits, Linux ARM64 revision
+`73721ae5` passed the server-free refresh: formatting, strict all-target/all-
+feature Clippy, default and all-feature workspace tests, the Asia/Taipei unique
+ID fixture, differential self-test and 37-scenario manifest, fuzz smoke (163
+frame seeds, 11 message seeds, 2,784 bounded mutations, 245 frame decodes,
+192 message decodes), 17 deterministic race/leak cases × 3, release examples,
+benchmark compilation, and workspace metadata. After `f375e3f0`, the focused
+native macOS stack regression and full Windows GNU cross-check passed.
+
+No external CI run or push was performed. Current-revision GitHub
+Ubuntu/Windows evidence and broad P18-V01 bidirectional source/API/settings/
+input/error/control-flow/reverse-export reconciliation remain open. The
+protected Phase 19 user changes were not staged or modified.
+
+## P18-V02 pinned Java oracle refresh — 2026-10-23T07:00:27Z
+
+`mvn -o -f compat/java-reference/pom.xml verify` completed with BUILD SUCCESS
+on current tree `bc58a528` (three minutes eight seconds). The Java reference
+self-test and all 37 manifest scenarios passed. Runtime invoked fixtures for
+routing/VIP, config, address, hooks, consumers, offsets, Broker lookup/admin,
+headers and DTO identity passed; the Java decoder accepted all 106 generated
+typed headers and all 19 generated typed bodies. Maven left no tracked
+fixture changes.
+
+This updates the pinned offline oracle evidence only. Broad P18-V01
+bidirectional Java/Rust source/API/settings/input/error/control-flow and
+reverse-export reconciliation remains open, as do current-revision GitHub
+Ubuntu/Windows results. No external CI run or push was performed. Protected
+Phase 19 user changes remain unstaged and untouched.
+
+## Linux ARM64 CI-profile server-free refresh — 2026-10-23T07:14:01Z
+
+Current tree `0095d478` passed the complete local Rust server-free pipeline
+inside `rust:1.85.0-bookworm` on Linux ARM64 with the exact new CI profile
+settings active: `CARGO_PROFILE_DEV_DEBUG=0`, `CARGO_PROFILE_TEST_DEBUG=0`,
+and `CARGO_INCREMENTAL=0`. Formatting, strict all-target/all-feature
+workspace Clippy, default and all-feature workspace tests, the Asia/Taipei
+public unique-ID fixture, differential comparator self-test and all 37
+manifest scenarios, fuzz smoke (163 frame seeds, 11 message seeds, 2,784
+bounded mutations, 245 frame decodes, 192 message decodes), 17 deterministic
+race/leak cases × 3, release examples, offline benchmark compilation, and
+workspace metadata checks all passed (exit 0). The pinned offline Maven verify
+also passed on the preceding documentation-only tree `bc58a528`; it verified
+37 scenarios, 106 typed headers, and 19 typed bodies.
+
+This local Linux ARM64 run exercises the full unit-only Cargo pipeline under
+the disk-reduction profile, but does not replace a current GitHub Actions run.
+No push or remote run was performed. Broad P18-V01 source/API/settings/input/
+error/control-flow/reverse-export reconciliation and current-revision remote
+Ubuntu/native Windows evidence remain open. Protected Phase 19 user changes
+remain untouched and unstaged.
+
+## P18-V01 Remoting command version parity — 2026-10-23T08:08:24Z
+
+Implementation commit `838286ca` applies pinned Java 5.5.1 client command
+version 515 throughout the Core API request builders, Core and Consumer
+inbound response builders, and generic Remoting processor error responses.
+The hidden Remoting initializer maps Java `MQClientAPIImpl` static property
+setup and preserves already-cached `RemotingCommand.configVersion` ordering.
+The Java invoked RPC oracle asserts `MQVersion.CURRENT_VERSION` on every
+dispatched request; the Rust wire fixture asserts 515, and the command-factory
+subprocess regression covers request and response construction around API
+initialization and a cached property.
+
+Validation on the implementation tree: `cargo fmt --all -- --check` passed;
+`cargo clippy --workspace --all-targets --all-features --locked -- -D
+warnings` passed; `cargo test --workspace --locked` passed; and the reduced
+CI-profile `cargo test --workspace --all-features --locked --quiet` rerun
+passed with exit 0. The Asia/Taipei unique-ID fixture passed. Differential
+self-test and all 37 manifest scenarios passed. Fuzz smoke passed with 163
+frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes, and 192
+message decodes. Offline deterministic race/leak smoke passed all 17 cases ×
+3. Release examples built, the offline benchmark compiled, and workspace
+metadata validation passed. `mvn -o -f compat/java-reference/pom.xml verify`
+passed after the Java oracle version assertion was added: 37 scenarios, 106
+typed headers, and 19 typed bodies; no Java fixture changes followed that run.
+
+This closes the command-version parity slice only. Broad P18-V01
+source/API/settings/input/error/control-flow and Rust reverse-export
+reconciliation remains PARTIAL. Current-revision GitHub Ubuntu and native
+Windows evidence, plus Phase 19 Broker/Docker validation, remain open. No
+push, remote CI, Broker, or Docker action was performed. Protected Phase 19
+worktree files remain untouched and unstaged.
+
+## P18-V04 current-revision Windows GNU compile — 2026-10-23T08:10:08Z
+
+On implementation revision `838286ca`,
+`cargo check --offline --workspace --all-targets --all-features --target
+x86_64-pc-windows-gnu --locked` passed, including Core, Consumer, Producer,
+Remoting, facade, and integration targets. This is compile-only evidence; it
+does not execute tests on Windows or establish a current GitHub Actions result.
+Native Windows runtime and current-revision remote Ubuntu evidence remain open.
+Broad P18-V01 remains PARTIAL. No push or remote CI was performed; protected
+Phase 19 worktree files remain untouched and unstaged.
+
+## P18-V01 Java client process-property census — 2026-10-23T08:13:58Z
+
+Pinned Java 5.5.1 `System.getProperty`/`System.getenv` and property-parsing
+reads across `client`, `common`, and `remoting` were cross-checked against Rust
+production environment reads in Common, Protocol, Remoting, Core, Producer, and
+Consumer. Active client property owners include ClientConfig/NameServer,
+SessionCredentials, LocalFileOffsetStore, ProcessQueue/POP/orderly timing,
+MQClientAPIImpl's `sendSmartMsg` and Remoting version initialization, Producer
+compression/recall tracing, Remoting/TLS configuration, and the dynamic zone
+hook. Their existing source-backed mappings are linked in
+`docs/compatibility/PHASE_6_API_CONFIG_MAP.md`. No unexplained production
+environment-backed public setting was found in this bounded reverse scan.
+
+The public Java `MQClientAPIFactory` has no construction/call site outside its
+own class in the pinned client source. Its earlier no-separate-user-facing-API
+disposition is left open for re-evaluation under P18's reverse public-API
+contract. This closes the property census only; broad P18-V01 remains PARTIAL.
+Current-revision remote Ubuntu CI, native Windows runtime execution, and
+Phase 19 Broker/Docker evidence remain open. No push or remote CI was run;
+protected Phase 19 worktree files remain untouched and unstaged.
+
+## P18-V01 LocalFileOffsetStore public static field — 2026-10-23T08:26:38Z
+
+Pinned Java 5.5.1 exposes `LOCAL_OFFSET_STORE_DIR` as a public static final
+field initialized once from `rocketmq.client.localOffsetStoreDir` or the
+`user.home/.rocketmq_offsets` fallback. Rust now exposes the corresponding
+`LocalFileOffsetStore::local_offset_store_dir()` and uses the shared snapshot
+for `new()`, including Java-compatible explicit-empty and missing-home string
+construction. Invoked Java fixture checks the class-init snapshot across a
+`user.home` mutation. Isolated Rust subprocess cases check explicit property
+and mutation, default home, empty property, empty home, and missing home.
+
+Implementation commit: `6d0f4523 fix(consumer): match Java local offset root property`.
+Validation passed: `cargo fmt --all -- --check`, focused Rust subprocess test,
+`cargo test -p rocketmq-classic-consumer --all-features --locked`, strict
+Consumer Clippy, and focused Java runtime-offset fixture verification. A full
+Maven verify showed all fixture output without errors but its process exit code
+was not captured; this is not recorded as a confirmed gate. Full P18-V01
+source/API/settings/input/error/control-flow/reverse-export audit remains
+PARTIAL; final `MQClientAPIFactory` scope review, native Windows runtime,
+current-revision remote Ubuntu CI, and Phase 19 Broker/Docker evidence remain
+open. No push or remote CI was performed; protected Phase 19 worktree files
+remain untouched and unstaged.
+
+## P18-V01 LocalFileOffsetStore full Java reference verify — 2026-10-23T08:29:42Z
+
+Follow-up rerun of `mvn -o -q -f compat/java-reference/pom.xml verify`
+completed with exit code 0. The full reference suite verified runtime offset
+conversion including 10 base and 7 nullable cases, the new property
+class-initialization fixture, and all remaining Java/Rust fixture and typed
+header/body decoders. This resolves the uncaptured-exit status noted in the
+08:26 entry. Existing Java/Netty `Unsafe` and reflective final-field warnings
+were emitted; they did not fail the verify. Broad P18-V01 and platform/live
+evidence remain open.
+
+## P18-V01 MQClientAPIFactory final scope review — 2026-10-23T08:33:28Z
+
+At pinned client commit `efa1be59d6fc747ad220f036c86030f05f0419f9`,
+`git grep` finds `MQClientAPIFactory` only at its declaration and constructors;
+`MQClientAPIExt` is referenced only by that factory in client source. The
+Java-public helper is under `impl.mqclient` and owns a multi-API pool, but the
+standard client manager constructs one `MQClientAPIImpl` per
+`MQClientInstance`, without using the factory. Reviewed its public constructors,
+selection/list/name-server methods, lifecycle, protected initialization and
+client-creation hooks. The active Rust flow maps to
+`ClientRuntime`/`ClientRuntimeManager`, `MQClientApi`, and `RemotingClient`.
+Disposition: internal implementation helper, outside the supported
+Producer/Consumer facade contract; direct external Java use is not claimed
+method-for-method compatible. Its constructor's VIP/NameServer system-property
+writes were added to the inactive-helper process-property census. This closes
+the final scope-review follow-up only; broad P18-V01 and platform/live evidence
+remain open. No code/tests changed in this review; no remote CI or push was run.
+
+## P18-V01 MQClientAPIFactory public API mapping — 2026-10-23T09:02:27Z
+
+Correction to the 08:33 scope disposition above: the pinned Java class being
+under `impl.mqclient` and lacking a standard client callsite does not waive the
+P18 public API parity requirement. Commit `ac3a8ed5` adds Core's
+`MQClientApiFactory` and `NameserverAccessConfig`, including pool selection,
+Java-style shared mutable client-array aliasing, NameServer updates, both
+constructor forms, domain refresh, and lifecycle methods. Java's JVM-wide
+VIP/NameServer property writes are represented by the factory-owned client
+configuration and domain provider; Rust does not mutate process environment.
+
+`RuntimeApiFactoryFixtures` directly invokes the pinned Java constructors and
+methods, captures the public surface and lifecycle/address/property outcomes,
+and verifies `fixtures/runtime/api-factory.json`. Full workspace
+`cargo test --workspace --all-features --locked` passed. Strict all-target,
+all-feature workspace Clippy passed with `-D warnings`; format and diff checks
+passed. Offline Maven `verify` completed with exit code 0, including the new
+invoked factory fixture and remaining Java/Rust fixture decoders.
+
+This closes the factory public API slice, not the broad P18-V01 audit.
+Protected subclass hooks remain a separate inventory item; final reverse API
+reconciliation, native Windows runtime, current-revision remote Ubuntu CI, and
+Phase 19 Broker/Docker evidence remain open. No push or remote CI was run.
+Protected Phase 19 worktree files remain unstaged and untouched.
+
+## P18-V01 MQClientAPIFactory nullable callback and discovery parity — 2026-10-23T09:13:51Z
+
+Pinned Java `MQClientAPIFactory.onNameServerAddressChange(null)` delegates to
+each API client, where null leaves the current address unchanged. Before
+startup, the same call fails because the factory client array is null. Rust
+now preserves both boundaries with its typed not-started error and Java-null
+no-op. The factory also ignores blank `TopAddressing` results like Java's
+`MQClientAPIImpl.fetchNameServerAddr`/`UtilAll.isBlank`; direct callback strings
+remain unfiltered. Commit `805619a9` records the code and expanded fixture.
+
+The invoked Java fixture verifies pre-start null failure and the unchanged
+address list after a null update. Rust coverage consumes those cases and adds
+a whitespace-only discovery provider regression. Core all-feature library
+tests passed (237), strict all-target/all-feature Core Clippy passed, and
+format/diff checks passed. The focused Java fixture verification and full
+offline Maven `verify` both completed with exit code 0. Broad P18-V01 remains
+PARTIAL; protected hooks/final reverse API reconciliation, native Windows
+runtime, current-revision remote Ubuntu CI, and Phase 19 Broker/Docker evidence
+remain open. No push or remote CI was run; protected Phase 19 files remain
+untouched and unstaged.

@@ -1,0 +1,24 @@
+# Phase 18 compatibility-closure audit continuation — 2026-10-21T13:36:25Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `06ce7eb4`
+
+- Recorded the current offline benchmark sample in
+  `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+- P18-V02 offline gates passed on this revision: default and all-feature locked
+  workspace tests; strict all-target/all-feature Clippy; Maven `verify` (37
+  scenarios, 83 Java-decoded Rust typed header frames, 16 typed body frames);
+  formatting and diff checks; differential self-test and manifest validation
+  (37 scenarios); workspace metadata/dependency check; release examples build;
+  bounded fuzz smoke (137 frame seeds, 11 message seeds, 2,368 mutations); 16
+  deterministic race/leak cases repeated three times; offline benchmark build
+  and run; and pinned Java source tag review.
+- The current-revision macOS benchmark sample is appended to the baseline. It
+  has no performance threshold and is not a cross-machine comparison.
+- P18-V01 bidirectional public API, settings, input, error, control-flow, and
+  reverse-export reconciliation remains open. P18-V04 current GitHub Ubuntu and
+  native Windows evidence, and Phase 19 live Broker/Docker execution, remain
+  outside the evidence recorded here.
+- Preserved Phase 19 working-tree paths remain unstaged and untouched.
+
+No production code changed in this continuation.

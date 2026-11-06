@@ -1,0 +1,47 @@
+# Phase 18 P18-V02 current-code refresh — 2026-10-21T16:00:47Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Verified code revision: `9008c10e` (`fix(consumer): match null rebalance membership semantics`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## P18-V02 server-free gate
+
+- PASS: `cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked` after the rebalance behavior
+  change. The subsequent source edit only restored the historical test name
+  selected by the stress runner; the exact named regression passed afterward.
+- PASS: strict all-target/all-feature workspace Clippy, formatting and diff
+  checks.
+- PASS: pinned `mvn -q -f compat/java-reference/pom.xml verify`; 37 scenarios,
+  generated-fixture drift checks and Rust/Java cross-decodes, including 83
+  typed header fixtures and 16 typed body fixtures. Existing JDK Unsafe and
+  reflective-final-field warnings remain; Maven exited successfully.
+- PASS: differential comparator self-test and 37-row manifest validation.
+- PASS: offline race/leak stress smoke, all 16 cases × 3. Its first attempt
+  after the test rename matched zero tests for the rebalance churn case. The
+  historical test name was restored; the focused regression and complete
+  stress script then passed.
+- PASS: release fuzz smoke: 137 frame seeds, 11 message seeds, 2,368 bounded
+  mutations, 201 frame decodes and 118 message decodes.
+- PASS: release example build and offline benchmark. Benchmark observations
+  are appended to `PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`; no threshold is
+  asserted.
+- PASS: locked no-dependency Cargo metadata, workspace metadata/license/
+  dependency check, seven distributable package listings with `LICENSE` and
+  `NOTICE`, and four `unique_id::tests` under both UTC and Asia/Taipei.
+
+The null/empty local membership result now retains Java's `balanced=true`
+default and current queues; a thrown membership RPC error still marks the pass
+unbalanced. The exact Java source branch and focused regression are recorded
+in `20261021T160022Z.rlog`.
+
+## Remaining status
+
+- Broad P18-V01 remains open, including arbitrary Push consume-service
+  replacement, the shared mutable stats-manager accessor, arbitrary
+  application-defined `MessageExt` subclasses, and the remaining inherited/
+ public/DTO/settings/input/error/control-flow/reverse-export audit.
+- P18-V04 current-revision GitHub Ubuntu address-profile and native Windows
+  stack-runtime evidence are absent. No remote CI was triggered. Phase 19 live
+  Broker/Docker execution remains separate.
+- Existing protected Phase 19 worktree paths remain untouched and unstaged.

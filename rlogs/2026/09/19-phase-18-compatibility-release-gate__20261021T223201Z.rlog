@@ -1,0 +1,185 @@
+# Phase 18 full server-free refresh — 2026-10-21T22:32:01Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Verified revision: `0f6a0244` (`docs(compat): record active POP assignment retention`)
+Latest behavior-test revision: `05dcbf0e` (`test(consumer): cover active POP assignment retention`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Verification
+
+- `cargo test --workspace --locked` — passed.
+- `cargo test --workspace --all-features --locked` — passed.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+  — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- `mvn -q -f compat/java-reference/pom.xml verify` — passed: 37 scenarios,
+  9 Running Info, 29 direct-consume, 15 reset cases, 85 typed headers, 16 typed
+  bodies, fixture drift checks and Java/Rust cross-decodes. Existing JDK/Netty
+  `Unsafe` and reflective-final-field warnings were emitted.
+- Differential comparator self-test and `--validate-manifest` — passed; 37
+  scenarios validated.
+- `bash tests/stress/run-offline-smoke.sh` — passed, 16 deterministic
+  race/leak cases × 3 repetitions.
+- `cargo run --locked --offline -p rocketmq-classic-remoting --example fuzz_smoke`
+  — passed: 139 frame seeds, 11 message seeds, 2,400 bounded mutations, 200
+  frame decodes and 113 message decodes.
+- Core Unique ID fixture test passed under both `TZ=UTC` and
+  `TZ=Asia/Taipei`.
+- Release facade examples and all workspace benchmarks compiled. The offline
+  benchmark ran on macOS AArch64, Apple M5 Max, 18 logical CPUs, Rust 1.85.0;
+  current measurements are recorded in
+  `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+- Locked Cargo metadata passed with 8 workspace members, 216 total packages
+  and 208 registry packages. Workspace metadata/license/dependency-direction
+  checks passed. Seven product package listings each include `LICENSE`,
+  `NOTICE` and `src/lib.rs`; the eighth member is the development integration
+  helper.
+
+## Remaining work
+
+Broad bidirectional P18-V01 source/API/settings/input/error/control-flow and
+reverse-export reconciliation remains open. Current-revision GitHub Ubuntu
+and native Windows P18-V04 evidence remains open. No remote CI, Broker or
+Docker run was performed. The pre-existing protected Phase 19 worktree paths
+remain untouched and unstaged.
+
+## Producer usage and delivery guidance follow-up — 2026-10-21
+
+- Re-read the Phase 18 plan's P18-07 documentation requirements and found that
+  the README lacked a runnable producer send example and explicit timeout,
+  duplicate-delivery and shutdown guidance.
+- Updated `examples/producer.rs` to use the facade `Producer` lifecycle, send a
+  message and await shutdown. Updated README usage guidance: a timed-out send
+  can have been stored, retries can duplicate it, handlers should be
+  idempotent, and Push consumer shutdown may cancel work after the configured
+  termination wait.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+  passed. `cargo build -p rocketmq-classic --example producer --locked` and
+  `cargo build -p rocketmq-classic --examples --release --locked` passed.
+  Formatting and diff checks passed.
+- During the package/provenance recheck, two initial custom script runs failed
+  on the verifier's artifact-name and source-JAR path assumptions. After
+  correcting the verifier, all nine documented Maven artifact SHA-256 values
+  matched, and four source-JAR files byte-matched the pinned Java tag. Offline
+  Maven dependency tree confirmed client 5.5.1 -> remoting 5.5.1 -> common
+  5.5.1. No repository source mismatch was found.
+- Local P18-V03 package/provenance review passes. Independent OpenPGP
+  verification remains unavailable because GPG is not installed; the tag
+  target and source-JAR byte identities are verified. Release version and
+  registry resolution remain post-Phase-19 tasks per the plan. Broad P18-V01
+  and current-revision GitHub Ubuntu/native Windows P18-V04 remain open.
+
+## P18-V03 current-revision package/provenance recheck — 2026-10-21
+
+- Current verified revision: `79406d1991c6a2ff6805299c602c551379fb1e37`.
+- Offline Maven `dependency:tree` confirms client 5.5.1 -> remoting 5.5.1 ->
+  common 5.5.1. All nine documented Maven artifact SHA-256 values match local
+  cache files, and four selected source-JAR files byte-match the exact pinned
+  Java tag. Tag commit:
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- Current locked Cargo metadata reports 8 workspace members, 216 packages and
+  208 registry packages. Workspace license/dependency-direction validation
+  passes; all seven product package listings contain `LICENSE`, `NOTICE`, and
+  `src/lib.rs`.
+- P18-07 README usage, retry/duplicate delivery, and shutdown semantics are
+  documented; the updated producer example builds in release mode and strict
+  Clippy passes. Local P18-V03 preparation checks are complete. GPG is
+  unavailable for detached tag signature verification; registry resolution,
+  release version selection and publication remain post-Phase-19 work.
+- Broad P18-V01 and current-revision GitHub Ubuntu/native Windows P18-V04
+  evidence remain open. Protected Phase 19 paths remain unstaged.
+
+## P18-V01 message-family method crosswalk — 2026-10-21
+
+- The first method inventory was read from the separate Java working tree,
+  which is 5.3.3. It was discarded as evidence. Re-ran the inventory directly
+  from pinned Java tag commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- Crosswalked all 34 `Message`, 41 `MessageExt`, and 4 `MessageClientExt`
+  declared public non-static instance methods, with constructors documented
+  separately. Added the detailed mapping at
+  `docs/compatibility/PHASE_18_MESSAGE_SUBTYPE_API_CROSSWALK.md` and linked it
+  from the Java compatibility evidence and release checklist.
+- Pinned runtime fixture SHA-256 values: `consumer-operations.json`
+  `a8d82baca384b9b7932b4961b051902336155543428047d891eb9f84052d166d`;
+  `records.json`
+  `d0cdfbf2599adb0242a1df0dfa8523818a018c35cb34dac2b8418f8ce4bc972d`.
+- `cargo test -p rocketmq-classic-common --test message_decode --locked`
+  passed (26 tests); `cargo test -p rocketmq-classic-consumer --test
+  runtime_direct_consume --locked` passed (4 tests); pinned Maven `verify`
+  passed, including 29 direct-consume cases and typed Java/Rust cross-decodes.
+- This supersedes prior open notes for remaining message-family override
+  methods and subtype live-map identity. Broad P18-V01 reconciliation and
+  current-revision GitHub Ubuntu/native Windows P18-V04 evidence remain open.
+- The protected Phase 19 paths remain untouched and unstaged. No push, remote
+  CI, Broker, or Docker run was performed.
+
+## Message-family static method inventory correction — 2026-10-21
+
+- Diff review found three declared public static methods on pinned
+  `MessageExt` in addition to the 79 public instance methods:
+  `parseTopicFilterType(int)` and both `socketAddress2ByteBuffer` overloads.
+- Added mappings to `parse_topic_filter_type`,
+  `MessageHostAddress::network_bytes`, and
+  `MessageHostAddress::write_network_bytes`. The crosswalk now covers 82
+  declared methods total, with constructors listed separately.
+- No implementation change was needed; the focused Rust tests and pinned Maven
+  verification recorded in the preceding entry passed for these methods.
+
+## P18-V01 `cloneGroupOffset` direct RPC closure — 2026-10-22
+
+- Added the pinned Java 5.5.1 `CloneGroupOffsetRequestHeader` wire model and
+  `MQClientApi::clone_group_offset` for request 314, including inherited RPC
+  header fields, nullable string inputs, primitive `offline`, configured VIP
+  channel conversion, caller timeout, and response classification.
+- Added invoked Java fixtures for normal inputs, null string inputs, and an
+  error response; added typed Java↔Rust header fixtures and a Rust loopback RPC
+  test. Fixture hash: `fixtures/producer/core.json`
+  `c7895cfff96e0150878d761336c34b4ddfec8064249d4af994a3f6796959a8d9`.
+- `cargo test -p rocketmq-classic-core --test admin_rpc clone_group_offset
+  --locked` passed (1 test). `cargo test -p rocketmq-classic-protocol --test
+  header_inventory --locked` passed (13 tests). `cargo fmt --all -- --check`
+  and `git diff --check` passed. Pinned `mvn -f compat/java-reference/pom.xml
+  verify` passed: 37 scenarios, 86 typed headers, and 16 typed bodies.
+- The first Maven attempts exposed a duplicate accessor-macro invocation and
+  missing Java fixture routing for the new typed header. Both were fixed before
+  the successful run. Broad P18-V01 remains open; current-revision GitHub
+  Ubuntu/native Windows P18-V04 evidence remains open. No remote CI, Broker,
+  or Docker run was performed. Phase 19 worktree paths remain unstaged.
+
+## P18-V01 `invokeBrokerToGetConsumerStatus` direct RPC closure — 2026-10-22
+
+- Added `MQClientApi::invoke_broker_to_get_consumer_status`, preserving Java's
+  nullable topic/group/client-address fields, request 223, configured VIP
+  conversion, timeout, nullable `consumerTable`, Broker errors, and the
+  success-without-body client-error branch.
+- Added Java invocation cases and Rust fixture-driven loopback coverage for
+  populated/empty tables, null inputs, Broker errors, and no response body.
+  A separate Core test verifies the configured VIP port offset for both this
+  operation and `clone_group_offset`. Producer core fixture SHA-256:
+  `7de333d7c61d4235a6e134e5bdf7dc97cf03c12024dd320b9b96ff3a02beb183`.
+- `cargo test -p rocketmq-classic-core --test admin_rpc
+  invoke_broker_to_get_consumer_status_matches_java_fixture --locked` passed
+  (1 test); `cargo test -p rocketmq-classic-core --lib
+  direct_broker_operations_apply_configured_vip_port_offset --locked` passed
+  (1 test). Pinned Maven `verify` passed for this fixture revision: 37
+  scenarios, 86 typed headers, and 16 typed bodies. Formatting and diff checks
+  passed. Broad P18-V01 remains open; current-revision GitHub Ubuntu/native
+  Windows P18-V04 evidence remains open. No remote CI, Broker, or Docker run
+  was performed. Phase 19 worktree paths remain unstaged.
+
+## P18-V02 final local workspace gates after direct RPC additions — 2026-10-22
+
+- The first `cargo test --workspace --locked` run exposed that adding
+  `CloneGroupOffsetRequestHeader` also required a row in the exhaustive
+  `header_validation_matrix`. Added the wire-field classification and verified
+  the focused matrix test; reran the full default workspace suite successfully.
+- `cargo test --workspace --all-features --locked` passed. This includes the
+  bounded protocol fixture mutation regression. Strict
+  `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+  passed. `python3 tests/differential/compare.py --self-test`, formatting, and
+  `git diff --check` passed.
+- These local gates cover the current code through commit `d1b1da78` plus the
+  protocol header matrix follow-up. P18-V01 public method/API reconciliation
+  remains open; current-revision GitHub Ubuntu/native Windows P18-V04 evidence
+  remains open. No remote CI, Broker, or Docker run was performed. Phase 19
+  worktree paths remain unstaged.

@@ -1,0 +1,221 @@
+name: ${COMPOSE_PROJECT_NAME:-rocketmq-classic-p19-local}
+
+services:
+  namesrv:
+    image: apache/rocketmq:5.3.4@sha256:d57ee4ebbd9d7bb6e185775bde41c128e98f185b25bf0b05c77d4e6c010572b8
+    profiles: [basic, two-broker, two-broker-host, transaction, host-routed, tls, tls-auth]
+    command: ["nameserver"]
+    ports:
+      - "127.0.0.1:${ROCKETMQ_NAMESRV_HOST_PORT:-19876}:9876"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9876'"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+      start_period: 3s
+
+  store-init:
+    image: apache/rocketmq:5.3.4@sha256:d57ee4ebbd9d7bb6e185775bde41c128e98f185b25bf0b05c77d4e6c010572b8
+    profiles: [basic, two-broker, transaction, host-routed, tls]
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c", "chown -R rocketmq:rocketmq /data"]
+    volumes:
+      - broker-store:/data
+    restart: "no"
+
+  broker:
+    image: apache/rocketmq:5.3.4@sha256:d57ee4ebbd9d7bb6e185775bde41c128e98f185b25bf0b05c77d4e6c010572b8
+    profiles: [basic, two-broker, tls]
+    command: ["broker", "-c", "/etc/rocketmq/broker.conf"]
+    depends_on:
+      namesrv:
+        condition: service_healthy
+      store-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./config/broker.conf:/etc/rocketmq/broker.conf:ro
+      - broker-store:/home/rocketmq/store
+    ports:
+      - "127.0.0.1:${ROCKETMQ_BROKER_FAST_HOST_PORT:-20909}:10909"
+      - "127.0.0.1:${ROCKETMQ_BROKER_HOST_PORT:-20911}:10911"
+      - "127.0.0.1:${ROCKETMQ_BROKER_HA_HOST_PORT:-20912}:10912"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/10911'"]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+      start_period: 8s
+
+  store-init-auth:
+    image: apache/rocketmq:5.3.4@sha256:d57ee4ebbd9d7bb6e185775bde41c128e98f185b25bf0b05c77d4e6c010572b8
+    profiles: [tls-auth]
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c", "chown -R rocketmq:rocketmq /data"]
+    volumes:
+      - broker-auth-store:/data
+    restart: "no"
+
+  broker-auth:
+    image: ${ROCKETMQ_AUTH_BROKER_IMAGE:-apache/rocketmq:5.3.4@sha256:d57ee4ebbd9d7bb6e185775bde41c128e98f185b25bf0b05c77d4e6c010572b8}
+    platform: ${ROCKETMQ_AUTH_BROKER_PLATFORM:-linux/arm64}
+    profiles: [tls-auth]
+    command: ["broker", "-c", "/etc/rocketmq/broker.conf"]
+    depends_on:
+      namesrv:
+        condition: service_healthy
+      store-init-auth:
+        condition: service_completed_successfully
+    volumes:
+      - ${ROCKETMQ_BROKER_AUTH_CONFIG:-./config/broker-auth.conf}:/etc/rocketmq/broker.conf:ro
+      - broker-auth-store:/home/rocketmq/store
+    ports:
+      - "127.0.0.1:${ROCKETMQ_BROKER_HOST_PORT:-61911}:10911"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/10911'"]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+      start_period: 8s
+
+  broker-tx:
+    image: apache/rocketmq:5.3.4@sha256:d57ee4ebbd9d7bb6e185775bde41c128e98f185b25bf0b05c77d4e6c010572b8
+    profiles: [transaction]
+    command: ["broker", "-c", "/etc/rocketmq/broker.conf"]
+    depends_on:
+      namesrv:
+        condition: service_healthy
+      store-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./config/broker-tx.conf:/etc/rocketmq/broker.conf:ro
+      - broker-store:/home/rocketmq/store
+    ports:
+      - "127.0.0.1:${ROCKETMQ_BROKER_FAST_HOST_PORT:-30909}:30909"
+      - "127.0.0.1:${ROCKETMQ_BROKER_HOST_PORT:-30911}:30911"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/30911'"]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+      start_period: 8s
+
+  broker-host:
+    image: apache/rocketmq:5.3.4@sha256:d57ee4ebbd9d7bb6e185775bde41c128e98f185b25bf0b05c77d4e6c010572b8
+    profiles: [host-routed]
+    command: ["broker", "-c", "/etc/rocketmq/broker.conf"]
+    depends_on:
+      namesrv:
+        condition: service_healthy
+      store-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./config/broker-host.conf:/etc/rocketmq/broker.conf:ro
+      - broker-store:/home/rocketmq/store
+    ports:
+      - "127.0.0.1:${ROCKETMQ_BROKER_FAST_HOST_PORT:-40909}:40909"
+      - "127.0.0.1:${ROCKETMQ_BROKER_HOST_PORT:-40911}:40911"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/40911'"]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+      start_period: 8s
+
+  store-init-b:
+    image: apache/rocketmq:5.3.4@sha256:d57ee4ebbd9d7bb6e185775bde41c128e98f185b25bf0b05c77d4e6c010572b8
+    profiles: [two-broker]
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c", "chown -R rocketmq:rocketmq /data"]
+    volumes:
+      - broker-b-store:/data
+    restart: "no"
+
+  broker-b:
+    image: apache/rocketmq:5.3.4@sha256:d57ee4ebbd9d7bb6e185775bde41c128e98f185b25bf0b05c77d4e6c010572b8
+    profiles: [two-broker]
+    command: ["broker", "-c", "/etc/rocketmq/broker.conf"]
+    depends_on:
+      namesrv:
+        condition: service_healthy
+      store-init-b:
+        condition: service_completed_successfully
+    volumes:
+      - ./config/broker-b.conf:/etc/rocketmq/broker.conf:ro
+      - broker-b-store:/home/rocketmq/store
+    ports:
+      - "127.0.0.1:${ROCKETMQ_BROKER_B_FAST_HOST_PORT:-20919}:10919"
+      - "127.0.0.1:${ROCKETMQ_BROKER_B_HOST_PORT:-20921}:10921"
+      - "127.0.0.1:${ROCKETMQ_BROKER_B_HA_HOST_PORT:-20922}:10922"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/10921'"]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+      start_period: 8s
+
+  store-init-a-host:
+    image: apache/rocketmq:5.3.4@sha256:d57ee4ebbd9d7bb6e185775bde41c128e98f185b25bf0b05c77d4e6c010572b8
+    profiles: [two-broker-host]
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c", "chown -R rocketmq:rocketmq /data"]
+    volumes:
+      - broker-a-host-store:/data
+    restart: "no"
+
+  store-init-b-host:
+    image: apache/rocketmq:5.3.4@sha256:d57ee4ebbd9d7bb6e185775bde41c128e98f185b25bf0b05c77d4e6c010572b8
+    profiles: [two-broker-host]
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c", "chown -R rocketmq:rocketmq /data"]
+    volumes:
+      - broker-b-host-store:/data
+    restart: "no"
+
+  broker-a-host:
+    image: apache/rocketmq:5.3.4@sha256:d57ee4ebbd9d7bb6e185775bde41c128e98f185b25bf0b05c77d4e6c010572b8
+    profiles: [two-broker-host]
+    command: ["broker", "-c", "/etc/rocketmq/broker.conf"]
+    depends_on:
+      namesrv:
+        condition: service_healthy
+      store-init-a-host:
+        condition: service_completed_successfully
+    volumes:
+      - ${ROCKETMQ_BROKER_A_HOST_CONFIG:-./config/broker-a-host.conf}:/etc/rocketmq/broker.conf:ro
+      - broker-a-host-store:/home/rocketmq/store
+    ports:
+      - "127.0.0.1:${ROCKETMQ_BROKER_A_PUBLISHED_HOST_PORT:-50911}:50911"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/50911'"]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+      start_period: 8s
+
+  broker-b-host:
+    image: apache/rocketmq:5.3.4@sha256:d57ee4ebbd9d7bb6e185775bde41c128e98f185b25bf0b05c77d4e6c010572b8
+    profiles: [two-broker-host]
+    command: ["broker", "-c", "/etc/rocketmq/broker.conf"]
+    depends_on:
+      namesrv:
+        condition: service_healthy
+      store-init-b-host:
+        condition: service_completed_successfully
+    volumes:
+      - ${ROCKETMQ_BROKER_B_HOST_CONFIG:-./config/broker-b-host.conf}:/etc/rocketmq/broker.conf:ro
+      - broker-b-host-store:/home/rocketmq/store
+    ports:
+      - "127.0.0.1:${ROCKETMQ_BROKER_B_PUBLISHED_HOST_PORT:-50921}:50921"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/50921'"]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+      start_period: 8s
+
+volumes:
+  broker-store:
+  broker-b-store:
+  broker-a-host-store:
+  broker-b-host-store:
+  broker-auth-store:

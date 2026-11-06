@@ -1,0 +1,7 @@
+Phase 6 continuation, 2026-10-09. Pinned Java source remains read-only at efa1be59d6fc747ad220f036c86030f05f0419f9.
+
+The route input audit adds `broker-boolean-high-precision-decimal-one` in probe/test commit a18ce02. The pinned Java 5.5.1 oracle decodes `{"enableActingMaster":1.0000000000000000001}` as false. The existing Rust boolean coercion also returns false, so this probe required no implementation change. The focused `route_dto_inputs_match_invoked_java_fastjson` test passes with all 80 route input cases.
+
+Current fixture inventory: route DTO input count 80, SHA-256 74ad05fe746f63b1b4fd5886d3fd135a60a4f252fd7ea037e6d4a420fedc4e12; lookup consumer-list count 13 and assignment-attachment count 7, SHA-256 ed97d76aac400d5aabc76c05f5d309f6ba8f73a56b614320781cbcdf93f1c04f; heartbeat input count 52, SHA-256 e183f318134bd5dfa85bcbd80276c3e85c444f3ca0ebbe8231696ef2b4305db7.
+
+The adjacent string-container implementation remains commit 428dde9, with Java probes in commits 1695b9f and 8f7ad7f. The working tree passed `cargo fmt --all -- --check` and `git diff --check` before this evidence-only update. Full workspace tests, strict Clippy, pinned offline Maven verify (22 scenarios, deterministic fixtures), and comparator self-test passed for the implementation; P6-V04 remains PENDING_PHASE_19 and Phase 6 is not accepted.

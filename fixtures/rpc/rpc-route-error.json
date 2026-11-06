@@ -1,0 +1,1 @@
+{"java_client_version":"5.5.1","server_baseline_not_contacted":"5.3.4","scenario_id":"P5-RPC-ROUTE-ERROR","request_code":105,"response_code":17,"response":true,"ext_fields":{},"body_hex":"","frame_sha256":"d64290986cade20b7ee05658729d97d4ba1ff2619ad92c526cc49702510fb9a3","java_outcome":"BROKER_ERROR"}

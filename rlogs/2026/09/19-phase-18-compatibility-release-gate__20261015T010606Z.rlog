@@ -1,0 +1,7 @@
+# Phase 18 Common Message equality reverse-surface — 20261015T010606Z
+
+- Compared Java 5.5.1 `Message`/`MessageExt` declarations with the Rust public surface. Java classes inherit identity-based `Object.equals`/`hashCode`; Rust had exposed field-based `PartialEq`/`Eq`.
+- Removed structural equality from `Message`. `MessageExt` now compares a private identity token; cloning preserves that token, and serde skips it so each deserialized object receives a fresh identity. The Java `messagePublicApi` fixture records same-instance and distinct-default outcomes. A compile-fail doctest guards `Message`'s missing structural equality; Rust fixture tests cover `MessageExt` identity behavior.
+- Updated Phase 6/8 compatibility maps and the release checklist. Fixture SHA-256: `689666cff0ba5319cbe396e5a20a6b5943d1e23fc394299c7f69d22b65a4ed42`.
+- PASS: `cargo test --workspace --locked`; `cargo test --workspace --all-features --locked`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `mvn -o -q -f compat/java-reference/pom.xml verify` (37 scenarios, fixture drift and Java/Rust cross-decodes); `cargo fmt --all -- --check`; `git diff --check`.
+- This closes only the `Message`/`MessageExt` equality-trait reverse-surface slice. Broad P18-V01 reconciliation remains open. The full P18-V02 race/fuzz/example/benchmark/metadata/package-content gates still need a final-revision rerun; current-revision GitHub Ubuntu evidence and Phase 19 Docker/Broker scenarios remain outstanding. No plan file changed.

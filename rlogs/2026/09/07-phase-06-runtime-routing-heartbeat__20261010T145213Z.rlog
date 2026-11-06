@@ -1,0 +1,17 @@
+Execution session: 2026-10-10T14:52:13Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Initial state: clean worktree at `f727e72d` after documenting the explicit heartbeat VIP address boundary. `MQClientInstance.getBrokerNameFromMessageQueue` already covered null topic fields but not a null queue argument.
+
+Selected slice: represent Java's nullable `MessageQueue` argument at the Rust broker-name lookup boundary and preserve Java's null dereference outcome.
+
+Oracle: the actual pinned Java runtime call `getBrokerNameFromMessageQueue(null)` yields `NullPointerException`. Oracle/fixture commit `a2ba77ec`; `fixtures/runtime/route.json` SHA-256 `b79868807ee49e5b362aa05d0dbf0e94576296345a22d84e2860b72bde698e52`.
+
+Native change: added `RouteSnapshot::broker_name_nullable(Option<&MessageQueue>)`, which returns `InvalidRoute("null message queue")` for `None` and delegates non-null queues to the existing method. A fixture-backed unit test verifies the Java outcome and Rust error. Implementation/test commit `de514b32`.
+
+Validation: full `cargo test --workspace --all-targets --locked` passed; strict all-target/all-feature Clippy passed; pinned offline Maven verify passed (22 scenarios, fixture drift and cross-decodes); comparator self-test and manifest validation passed (22 scenarios); `cargo fmt --all -- --check` and `git diff --check` passed.
+
+Documentation: `PHASE_6_API_CONFIG_MAP.md` maps the nullable route lookup wrapper and error, and `PHASE_6_REQUIREMENT_AUDIT.md` records the oracle digest, evidence and remaining scope. P6-V04 remains pending Phase 19; full Phase 6 method/input/platform reconciliation remains open.
+
+Documentation/log commit: pending.

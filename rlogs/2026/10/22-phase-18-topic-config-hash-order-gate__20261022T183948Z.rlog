@@ -1,0 +1,61 @@
+# Phase 18 TopicConfig HashMap iteration-order gate
+
+- Recorded: 2026-10-22 18:39:48 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Implementation commit: `2f4daa9a475d453a2d193675f19d51c9b315d30f`
+- Producer core fixture SHA-256: `1382505e8f49138746501dd77760358ae286e285f762b152f2223b912c8e6167`
+
+## Finding and change
+
+Pinned Java `TopicConfig.encode()` and `toString()` serialize the supplied
+attributes map in its iteration order. With Java `HashMap` keys `BB` and `Aa`,
+their colliding string hashes put both entries in the same bucket; Java retains
+their insertion order. Rust previously stored these attributes in `BTreeMap`,
+which sorted the keys and changed the public encoded string.
+
+`TopicConfigAttributeMap` now uses `IndexMap` to retain insertion order. The
+serializer applies Java hash spreading and bucket ordering while preserving
+insertion order within each bucket. TopicConfig JSON and whitespace-form
+decoders also retain parsed key order. Rust equality and hashing remain
+independent of insertion order, matching Java Map equality/hash semantics.
+The Java fixture records both insertion orders, setter and decode paths, and
+the corresponding `encode()`/`toString()` results.
+
+## Verification
+
+- Maven producer core fixture generation — passed using the pinned 5.5.1
+  dependency; the collision rows were checked directly in the fixture.
+- `cargo test --offline -p rocketmq-classic-protocol --test topic_config_public_api` — passed (4 tests).
+- `cargo test --offline --workspace --locked` — passed.
+- `cargo test --offline --workspace --all-features --locked` — passed.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — passed.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — passed; 37 scenarios,
+  36 route/VIP cases, 106 typed-header cross-decodes, and 19 typed-body
+  cross-decodes.
+- `python3 scripts/check-workspace-metadata.py` — passed.
+- `cargo package --list --locked` for all seven product crates — passed; each
+  listing contains `Cargo.toml`, `LICENSE`, `NOTICE`, and `src/lib.rs`.
+- `cargo fmt --all -- --check`, `git diff --check`, and the protected Phase 18
+  plan unchanged check — passed.
+
+## First-attempt diagnostics
+
+- The first fixture-generation command used a relative path interpreted from
+  the workspace root, producing the generated file under the adjacent
+  `Projects/fixtures` directory. That generated file was copied into the
+  intended workspace fixture path and removed from the adjacent directory;
+  the fixture was then regenerated successfully using its absolute workspace
+  path. The final Maven verification checked the committed workspace fixture.
+- `cargo package --list --locked` refuses changed package source by default.
+  The changed Protocol package was first listed with `--allow-dirty`, then all
+  seven listings passed after the implementation commit.
+
+## Scope and remaining evidence
+
+This closes only the tested TopicConfig attribute iteration-order slice.
+Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export
+reconciliation remains open. Current-revision remote Ubuntu CI, native Windows
+runtime evidence, and Phase 19 Broker/Docker validation remain open. No push,
+external CI, or Broker was used. The protected Phase 19 worktree paths were
+left unchanged and unstaged.

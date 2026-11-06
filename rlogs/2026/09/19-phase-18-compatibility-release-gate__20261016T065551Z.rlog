@@ -1,0 +1,88 @@
+## P18-V01 Push updateCorePoolSize Java oracle — 2026-10-16T06:55Z
+
+- Rechecked the pinned RocketMQ Java client 5.5.1 source JAR (source commit `efa1be59d6fc747ad220f036c86030f05f0419f9`). `DefaultMQPushConsumer.updateCorePoolSize(int)` returns `void` and delegates to the implementation; the implementation delegates unconditionally to the consume service. The concurrent and orderly services update only when `0 < corePoolSize <= Short.MAX_VALUE` and `corePoolSize < consumeThreadMax`. A missing service throws `NullPointerException`; valid updates remain possible through the retained service after shutdown.
+- Extended `PushImplementationAccessorFixtures` to invoke the null-service facade path and both concrete services, checking void return type, valid/invalid updates, and post-shutdown updates. Regenerated `fixtures/consumer/push-implementation-accessor.json`; SHA-256 `ed491b81cc44386ba5644b668fc4bcb0b0da0af67659c86668f7b5fca0ffa265`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml -Dexec.args='push-implementation-accessor-fixture /Users/bruce.tsai/Projects/trio/rocketmq-classic/fixtures/consumer/push-implementation-accessor.json' compile exec:java`; `git diff --check`.
+- Rust facade parity regression and implementation are pending. No plan file, Docker/live Broker, publication, or tag was changed.
+
+## P18-V01 Push updateCorePoolSize live-maximum edge — 2026-10-16T07:06Z
+
+- Continued source-flow review found that the Java facade reads the current `consumeThreadMax`, while each constructed `ThreadPoolExecutor` retains its original maximum. If the facade maximum is raised from 8 to 10, updating to 9 passes the facade guard and throws `IllegalArgumentException`; updating to 8 is accepted because it equals the executor maximum. This applies to both concurrent and orderly services.
+- Extended the invoked Java fixture for both services with that mutation/error boundary and regenerated `fixtures/consumer/push-implementation-accessor.json`; SHA-256 `7cb9248e388ffb283f4b3554364edfc84cd2623ef7ec25a2d38dd638a2f8613d`.
+- PASS: focused Java fixture generation; fixture reports the exception for 9, retained size 6, and accepted size 8 for both services; `git diff --check`.
+- Rust still needs to distinguish the live facade bound from the constructed executor capacity; implementation and differential regression remain in progress.
+
+## P18-V01 Push updateCorePoolSize after shutdown — 2026-10-16T07:14Z
+
+- Extended the Java fixture after shutdown: with live `consumeThreadMax=10` and constructed executor maximum 8, `updateCorePoolSize(9)` still throws `IllegalArgumentException` for both concurrent and orderly services. This confirms the executor capacity and original service survive shutdown for this call path.
+- Regenerated `fixtures/consumer/push-implementation-accessor.json`; SHA-256 `29ed1e78da3f3dfe6f0d334d78e8f97e4178537a7105419c6fd907fc0aa9a023`.
+- PASS: focused Java fixture generation and `git diff --check`. Rust regression now checks the same post-shutdown capacity error; full verification is pending after this extension.
+
+## P18-V01 Push updateCorePoolSize Rust parity — 2026-10-16
+
+- Code commit `8105fd3b` changes the public facade result from `bool` to `Result<(), PushConsumerError>` and preserves Java's void/no-op contract. It distinguishes an uncreated service (`NotStarted`), invalid live-facade bounds (no-op success), and a requested size above the constructed executor maximum after a live config increase (`InvalidSetting`, corresponding to Java `IllegalArgumentException`). Concurrent and orderly service owners now permit the executor maximum itself when the facade maximum has since been raised. The service maximum is retained across shutdown and startup failure, while accepted post-shutdown changes update the tracked effective size without restarting workers.
+- Added fixture-backed Rust regression coverage for the missing-service path, valid/invalid values, concurrent and orderly resizing, live maximum increase, executor-capacity failure, exact-capacity acceptance, and shutdown behavior. Updated `tests/push_pipeline.rs` for the new Rust error result.
+- PASS on the committed code: `cargo test -p rocketmq-classic-consumer --all-features --locked` (220 unit tests, all integration targets and 12 doctests); `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`; pinned `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, all fixture-drift checks and Rust/Java cross-decodes; exit 0).
+- One verification wrapper initially returned exit 1 after Maven completed because zsh reserves the variable name `status`; reran with `mvn_result` and confirmed Maven verify exit 0. No Maven fixture or project failure occurred.
+- Updated `docs/compatibility/PHASE_10_OFFLINE_METHOD_MATRIX.md` and `docs/release-checklist.md` in a separate documentation change. Broad P18-V01, full-workspace P18-V02 on this final revision, GitHub Ubuntu/P18-V04 evidence, and release preflight remain open. No plan file, live Broker/Docker environment, publication, push, or tag was changed.
+
+## P18-V01 Push consumerRunningInfo after shutdown — 2026-10-16T07:41Z
+
+- Reconciled the pinned Java 5.5.1 implementation: `consumerRunningInfo()` has no service-state guard; `shutdown(long)` retains the consume service, offset store and factory, while `RebalanceImpl.destroy()` clears the pull/POP queue tables. An offline probe confirmed `consumerRunningInfo()` succeeds in `SHUTDOWN_ALREADY` and reads the retained core-pool size.
+- Extended the invoked Java fixture to evaluate the method after shutdown state and queue-table cleanup, restoring fixture queue maps afterward so the independent offset-persistence scenario remains isolated. Fixture SHA-256: `1003a2a0ee2cfc8fcd759356a364b9764c36f529b598079772f444ce574ec7a0`.
+- Rust now retains the runtime identity and NameServer address needed to build the owner snapshot after shutdown; cleared pull/POP queues remain empty while subscriptions, stats and core-pool settings are reported. Commit `30f8e41f`.
+- PASS: `cargo test -p rocketmq-classic-consumer --all-features --locked` (220 unit tests, all integration targets and 12 doctests); strict Consumer Clippy; `cargo fmt --all -- --check`; pinned `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, fixture drift and Java/Rust cross-decodes); `git diff --check` before documentation edits.
+- This closes the post-shutdown `consumerRunningInfo` slice only. Broad P18-V01 audit, final-revision full workspace P18-V02, current GitHub Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker automation and release version/registry checks remain open. No plan file, live Broker/Docker, publication, push or tag was changed.
+
+## P18-V01 Push consumerRunningInfo pre-start boundary — 2026-10-16T07:45Z
+
+- Extended the pinned Java fixture to invoke `consumerRunningInfo()` before startup and record the `NullPointerException` caused by its null consume service. Rust's owner method returns typed `NotStarted` for the same state; this exception-shape adaptation is now explicit in the Phase 10 matrix and release checklist.
+- The Rust running-info regression compares the pinned Java pre-start outcome and continues to verify the running and post-shutdown snapshots. Fixture SHA-256: `fdc94afde6f4fdd74ffeab6fae12fad521a831178e070c4e072c25ef718a1f82`.
+- PASS: focused Java fixture generation; `cargo test -p rocketmq-classic-consumer --all-features --locked running_info_returns_queue_snapshot_and_java_config_properties`; `git diff --check`.
+- This records the lifecycle error mapping for this method only; broad P18-V01, final-revision full workspace P18-V02, current GitHub Ubuntu/P18-V04, Phase 19 local Docker/Broker automation and release version/registry checks remain open. No plan file, live Broker/Docker, publication, push or tag was changed.
+
+## P18-V01 request/reply table removal semantics — 2026-10-16T08:07Z
+
+- The pinned Java `RequestFutureHolder` fixture now verifies that removing a
+  correlation leaves the `RequestResponseFuture` latch at one and its
+  independent timed wait returns null. Fixture SHA-256:
+  `b5c6e39d24e197d678fd214418f4f18b4fabb9f63ef27e74d3e152c7616ef5ef`.
+  Fixture commit: `aef6b86a`.
+- Rust `PendingReplyRequest::receive` now retains the original deadline after
+  the public live table removes, replaces, or clears its entry. Explicit
+  `control.cancel` and registry clear send `Cancelled`; the waiter tracks a
+  closed oneshot so a cancelled receive future can be polled again safely.
+  Added fixture assertions and regressions for removal through deadline,
+  registry clear, and reply/cancel arbitration. Code commit: `65becc27`.
+- The first full scoped suite exposed an old assertion expecting cancellation
+  to close the oneshot as an error. Updated it to assert `Cancelled`; the rerun
+  passes Core (168 unit tests plus integration/doc targets), Producer (142
+  unit tests plus integration/doc targets), and facade (5 request/reply
+  integration tests). Strict scoped all-target/all-feature Clippy, format,
+  diff checks, and pinned Maven `verify` (37 scenarios, fixture drift and
+  cross-decodes) pass.
+- Updated the Phase 15 request/reply matrix and release checklist. This closes
+  the table-removal waiter slice only. Broad P18-V01, final-revision workspace
+  P18-V02, GitHub Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker
+  automation and `docs/owner-validation.md`, and release version/registry
+  checks remain open. Owner-run deployment/live Broker validation remains
+  reserved for Phase 19. No plan file, live Broker/Docker, publication, push,
+  or tag was changed.
+
+## P18-V01 request/reply completion API reverse-surface correction — 2026-10-16T08:15Z
+
+- Reverse-surface review caught that the preceding implementation added a
+  Java-absent public `PendingReplyCompletion::Cancelled` variant. Replaced it
+  with a private cancellation flag. Public map removal still closes only the
+  lookup sender and waits through the original deadline; explicit cancellation
+  and registry clear retain the existing `receive()` error and
+  `RequestReplyCancelled` mapping. The public enum now keeps its original
+  variants. No Java fixture needed a change.
+- PASS: scoped all-feature Core/Producer/facade tests (168 Core unit, 142
+  Producer unit, facade 5 request/reply tests, all scoped integration and doc
+  targets), strict scoped all-target/all-feature Clippy, `cargo fmt --all --
+  --check`, and `git diff --check`.
+- Updated the Phase 15 matrix and release checklist. This closes the extra
+  completion-variant discrepancy only; broad P18-V01 and final-revision
+  P18-V02 remain open. No plan file, live Broker/Docker, publication, push,
+  or tag was changed.

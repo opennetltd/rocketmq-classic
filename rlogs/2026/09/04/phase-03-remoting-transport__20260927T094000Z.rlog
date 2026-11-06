@@ -1,0 +1,6 @@
+# Phase 3 acceptance decisions — 2026-09-27
+
+- User decisions recorded: accept (1) immutable construction-time Rust config snapshot versus Java's later reads of mutable config; (2) Rust queued-byte writability/watermark semantics versus Netty outbound-buffer writability; (3) NameServer scan deferral versus Java executor rejection and documented scheduling/list/wrapper details; (4) omission of Java APIs requiring Netty/JVM framework-object contracts. Also, Rust need not extend TLS key encryption/key-size support beyond the selected RustCrypto/rustls capabilities.
+- Scope guard: these acceptances are narrow, do not waive missing transport/control flow or unrelated public-API additions. TLS trust/hostname/mode behavior, supported Java key formats and Phase 19 tests remain required. ChannelWrapper reconnect details, allocator behavior, signed-duration/other validation edges, equality semantics and specific transport errors/control paths remain subject to source review and evidence.
+- Updated `docs/compatibility/PHASE_3_REMOTING_INVENTORY.md` and `docs/compatibility/KNOWN_DIFFERENCES.md` with the decisions. No implementation changes.
+- Phase 3 acceptance and Phase 4 start remain blocked pending final Java/Rust difference inventory review, including unresolved API/feature items. P3-V04 remains for Phase 19.

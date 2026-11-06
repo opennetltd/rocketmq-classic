@@ -1,0 +1,22 @@
+# Phase 18 Producer publish-info ConcurrentMap remapping and views — 2026-10-14T02:49:24Z
+
+- Continued `phase/19-phase-18-compatibility-release-gate` from `1e45a8fd`; the pinned RocketMQ Java client source/artifact is 5.5.1 at `efa1be59d6fc747ad220f036c86030f05f0419f9`, and the external checkout remains read-only.
+- Added Java-backed Producer table support for `computeIfAbsent`, `computeIfPresent`, `compute`, `merge`, conditional replace/remove, `replaceAll`, ordered `putAll` nullable rows, and retained key/value/entry view single and bulk mutations. Per-key remapping gates serialize same-topic mutation; same-thread recursive mutation is rejected to avoid deadlock. Fixture/Rust checks also preserve prefix writes before a later null `putAll` row. Code/test/fixture commit: `d09405f4` (`feat(producer): map publish info table operations`).
+- Updated `fixtures/producer/core.json`; SHA-256: `4a17ff344fe215f19bccc95464b1fcdcd532795181f3e35da5bbe45af50e4574`.
+- Updated the Phase 7 matrix and release checklist. These docs and this log are recorded in a separate documentation commit.
+
+## Verification
+
+- PASS: `cargo fmt --all`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `cargo clippy -p rocketmq-classic-producer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo test -p rocketmq-classic-producer --locked` (119 unit tests, 44 integration tests, and doc targets).
+- PASS: `mvn -q -f compat/java-reference/pom.xml -Dproducer.core.fixture.verify=false verify` (fixture generation, Java reference checks and 37 scenarios).
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (fixture drift checks and 37 scenarios).
+- PASS: `python3 tests/differential/compare.py --self-test`; `python3 tests/differential/compare.py --validate-manifest` (37 scenarios).
+- The current complete workspace P18-V02 rerun is deferred until the remaining P18-V01 audit changes are complete. The most recent complete workspace evidence is logged on revision `52ef36ab`.
+
+## Remaining work
+
+- P18-V01 remains PARTIAL: nullable callback/key/value and view-collection branches for the live table, returned client-factory surface, nested `MQFaultStrategy` helpers, per-overload input/branch crosswalks, Java reverse-export, inherited/trait API, and broad source/input reconciliation remain open.
+- No current GitHub Ubuntu workflow result exists for the Linux-specific Java address profile. Phase 19 Docker/Broker scenarios have not run. Confirming the `0.1.0` release version and registry dependency resolution also remain open; packages stay unpublished.
+- Final owner-run platform checks remain separate: Windows IP Helper runtime enumeration, non-macOS BSD runtime enumeration, and an IPv6-only host. No Broker was contacted and no push/publication/tag was performed.

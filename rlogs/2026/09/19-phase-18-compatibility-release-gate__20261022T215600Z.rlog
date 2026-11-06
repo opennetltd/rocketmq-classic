@@ -1,0 +1,34 @@
+P18-V01 active channel-event callback shutdown parity —
+2026-10-22 21:56 UTC
+
+Environment: macOS AArch64, Rust 1.85.0. Branch:
+`phase/18-phase-18-compatibility-closure`. Java reference is RocketMQ 5.5.1,
+commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Source review found that Java `ChannelEventListener.onChannelActive` runs
+synchronously on `NettyEventExecutor`; `NettyRemotingClient.shutdown()` waits
+for that worker through `ServiceThread.shutdown()` for up to 90 seconds. Rust's
+public async Active adapter had been canceled on shutdown. It now runs to
+completion on its owned event worker, matching the synchronous Java callback
+flow. `shutdown().await` still returns after the 90-second join bound if the
+callback remains active; the worker can continue in background.
+
+Code/test commit: `4248ce38 fix(remoting): drain active callbacks on shutdown`.
+The slow-listener unit and scripted-peer tests now explicitly release the
+callback and verify its completion; transport RPC continues while the observer
+is slow.
+
+Current-revision verification:
+- `cargo test --offline --workspace --all-features --lib --quiet --locked` —
+  PASS.
+- Remoting library tests — PASS (140 tests).
+- Remoting `tests/transport.rs` — PASS (107 tests).
+- Core `tests/heartbeat.rs` — PASS (17 tests).
+- Strict all-target/all-feature workspace Clippy — PASS.
+- Formatting and `git diff --check` — PASS.
+
+The Phase 16 channel-event row now records the shutdown wait boundary and the
+revised slow-observer test. Broad P18-V01 source/API/settings/input/error/
+control-flow and reverse-export reconciliation remains open. No external CI,
+push, publication, or release operation was performed. Protected Phase 19
+working-tree paths remain unstaged.

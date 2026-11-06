@@ -1,0 +1,82 @@
+# Phase 18 POP/Lite POP header parity slice — 2026-10-18T11:18:55Z
+
+- Branch: `phase/19-phase-18-compatibility-closure`; base revision `1b032468`.
+  Java oracle remains pinned to RocketMQ client 5.5.1 / source marker
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; no Java checkout changes.
+- Source/bytecode inspection confirmed `PopLiteMessageRequestHeader` uses
+  reflection decoding, has a no-op `checkFields()`, and extends
+  `RpcRequestHeader`. Nullable client/group/topic/attempt strings remain null;
+  missing or malformed primitive numbers stay at zero; inherited `ns`, `nsd`,
+  `bname`, and `oway` are serialized and participate in base equality/hash.
+  Added the header to the request-header identity oracle (42 classes total).
+- Added Java fixtures for both decode hints, absent/malformed/overflow values,
+  valid Arabic-Indic numerals, base fields, and `isTimeoutTooMuch()` elapsed and
+  far-future cases. Rust now preserves nullable strings and inherited fields,
+  matches Java's base-only equality/hash, and exposes the timeout helper for
+  Lite POP. The same Java timeout helper is now mapped for regular POP. Added
+  boundary and signed-overflow regressions.
+- First Protocol all-feature run caught an invalid `compile_fail` doctest that
+  expected `PopLiteMessageRequestHeader` not to implement equality. The class
+  inherits equality from Java `RpcRequestHeader`, so the incorrect guard was
+  removed and the complete Protocol test run then passed.
+- Verification on macOS ARM64, Rust 1.85.0: Protocol all-feature tests PASS;
+  workspace all-feature tests PASS; strict all-target/all-feature workspace
+  Clippy PASS; Maven `verify` PASS (37 scenarios, fixture checks, 66 typed
+  headers and 15 typed bodies cross-decoded); `cargo fmt --all -- --check` and
+  `git diff --check` PASS. Maven emitted existing JDK Unsafe/reflection
+  warnings and exited 0.
+- Fixture SHA-256: optional numeric/decode modes
+  `2c7095818dfb39cfd892f84e585b57c4a61cf09f60f4d6dfc5489674ec340424`;
+  request-header identity
+  `cb0a9c871e95bdb006f7bdb5a8a54c2cf74a214ee79729a6e7470f8b62bce9c1`.
+- The complete P18-V02 supplementary race/fuzz/example/benchmark/package gate
+  remains to be refreshed after implementation work. Broad P18-V01 source/API/
+  settings/input/error/flow and reverse-export reconciliation, final P18-V03
+  package/provenance and pre-publication checks, current-revision P18-V04
+  Ubuntu/native Windows evidence, and Phase 19's remaining local runners and
+  profiles remain open. MAN-05 awaits the complete local matrix; MAN-01–04 are
+  owner-environment checks.
+- Pre-existing Phase 19 README/runner edits remain unstaged. This P18 slice and
+  its execution record are intended for one separate commit.
+- Follow-up on revision `c6b3ef32`: `CARGO_TARGET_DIR=/tmp/rocketmq-classic-target
+  cargo test --workspace --locked` also passed, completing current-revision
+  default and all-feature workspace test evidence for this slice.
+
+## Current-worktree P18-V02 server-free gate — 2026-10-18T12:22:11Z (`f5a924fa`)
+
+- Branch: `phase/18-phase-18-compatibility-closure`; current code revision
+  `f5a924fa`, documentation HEAD before this entry `46850b8f`. No source code
+  changed during verification. The uncommitted Phase 19 runner files remain
+  untouched.
+- Linux ARM64, `rust:1.85.0-bookworm`, Rust 1.85.0: default
+  `cargo test --workspace --locked --offline -- --test-threads=1` and
+  `CARGO_NET_OFFLINE=true cargo test --workspace --all-features --locked --
+  --test-threads=1` pass, including integration tests and doctests. All-target/
+  all-feature workspace `cargo check` and strict Clippy pass. Container used
+  `--init`, read-only Cargo
+  cache mounts, `/workspace` source mount, `/build` target directory, and a
+  temporary C test runner that clears inherited signal masks.
+- Two non-gating attempts exposed container issues and were discarded: without
+  the runner, the consumer jstack test inherited a fully blocked candidate
+  signal mask; with the runner but a `/work` mount, a cached test binary looked
+  for fixtures under its embedded `/workspace` path. The corrected mount and
+  runner completed the suite.
+- Server-free supplements pass: Maven `verify` on this code revision (37
+  scenarios, fixture checks, 66 typed-header and 15 typed-body cross-decodes);
+  differential comparator self-test and 37-row manifest validation; race/leak
+  smoke (16 cases × 3); fuzz smoke (120 frame seeds, 11 message seeds, 2,096
+  mutations, 164 frame decodes, 120 message decodes); release examples;
+  workspace bench compilation and offline benchmark; locked Cargo metadata,
+  workspace metadata/license/dependency checks, seven publishable package
+  listings, UTC and Asia/Taipei Unique ID tests, formatting, and diff checks.
+- Linux ARM64 benchmark observations (Rust 1.85.0): frame encode/decode
+  1,217.0 ns/iteration; Zstd decode 711.2 ns; producer request construction
+  906.9 ns; route lookup 14.1 ns; loopback pending completion 5,894.3 ns.
+  Measurements are observations, not thresholds.
+- This closes P18-V02 server-free gates on `f5a924fa`. Broad P18-V01
+  source/API/settings/input/error/flow and reverse-export reconciliation,
+  final P18-V03 package/provenance and pre-publication checks, current-revision
+  Ubuntu/native Windows P18-V04 evidence, and Phase 19's 30 remaining local
+  scenario runners and required profiles remain open. MAN-01–04 are owner
+  checks; MAN-05 awaits local-matrix classification. No remote CI, tag, push,
+  publication, or deployment was triggered.

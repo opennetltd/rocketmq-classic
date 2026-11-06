@@ -1,0 +1,115 @@
+# P18-V01 inherited RemotingSerializable writer feature continuation
+
+Timestamp: 2026-10-16 21:49 UTC
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md (unchanged)
+Branch: phase/19-phase-18-compatibility-release-gate
+Starting revision: 9ce1db75
+Implementation commit: 2261c5b1
+
+## Finding and changes
+
+- Pinned Java oracle: `/Users/bruce.tsai/Projects/3rd/rocketmq`, commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; Fastjson2 2.0.63.
+- Added public `JavaJsonWriterFeature` with all 48 pinned enum names and
+  ordinals. Added `java_encode_with_features` to 15 body DTOs, both route DTOs,
+  and `HeartbeatData`.
+- Implemented `WriteNonStringValueAsString` and compared it against invoked
+  Java output for body values, `MessageQueue` map keys, route integer map keys,
+  and heartbeat values. Unknown/unmapped features fail explicitly; 47 feature
+  behaviors remain open.
+- Extended the route and heartbeat invoked fixtures and added differential
+  assertions for empty features, the implemented feature, and rejected
+  unmapped features.
+- Updated the Phase 6 crosswalk and release checklist to replace the prior
+  stale statement that no feature-aware encoder exists.
+- Fixture SHA-256: lookup
+  `5a10759a1b73504c0476b0d08c0f922ab74c5aa04f41b9203e6bfd8a8a7d2d6c`, route
+  `189b34d28d4719b44839a7cc08ab8e209f711b613285a6a6baad194378829cd4`,
+  heartbeat
+  `459adaf81a93ca4d1cb08075fcc65c4db7b75c6a9582ffd0500b499283585bda`.
+
+## Validation
+
+- `cargo test -p rocketmq-classic-protocol --all-features --locked` passed:
+  121 unit tests, all integration targets, and 42 doctests.
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features
+  --locked -- -D warnings` passed.
+- `TZ=UTC mvn -o -q -f compat/java-reference/pom.xml verify` passed all 37
+  scenarios and fixture checks. It emitted JDK Unsafe deprecation and
+  reflective final-field mutation warnings.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+
+## Status
+
+- Commit `2261c5b1` records the implementation and fixture changes; the
+  documentation and this execution log are a separate pending commit.
+- This closes only one writer-feature behavior. The other 47 writer features,
+  broad P18-V01 Java/Rust source/API/settings/input/error/flow/reverse-export
+  reconciliation, and the final-revision full-workspace P18-V02 run remain
+  open.
+- Current-revision Ubuntu/Windows CI evidence and Phase 19 Docker/Broker local
+  automation and scenario execution remain open. Package/pre-publication
+  resolution and review also remain open.
+- No plan edits, Docker/Broker execution, push, tag, publication, or release
+  action occurred.
+
+## P18-V01 `PrettyFormat` writer feature continuation
+
+Timestamp: 2026-10-16 22:05 UTC
+Implementation commit: `cf51df04`
+
+### Changes
+
+- Added `PrettyFormat` as a mapped writer feature. `java_encode_with_features`
+  now emits the same tab-indented JSON as the pinned Java feature overload for
+  all 15 body DTOs, both route DTOs, and `HeartbeatData`.
+- Extended differential assertions across body, route, and heartbeat writer
+  feature fixtures, including timezone-projected `QueryConsumeTimeSpanBody`
+  outputs.
+- Two of 48 writer features are now implemented; the other 46 still return an
+  explicit unsupported-feature error.
+
+### Validation
+
+- `cargo test -p rocketmq-classic-protocol --all-features --locked` passed:
+  121 unit tests, all integration targets, and 42 doctests.
+- Strict all-target/all-feature Protocol Clippy, format check, and diff check
+  passed.
+
+### Status
+
+- The latest full-workspace default/all-feature validation preceded this
+  feature change. Rerun it at the final revision after the next implementation
+  slice.
+- Broad P18-V01 remains open for 46 writer features and source/API/settings/
+  input/error/flow/reverse-export reconciliation.
+
+## P18-V01 space-indent writer feature continuation
+
+Timestamp: 2026-10-16 22:11 UTC
+Implementation commit: `c9d502a3`
+
+### Changes
+
+- Added Java `PrettyFormatWith2Space` and `PrettyFormatWith4Space` indentation
+  to inherited serializer adapters across the mapped 15 body DTOs, both route
+  DTOs, and `HeartbeatData`.
+- Reused a shared indentation selector for tab, two-space, and four-space
+  formatting. Fastjson2's source selects four spaces before two spaces when
+  both writer features are enabled; a route DTO regression pins that result.
+- Four of 48 writer features now have behavior mappings; 44 remain unmapped.
+
+### Validation
+
+- `cargo test -p rocketmq-classic-protocol --all-features --locked` passed:
+  121 unit tests, all integration targets, and 42 doctests.
+- Strict all-target/all-feature Protocol Clippy, format check, and diff check
+  passed.
+
+### Status
+
+- The last full-workspace default/all-feature run preceded this space-indent
+  change. Re-run the final full-workspace P18-V02 gate after the next
+  implementation slice.
+- Broad P18-V01 remains open for 44 writer features and Java/Rust source/API/
+  settings/input/error/flow/reverse-export reconciliation.

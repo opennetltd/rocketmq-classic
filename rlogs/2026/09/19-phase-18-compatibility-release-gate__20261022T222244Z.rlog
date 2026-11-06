@@ -1,0 +1,26 @@
+## P18-V01 POP-to-PULL assignment transition — 2026-10-22
+
+Compared the Java 5.5.1 `updateMessageQueueAssignment` PULL-mode branch with
+Rust Push rebalance when an active queue is present in both the pull and POP
+tables. Added `popToPullTransition` to the invoked Java fixture. Java and Rust
+both mark and remove the old POP state, retain the existing pull queue, and
+stop/remove the POP worker.
+
+Updated fixture SHA-256:
+`b414477a4a64b2c252d704704a70c7b1a89f2b6a5b1014531ca0200690edda36`.
+
+Verification:
+
+- Focused `rebalance_switch_to_pull_removes_pop_queue_and_stops_worker` — PASS.
+- `cargo test --offline -p rocketmq-classic-consumer --lib --locked` — PASS,
+  256 tests.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS, including
+  invoked Java fixture drift checks, 37 compatibility scenarios, Java
+  cross-decodes of 106 typed headers and 19 typed bodies.
+- `cargo fmt --all -- --check` — PASS.
+- `git diff --check` — PASS.
+
+This closes the tested POP-to-PULL cleanup branch only. Broad P18-V01 audit,
+current-revision remote Ubuntu CI, native Windows execution, and Phase 19
+Broker/Docker validation remain open. Protected Phase 19 worktree paths were
+left untouched.

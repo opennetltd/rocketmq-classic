@@ -1,0 +1,18 @@
+# Phase 3 remoting audit continuation — 2026-10-03
+
+## Actions
+- Resumed from compacted context; inspected the current working-tree status and target diff before edits. Preserved all existing modifications and historical rlogs.
+- Reviewed the Rust implementation skill and re-read the complete English and Traditional Chinese Phase 3 plans, including the execution contract and acceptance criteria.
+- Audited the current Phase 3 inventory. It still contains source-backed behavioral/configuration mismatches and incomplete public-surface dispositions; these are blockers, not blanket-accepted differences. Did not change inventory status labels to imply acceptance.
+- Ran `cargo test --workspace --offline -- --test-threads=1`: passed (all workspace unit/integration/doc tests, including remoting transport cases).
+- Ran `cargo clippy --workspace --all-targets --offline -- -D warnings`: passed.
+- Ran `cargo fmt --all --check`: passed.
+- Ran `python3 scripts/check-workspace-metadata.py`: passed.
+- Ran `python3 tests/differential/compare.py --self-test`: passed.
+- Ran `git diff --check`: passed.
+
+## Status and blockers
+- No commit was made in this continuation. The user requires independent commits per change, including logs; commits must wait until the code and compatibility audit establish reviewable, accurate change units.
+- The inventory has unresolved behavioral/configuration gaps (including mutation timing, Java thread-pool/backpressure semantics, exact callback timeout completion behavior, and API surface questions). The prior broad `ACCEPTED DIFFERENCE` labeling is not supported by the user's scoped decisions and must be reviewed row by row against pinned Java 5.5.1 source and the no-extra-capability contract.
+- Phase 3 remains unaccepted. P3-V04 remains deferred to Phase 19. Do not start Phase 4.
+- Existing untracked historical rlogs are preserved. This session log is append-only and is the only log file written by this continuation.

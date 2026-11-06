@@ -1,0 +1,40 @@
+Phase 18 ACL utility API audit continuation — 2026-10-16
+
+Context
+- Plan: `plan/2026/09/19-phase-18-compatibility-release-gate.md`; plan unchanged.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Pinned Java client source commit:
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Actions
+- Added reflected `AclUtils` constructor and declared-public-method signatures
+  to the Java oracle fixture. The Rust fixture test pins the exact no-argument
+  constructor plus 22 public static methods and calls the corresponding Rust
+  wrappers.
+- Added Java/Rust scope-token cases for surrounding whitespace and an
+  out-of-range numeric token.
+- Added a method-level crosswalk row to the Phase 16 security matrix.
+- Pinned and current Java `AclUtils.java` SHA-256 both equal
+  `86a4a1f968685a6ef3392a0d8b67f0af8301a70e2dbace74de0908a4be7f7fa3`.
+- ACL fixture SHA-256:
+  `bb2e97058c0d8509d8143e0a21bd67bad51c0079d8753627db86086973667c4f`.
+- Code/fixture commit: `abde18c6` (`test(compat): pin ACL utility public
+  surface`). Documentation and this log are committed separately.
+
+Validation
+- `cargo test -p rocketmq-classic-core --lib --locked
+  public_acl_utility_surface_matches_pinned_java_fixture` passed (1 test).
+- `cargo clippy -p rocketmq-classic-core --all-targets --all-features --locked
+  -- -D warnings` passed.
+- `mvn -f compat/java-reference/pom.xml verify` passed, including the updated
+  Java ACL fixture and all other fixture goals.
+- `cargo fmt --all -- --check` passed.
+- `git diff --check` passed.
+
+Scope status
+- This closes the `AclUtils` declared constructor/method surface slice only.
+- Broad bidirectional P18-V01 API/configuration/input/error/flow/reverse-export
+  reconciliation remains open. The final-revision full workspace P18-V02 gate,
+  current-revision CI evidence, Phase 19 Docker/Broker automation, and release
+  version/registry checks also remain open. Production-only owner checks remain
+  Phase 19 manual validation.

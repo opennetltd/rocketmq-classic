@@ -1,0 +1,28 @@
+# Phase 18 Broker config read compatibility slice — 2026-10-21T04:32:02Z
+
+- Continued the pinned Java 5.5.1 P18-V01 source audit. Public
+  `MQClientAPIImpl.getBrokerConfig(String,long)` was missing from the Core RPC
+  crosswalk. Rust now sends request 26 without header/body, passes the supplied
+  Broker address unchanged, decodes Java Properties semantics, and preserves
+  Broker response errors.
+- Extended the pinned Producer/Core Java fixture with exact
+  `getBrokerConfig` API reflection and Properties cases for empty input,
+  escaped separators, Unicode escapes, malformed escapes, raw non-ASCII text,
+  and a final backslash. Current `fixtures/producer/core.json` SHA-256:
+  `53f8d3ae387f5df155d0c10484815f3a71d00debafb70c82ed0912f3848bca2f`.
+- Rust parser and scripted RPC tests cover fixture outcomes, request fields,
+  missing response body and Broker errors. A VIP-enabled test confirms the
+  supplied address is used. Empty Properties text parses to an empty map; an
+  absent frame body maps to `MalformedResponse`, while Java dereferences null
+  before parsing.
+- Validation passed: Core all-feature locked tests (176 unit tests, all
+  integration targets and 16 doctests); strict all-target/all-feature Clippy
+  for Common, Core, Producer and facade; Producer pinned fixture comparison;
+  pinned Java Maven `verify` (37 scenarios, fixture drift and Java/Rust
+  cross-decodes); `cargo fmt --all`; and scoped `git diff --check`.
+- Updated the Phase 6/7 maps, Java compatibility summary, requirement audit,
+  release checklist and this execution record. The Phase 18 plan was not
+  edited. Broad P18-V01, the final current-revision P18-V02 refresh, P18-V03
+  package/provenance review and current Ubuntu/native Windows P18-V04 remain
+  open. No remote CI or Phase 19 Broker/Docker work was run.
+- Phase 19 worktree files remain untouched and unstaged.

@@ -1,0 +1,27 @@
+# Phase 18 createTopicList RPC slice — 2026-10-21T05:44:45Z
+
+- Continued the pinned RocketMQ Java 5.5.1 audit at
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`. Added
+  `MQClientApi::create_topic_list` and its nullable adapter for
+  `MQClientAPIImpl.createTopicList(String,List,long)`, request 18, Java
+  `CreateTopicListRequestBody`, Broker response handling and configured VIP
+  address transformation.
+- Added protocol `TopicConfig` and `CreateTopicListRequestBody` encoders plus
+  invoked Java signature/operation fixtures. Rust compares exact body bytes for
+  populated/default/custom and empty lists, a null list, a null list element,
+  and a Broker error. A VIP-enabled loopback verifies the two-port transform.
+  Producer core fixture SHA-256:
+  `fcf27463aa5fde04867de50543847ad53dabc1b5c3b526ae8ac2406481514ec7`.
+- Validation passed: focused Java/Rust RPC differential and VIP loopback;
+  Core all-feature locked suite (180 unit tests, all integration targets and
+  16 doctests); strict all-target/all-feature Clippy for Common, Core, Producer
+  and facade; Producer pinned fixture comparison; pinned Java Maven `verify`
+  (37 scenarios, 67 typed-header frames, 15 typed-body fixtures and Java/Rust
+  cross-decodes); formatting and `git diff --check`.
+- Updated the Phase 6 API map and requirement audit, Java compatibility summary,
+  Phase 7 fixture digest progression, release checklist and this record. The
+  Phase 18 plan was not edited. This RPC is closed; broad P18-V01, P18-V02
+  current-tree refresh, P18-V03 package/provenance review and P18-V04
+  environment evidence remain open. No remote CI or Phase 19 Broker/Docker
+  validation ran.
+- Phase 19 worktree files remain untouched and unstaged.

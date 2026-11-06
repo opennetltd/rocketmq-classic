@@ -1,0 +1,54 @@
+# Execution log: Phase 19 P7-V04 Broker-backed producer stress
+
+- Session date: 2026-10-26 UTC
+- Starting workspace revision: `1e4152b925dde55ad545d06d3d72af6f21a8f69c`
+- Stress implementation commit: `5e1c80b1716936a04f319832adc9d382adc2b500`
+- Pinned Java oracle: Apache RocketMQ 5.5.1 source
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; Java checkout remained read-only.
+- Scope: fill the missing server-backed bounded sustained-load portion of
+  P7-V04, update current compatibility and owner-handoff summaries, then rerun
+  the full Phase 19 local aggregate. No plan files were edited.
+
+## Implementation and focused live result
+
+- Added matching fixed-seed variable-size producer probes for Java 5.5.1 and
+  Rust. P7-V04 now sends 8,192 messages per language with a maximum of 32
+  concurrent sends, a 120-second deadline, matching payload byte totals and
+  FNV-1a checksums, and contiguous Broker queue offsets. Three existing
+  20-send producer start/shutdown cycles still run afterward.
+- `ROCKETMQ_CLASSIC_TEST_ENV=local-disposable ROCKETMQ_PROFILE=two-broker-host
+  tests/differential/run.sh --scenario P7-V04` passed at clean source revision
+  `5e1c80b1716936a04f319832adc9d382adc2b500`; evidence is
+  `docs/compatibility/evidence/phase-19/P7-V04/20261026T005812Z/`.
+- Java sent 8,192 messages in 2,361 ms at offsets 0–8,191; Rust sent 8,192 in
+  1,942 ms at offsets 8,192–16,383. Both sent 6,292,961 payload bytes with
+  checksum `f47e95bbe41fd746`. Both probes reported zero pending requests,
+  connections, and owned task groups. Metadata records `source_code_dirty=false`,
+  exit status 0, and a 102-second total scenario duration.
+- After evidence capture, filtered Docker queries found no containers or
+  volumes for the scenario project. The runner removed the scenario-owned topic
+  and disposable project.
+- An earlier dirty working-tree diagnostic at 512 messages passed in 118
+  seconds but was not official evidence. The clean-source 8,192-message run
+  supersedes it; the diagnostic directory is retained and is not referenced by
+  the scenario manifest.
+
+## Checks and pending gates
+
+- Before commit: `cargo fmt --all -- --check`, shell syntax checks,
+  `compare.py --validate-manifest`, `run.sh --check-all`, and `git diff --check`
+  passed. Java Maven verification and strict Clippy had also passed for the
+  implementation before the focused live run.
+- Documentation now describes P7-V04 coverage and clarifies MAN-04: the local
+  bounded workload does not establish representative production capacity or
+  SLOs. MAN-01–04 still require owner inputs.
+- The 23-gate full local aggregate at
+  `docs/compatibility/evidence/phase-19/run-local/20261025T225807Z/` predates
+  this code revision. A fresh `bash integration-tests/run-local.sh --all` and
+  final evidence reconciliation remain required.
+- GitHub Actions run `40249722222` targets earlier commit `1e4152b9`; its Windows
+  job passed while Linux tests and its Docker Phase 19 matrix were in progress
+  at the time of this record. This run cannot validate the new stress code. Push
+  the completed candidate and await a workflow for its commit.
+- No owner or production environment was accessed. No tag or package was
+  created or published.

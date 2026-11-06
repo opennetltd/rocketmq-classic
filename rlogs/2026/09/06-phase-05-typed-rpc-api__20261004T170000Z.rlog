@@ -1,0 +1,5 @@
+Session 2026-10-04T17:00:00Z; plan: plan/2026/09/06-phase-05-typed-rpc-api.md
+Decision: treat optional bname from pinned Java 5.5.1 send-back as a backward-compatible header parity correction; no user decision required. Phase 19 live gate remains pending.
+Action: extended invoked Java consumer list with unknown response code and malformed JSON, persisted two response/request fixtures, and compared same cases against scripted Rust RPC. Commit 9f541ca.
+Validation: Maven verify and cargo test -p rocketmq-classic-core --test rpc_invoked_consumer_fixtures --locked passed. Initial generic Maven exec:java failed because this POM configures the exec goal to invoke Main; rerun via exec:java@verify-java-invoked-consumer-fixtures succeeded.
+Progress: delegated isolated pull/lock/unlock, extensions, and producer parity fixtures and read-only Rust gate audit. P5-U01/V01/V03 remain open pending full method review; P5-V02 belongs to Phase 19.

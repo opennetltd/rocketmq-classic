@@ -1,0 +1,20 @@
+Phase 18 `getLiteClientInfo` RPC and response DTO
+
+Date: 2026-10-21 UTC
+Branch: `phase/18-phase-18-compatibility-closure`
+
+Scope:
+- Added `MQClientApi::get_lite_client_info` for pinned Java request 200077, with nullable request values, default header `maxCount=1000`, synchronous invocation, configured VIP conversion, caller deadline and nullable body decoding.
+- Added `GetLiteClientInfoRequestHeader` and `GetLiteClientInfoResponseBody`. The response DTO preserves nullable strings, a nullable Set, nullable Set elements, primitive defaults and mutable Set aliases.
+- Added seven invoked Java cases, a Rust fixture differential, a VIP loopback, a typed Java header fixture and Protocol header/body regressions.
+- Code commit: `285cdb4d` (`feat(core): add get lite client info RPC`). Compatibility docs are committed separately; preserved Phase 19 worktree paths remain untouched and unstaged.
+
+Evidence:
+- Success fixture SHA-256: `9e4e1ad1abd344d58ba5939b2fd204a4237c4e60570ceba9c878790aee85ae8b`.
+- `cargo check --workspace --locked` passed; focused body/header/Core loopback and invoked fixture differential passed; `header_inventory` passed 12 tests.
+- `cargo fmt --all`, `git diff --check`, and pinned `mvn -f compat/java-reference/pom.xml verify` passed. Maven verified 37 manifest cases, decoded 82 Rust typed header frames and 15 typed body frames.
+- The first Rust check found that this repository names its Java-long deserializer `deserialize_i64_reject_object`; the DTO now uses that helper and builds successfully.
+
+Remaining:
+- Full default/all-feature workspace suites and strict Clippy are scheduled with the following Lite discovery RPC slice.
+- Lite discovery request 200078, broad P18-V01 audit, current Ubuntu/native Windows P18-V04 evidence and Phase 19 live Broker scenarios remain open.

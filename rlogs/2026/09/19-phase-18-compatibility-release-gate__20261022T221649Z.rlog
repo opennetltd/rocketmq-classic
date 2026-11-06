@@ -1,0 +1,27 @@
+## P18-V01 POP unsubscribe truncation — 2026-10-22
+
+Compared Java 5.5.1 `RebalanceImpl.truncateMessageQueueNotMyTopic` with the
+Rust Push rebalance cleanup for a POP queue whose topic is no longer
+subscribed. Added an invoked Java fixture that records `dropped=true` and
+table absence, and a Rust regression that checks the same state plus POP
+worker cancellation/removal. No production implementation change was needed.
+
+Fixture SHA-256:
+`a40640a3ee3a5e17d6845421ffd9808e0cad6152ac2952c8c8002fc168cb6aa1`.
+
+Verification:
+
+- Focused Consumer regression — PASS.
+- `cargo test --offline -p rocketmq-classic-consumer --lib --locked` — PASS,
+  255 tests.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS, including
+  invoked Java fixture drift checks, 37 compatibility scenarios, Java
+  cross-decodes of 106 typed headers and 19 typed bodies.
+- `cargo fmt --all -- --check` — PASS.
+- `git diff --check` — PASS before the final audit-log append; rechecked after
+  documentation updates.
+
+This closes the unsubscribed POP cleanup branch only. Broad P18-V01 audit,
+current-revision remote Ubuntu CI, native Windows execution, and Phase 19
+Broker/Docker validation remain open. Protected Phase 19 worktree paths were
+left untouched.

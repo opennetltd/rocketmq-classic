@@ -1,0 +1,131 @@
+2026-10-15 18:44 UTC — reconciled the `MessageClientExt` constructor surface.
+
+The pinned Java source at `efa1be59d6fc747ad220f036c86030f05f0419f9` declares
+no constructor on `MessageClientExt`; its public implicit constructor is
+no-argument. The invoked Java fixture now reflects one public no-argument
+constructor. Rust `MessageClientExt::new()` and `Default` match that
+construction path; removed the public `new(MessageExt)` method and
+`From<MessageExt>` implementation. Rustdoc compile-fail examples guard both
+conversion surfaces. The decoder differential continues checking the
+client-visible and physical IDs directly on decoded messages.
+
+Code/fixture/matrix commit: `8b91e933`.
+
+Fixture regeneration:
+- Initial command
+  `mvn -f compat/java-reference/pom.xml compile exec:java -Dexec.mainClass=compat.MessageDecodeFixtures -Dexec.args='fixtures/messages/records.json false'`
+  failed because the POM fixes the default main class to `compat.Main`; its
+  usage error was retained here.
+- `mvn -f compat/java-reference/pom.xml dependency:build-classpath -Dmdep.outputFile=/tmp/rocketmq-classic-java-reference-classpath.txt`
+  passed.
+- `java -cp "compat/java-reference/target/classes:$(cat /tmp/rocketmq-classic-java-reference-classpath.txt)" compat.MessageDecodeFixtures fixtures/messages/records.json false`
+  regenerated 11 fixtures from the pinned 5.5.1 source; the fixture records
+  one public constructor and confirms it has no parameters.
+
+Validation passed:
+- `cargo test -p rocketmq-classic-common --all-features --locked` — 21 unit,
+  20 message-decode integration, 1 topic-validator and 20 doctests passed.
+- `cargo clippy -p rocketmq-classic-common --all-targets --all-features --locked -- -D warnings`
+- `mvn -f compat/java-reference/pom.xml verify` — 37 scenarios and all fixture
+  drift checks passed, including the updated message decode fixture.
+- `cargo fmt --all -- --check` and `git diff --check`.
+
+Fixture SHA-256:
+`cd7329a631de04393ceb4fdb7eff701ceec05728213605e9efd07eceaf184ccb`.
+This closes only the constructor API slice. Broad P18-V01 remains open; full
+workspace P18-V02 gates must be rerun on the final code revision. GitHub
+Ubuntu evidence, Phase 19 local Docker/Broker automation, and pre-publication
+version/registry checks are still outstanding. No push, tag, publication,
+deployment, Docker or live Broker action occurred.
+
+2026-10-15 18:53 UTC — completed a re-export-aware Common inherent-method
+crosswalk slice.
+
+Generated the all-feature Common Rustdoc JSON with
+`rustup run nightly cargo rustdoc --locked -p rocketmq-classic-common
+--all-features -- -Z unstable-options --output-format json`. Traversing the
+public re-export graph reached 26 aggregate types. Exact method-name search
+initially found 13 names absent from compatibility tables. Source/test review
+confirmed the Java mappings and added explicit rows for mutable `getBody`
+contents, nullable `hasProperty` and `putUserProperty`, `MessageHostAddress`
+to `InetSocketAddress` adapters, `MessageId` setters, and the public
+`TopicValidator` set getters. The final name sweep found no public inherent
+method names absent from compatibility docs. This scan is a name crosswalk;
+it does not prove trait/inherited surfaces or Java overload/input/error/flow
+parity.
+
+Pinned Java source inspection confirmed `TopicValidator.getSystemTopicSet()`
+and `getNotAllowedSendTopicSet()` are public; the underlying fields are
+private. Existing Rust accessors map those public methods, so no code boundary
+change was appropriate.
+
+Code/test/matrix commit: `e4593202`.
+
+Validation passed:
+- `cargo test -p rocketmq-classic-common --all-features --locked` — 21 unit,
+  20 message-decode integration, 1 topic-validator and 20 doctests passed.
+- `cargo clippy -p rocketmq-classic-common --all-targets --all-features --locked -- -D warnings`
+- `cargo fmt --all -- --check`, `git diff --check`.
+
+The constructor slice's earlier Maven verify passed on the same Java fixture;
+this continuation changes no Java source or fixture. Broad P18-V01 remains
+open, and full-workspace P18-V02 must be rerun on the final code revision.
+
+2026-10-15 19:12 UTC — reconciled the Java `MessageExt` constructor surface.
+
+Pinned source commit `efa1be59d6fc747ad220f036c86030f05f0419f9` declares exactly
+these public constructors: `MessageExt()` and
+`MessageExt(int, long, SocketAddress, long, SocketAddress, String)`. The invoked
+`messageExtPublicApi` fixture now reflects and pins both signatures. Rust
+`MessageExt::new()` and `Default` map to the no-argument constructor; the
+Rust-only public `new(Message)` conversion was removed. Common decoder internals
+use a crate-private `from_message`; Consumer/Core product paths use no-argument
+construction and inherited setters. Consumer/Core test fixtures use cfg(test)
+helpers, which add no downstream API. A compile-fail doctest guards both the
+removed conversion and the private helper boundary. The Phase 8 matrix and
+release checklist record this bounded closure; broad P18-V01 remains open.
+
+Fixture SHA-256: `9400beefa451ed1e29cdda0cb1171387aacd6929d5e2a144de3a837f6ca840e0`.
+Code/test/fixture/matrix changes are pending their own commit.
+
+Validation:
+- `cargo test -p rocketmq-classic-common -p rocketmq-classic-consumer -p rocketmq-classic-core --all-features --locked` passed; Common, Consumer, Core, their integration tests and doctests all passed. The first run surfaced three unused imports from migrated call sites; those imports were removed.
+- `cargo test -p rocketmq-classic-common --all-features --locked` passed after the Java constructor fixture update: 21 unit tests, 20 message-decode integration tests, 1 topic-validator integration test, and 22 doctests, including both compile-fail API checks.
+- `cargo clippy -p rocketmq-classic-common -p rocketmq-classic-consumer -p rocketmq-classic-core --all-targets --all-features --locked -- -D warnings` passed after import cleanup.
+- `mvn -f compat/java-reference/pom.xml verify` passed: all 37 scenarios and fixture drift checks.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+
+Full-workspace P18-V02 gates still need a final-revision rerun. Broad P18-V01,
+current-revision GitHub Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker
+automation, and pre-publication registry resolution remain open. No push,
+publication, Docker, live Broker, tag, or deployment action was taken.
+Code/test/fixture/compatibility-matrix commit: `7665b769`.
+
+2026-10-15 19:24 UTC — reran server-free P18-V02 gates at HEAD `bb93560e`
+(code revision `7665b769`; the later commit records this run).
+
+Passed sequentially on the host UTC timezone:
+- `cargo test --workspace --locked`
+- `cargo test --workspace --all-features --locked`
+- `cargo check --workspace --all-targets --locked`
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+- `mvn -f compat/java-reference/pom.xml verify` — 37 scenarios and fixture drift checks
+- `python3 tests/differential/compare.py --self-test`
+- `python3 tests/differential/compare.py --validate-manifest` — 37 scenarios
+- `bash tests/stress/run-offline-smoke.sh` — 16 race/leak cases × 3
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` — 105 frame seeds, 11 message seeds, 1,856 bounded mutations
+- `cargo build -p rocketmq-classic --examples --release --locked`
+- `cargo bench --workspace --no-run --locked`
+- `cargo metadata --locked --format-version 1 --no-deps`, full locked metadata (215 total packages, 208 registry-sourced), and `python3 scripts/check-workspace-metadata.py`
+- `cargo package --workspace --list --locked --allow-dirty`; individual package-content checks for all seven crates found LICENSE and NOTICE
+- `TZ=Asia/Taipei cargo test -p rocketmq-classic-core --all-features --locked unique_id::tests::` — 4 tests
+- `cargo fmt --all -- --check` and `git diff --check`
+
+This closes the local server-free P18-V02 gate at this revision. Broad P18-V01
+Java/Rust API, settings, overload input/error/control-flow, inherited/trait,
+and reverse-export reconciliation remains open. Current-revision GitHub
+Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker automated scenarios,
+pre-publication version/registry resolution, and native Windows/non-macOS BSD/
+real IPv6-only-host evidence remain open. Owner-run deployment and live Broker
+checks remain Phase 19 manual validation. No push, publication, tag, Docker,
+live Broker, or deployment action occurred.

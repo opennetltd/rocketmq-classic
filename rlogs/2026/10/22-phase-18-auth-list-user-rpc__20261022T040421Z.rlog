@@ -1,0 +1,50 @@
+# Phase 18 compatibility release gate — 2026-10-22 04:04:21 UTC
+
+Base revision: `06aae204`. This entry records the request 3005 `listUser`
+Broker RPC slice. Pinned Java source is
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Compatibility changes
+
+- Added nullable `ListUsersRequestHeader` with Java's no-op `checkFields()`
+  behavior and included it in the typed-header inventory and Java/Rust frame
+  cross-decode.
+- Added `MQClientApi::list_user` for request 3005. It sends the nullable filter
+  to the supplied Broker address with the caller timeout and returns nullable
+  `UserInfo` lists while retaining null list members.
+- Added invoked Java/Rust cases for populated/empty/null filters, null body,
+  JSON null, empty/populated lists, null members, Broker rejection, timeout,
+  and VIP-enabled unchanged-address behavior.
+- Recorded the pinned Fastjson object-root edge: Java decodes `{}` as a list
+  containing the string `"{}"`; Rust returns a malformed-response error rather
+  than exposing a non-`UserInfo` value.
+- Expanded the request-code and direct API audits. A full pinned auth-method
+  scan also found `getUser` (3004) and `getAcl` (3009), omitted from the former
+  candidate table; the remaining auth RPC audit now has six open rows including
+  those two and the four ACL create/update/delete/list operations.
+
+## Local verification
+
+- `cargo test -p rocketmq-classic-protocol --locked`: 155 unit tests, 57
+  integration tests, and 157 doctests passed.
+- `cargo test -p rocketmq-classic-core --test admin_rpc --locked`: 108 passed.
+- `cargo test -p rocketmq-classic-core --lib --locked`: 204 passed.
+- `cargo clippy -p rocketmq-classic-protocol -p rocketmq-classic-core -p rocketmq-classic-remoting --all-targets --all-features --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- `mvn -o -f compat/java-reference/pom.xml verify`: BUILD SUCCESS; Java
+  decoded 100 Rust typed-header fixtures and 19 Rust typed-body fixtures.
+- SHA-256 `fixtures/producer/core.json`:
+  `b57efa07d6234443af6150c3c86dbcf2a5d0c9da243505010fad8f41cfe00654`.
+- SHA-256 `fixtures/remoting/header-list-users-request.json`:
+  `a22b1913c8d7f6503d6c5c9b6404e90243de5137a3b7fd0ec59b9deb162e34ea`.
+- SHA-256 `fixtures/remoting/header-list-users-request.bin`:
+  `6987e99c15b16e37ee2ba7d32f53bece37fd19e6a63e5d998374ef73989fef10`.
+
+## Remaining work
+
+Request 3005 is closed for the typed list response states described above.
+`getUser`, `getAcl`, and the four ACL mutation/list APIs remain unimplemented.
+Broader Phase 18 settings, input, error, control-flow, reverse-export, and
+platform reconciliation also remains open. No Broker, Docker, or remote CI was
+used. Pre-existing Phase 19 worktree paths remain unstaged and outside this
+slice.

@@ -1,0 +1,17 @@
+Execution session: 2026-10-10T14:33:40Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Initial state: worktree clean on the Phase 6 branch, at `e8a56fec` after live VIP mutation coverage for `MQClientInstance.checkClientInBroker`. The source/API/input/platform reconciliation audit remains partial; P6-V04 is assigned to Phase 19.
+
+Selected slice: close the `ClientConfig.clientCallbackExecutorThreads` construction-versus-live-mutation branch. The map already records six Java constructor/executor cases, but did not prove what happens when the retained config changes after the runtime and public executor are constructed.
+
+Java oracle: pinned RocketMQ 5.5.1 constructs `MQClientInstance` with callback capacity 1, then mutates its retained `ClientConfig` value to 2. The config getter returns 2; `NettyClientConfig` and the reflected `NettyRemotingClient.publicExecutor` remain at 1. The generated fixture is `fixtures/runtime/client-config.json`, SHA-256 `0b8ed5f8fcb926797aa5216347961d14e634202672c8f5fd11efcc82c6e40c86`.
+
+Native differential: the loopback test constructs a Rust runtime with callback capacity 1, mutates the shared config to 2, returns two requests together from a local peer, and verifies observed callback concurrency remains 1. No production fix was required. Oracle/fixture commit `1f62b2b3`; Rust test commit `c29e2358`.
+
+Validation: focused loopback regression passed. `cargo test --workspace --all-targets --locked` passed; strict all-target/all-feature Clippy passed; pinned offline Maven verify passed (22 scenarios and fixture drift checks); comparator self-test and manifest validation passed (22 scenarios); `cargo fmt --all -- --check` and `git diff --check` passed.
+
+Documentation: the callback setting row in `PHASE_6_API_CONFIG_MAP.md` now records the post-construction snapshot evidence. `PHASE_6_REQUIREMENT_AUDIT.md` records the oracle, fixture digest, differential, gates, and remaining scope. This closes only the callback-thread activation branch; Phase 6 source/API/input/platform reconciliation remains open, and P6-V04 remains pending Phase 19.
+
+Documentation/log commit: pending.

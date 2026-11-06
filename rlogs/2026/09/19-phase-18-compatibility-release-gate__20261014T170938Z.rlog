@@ -1,0 +1,52 @@
+Phase 18 continuation — remove Rust-only handle identity methods — 2026-10-14 UTC
+
+Starting state
+- Branch `phase/19-phase-18-compatibility-release-gate`; HEAD `7580896a`.
+- Java oracle remains pinned at `efa1be59d6fc747ad220f036c86030f05f0419f9` and read-only.
+- Rustdoc JSON inspection found public `ptr_eq` helpers on Producer and Core handle types, with no corresponding pinned Java API method.
+
+Changes
+- `ProducerPublishQueueList::ptr_eq` and `ProducerQueueIndex::ptr_eq` were removed; `TopicPublishInfo::ptr_eq` and `TopicRouteDataHandle::ptr_eq` are now crate-private for Java reference-identity implementation details.
+- Producer/Core integration tests now verify returned-handle aliasing by mutating and reading shared values. Core route-table tests use a test-only marker mutation helper that restores the original route after each identity probe.
+- Compile-fail rustdoc examples guard all four external method boundaries. Phase 6/7 compatibility records the scope of this reverse-scan closure.
+
+Validation
+- PASS: `RUSTDOCFLAGS='-Z unstable-options --output-format json' cargo +nightly doc --workspace --all-features --locked --no-deps` (Rust 1.101.0-nightly) generated public-surface JSON for all 7 workspace crates; the four types no longer list public `ptr_eq` methods. Nightly documentation emitted existing workspace-manifest and consumer `AtomicU64::fetch_update` deprecation warnings.
+- PASS: `cargo test -p rocketmq-classic-producer --locked` — 140 unit tests, all 64 integration tests, and 3 compile-fail doctests.
+- PASS: `cargo test -p rocketmq-classic-core --locked` — all 157 unit tests, integration targets, and compile-fail doctest.
+- PASS: focused Core route table (6 tests) and cached-query regression; full Core suite also passed.
+- PASS: `cargo clippy -p rocketmq-classic-producer -p rocketmq-classic-core --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all -- --check` and `git diff --check`.
+
+Remaining work
+- This closes four surfaced Rust-only helper methods only; P18-V01 remains open for Java source/API/overload/input/error/flow and complete Rust reverse-export/configuration reconciliation.
+- No remote branch or GitHub Actions run exists for the current local branch; current-revision Ubuntu evidence for P18-V04 remains outstanding. No push was made.
+
+No plan-file edit, Java oracle modification, push, publication, or tag was made.
+
+Commit status
+- `73700d56` — `fix(compat): keep handle identity helpers internal` contains the implementation, regression tests and Phase 6/7 matrix updates.
+- This append-only execution record is committed separately.
+
+Phase 7 Producer API reverse-scan follow-up — 2026-10-14 UTC
+
+- Removed the public Rust-only `TopicPublishInfo::set_message_queues` Vec adapter and redundant `select_one_message_queue_with_filter` closure-slice adapter. Producer tests now call the Java-mapped queue-list setter directly, and Phase 7's crosswalk no longer maps either extra method to an unrelated Java overload. Added compile-fail rustdoc examples to guard both external method boundaries. Also removed the stale `ProducerQueueIndex::ptr_eq` row from the public API matrix.
+- PASS: `cargo test -p rocketmq-classic-producer --locked` — 140 unit tests, all 64 integration tests, and the then-current 3 compile-fail doctests.
+- PASS: `cargo test -p rocketmq-classic-producer --doc --locked` after adding the two new boundary doctests — all 5 compile-fail doctests.
+- PASS: `cargo clippy -p rocketmq-classic-producer --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: all-workspace rustdoc JSON generation and Producer `TopicPublishInfo` public-surface inspection confirm both Rust-only convenience methods are absent while `set_message_queue_list` and nullable filter selection remain public. Existing workspace manifest and Consumer deprecation warnings remain.
+- P18-V01 remains open for broad Java source/API/overload/input/error/flow and Rust reverse-export/configuration reconciliation. P18-V04 still lacks current-revision Ubuntu CI evidence; no push or CI run was made.
+- Implementation commit: `59518089 fix(compat): remove extra publish info helpers`. This record update is committed separately.
+
+Current-revision workspace gate — 2026-10-14 17:23 UTC
+
+- PASS on revision `17eb59df`: `cargo test --workspace --all-features --locked` completed successfully across all workspace unit, integration, and doctest targets after the Producer API surface cleanup. This supplies a current-tree P18-V02 test run.
+- No further source changes. P18-V01's broad bidirectional source/API/overload/input/error/flow and Rust/Java reverse-export reconciliation remains local work; P18-V04 still lacks current-revision GitHub Ubuntu CI. Phase 19 Broker/Docker cases and release-version/registry resolution remain outstanding.
+
+Common API reverse-scan follow-up — 2026-10-14 17:40 UTC
+
+- Removed the Rust-only public `Message::{take_body, take_body_nullable, set_property, properties_mut}` helpers and `MessageQueue::new_nullable_broker`, which have no distinct public Java 5.5.1 counterparts. Internal nullable queue construction now uses `MessageQueue::new_nullable`; property writes use the Java-mapped `put_user_property`; the mutable property-map test uses `get_properties_mut`. Compile-fail rustdoc examples guard all five removed public boundaries.
+- PASS on code revision `2618fd1c`: `cargo test --workspace --all-features --locked`, strict workspace/all-target/all-feature Clippy, `cargo fmt --all -- --check`, `git diff --check`, and workspace rustdoc JSON public-surface inspection. The public Common surface no longer exposes the five helpers.
+- Updated the Phase 6 requirement audit and release checklist to record the exact closure and its scope. Documentation commit: `df4c9293 docs(compat): record Common API reverse scan`.
+- This closes only the surfaced Common API extras; P18-V01 still requires the complete bidirectional Java/Rust API, configuration, overload/input/error/flow, inherited/trait, and reverse-export reconciliation. P18-V04 still lacks current-revision GitHub Ubuntu evidence. Phase 19 Broker/Docker scenarios and release-version/registry resolution remain outstanding.
+- No plan edit, Java oracle modification, push, publication, tag, or GitHub CI run was made.

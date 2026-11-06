@@ -1,0 +1,31 @@
+# P18-V03 Java source provenance and package preparation — 2026-10-18T16:30:53Z
+
+- Branch: phase/18-phase-18-compatibility-closure. Code revision reviewed:
+  43a7cebb. No files in the external Java checkout were modified.
+- The Maven harness pins org.apache.rocketmq:rocketmq-client:5.5.1. Offline
+  dependency:tree resolves rocketmq-client 5.5.1 → rocketmq-remoting 5.5.1 →
+  rocketmq-common 5.5.1. All three binary JARs' embedded pom.properties
+  confirm their Maven coordinates/version.
+- Computed SHA-256 for all three binary JARs, source JARs, and POMs. The
+  corresponding SHA-1 for each of the nine local artifacts matches the
+  published checksum read from Maven Central's .sha1 URL. Exact values are
+  recorded in docs/compatibility/PHASE_18_JAVA_PROVENANCE.md.
+- The external checkout contains annotated tag rocketmq-all-5.5.1, which
+  resolves to efa1be59d6fc747ad220f036c86030f05f0419f9; the commit object is
+  present. MQClientAPIImpl, DefaultMQPushConsumerImpl, MessageExt and
+  LockBatchResponseBody source-JAR entries byte-match files at that tag.
+  The annotated tag carries an OpenPGP signature, but git tag -v could not
+  verify it because gpg is unavailable. The evidence does not claim signer
+  verification.
+- Locked Cargo metadata reports 216 packages, 208 registry packages, and
+  eight workspace packages at 0.1.0 with publish disabled. Workspace
+  metadata/license/dependency-direction checks pass. Seven product package
+  listings include LICENSE and NOTICE. The leaf-to-facade order is common,
+  protocol, remoting, core, producer, consumer, facade.
+- This closes P18-V03's preparation review: facade examples, package graph
+  and contents, license/provenance metadata, baseline versions, and docs have
+  been reviewed without a release claim. Confirming release versions and
+  registry resolution, enabling publication, actual publication and tagging
+  remain post-Phase-19 work.
+- No plan, code, Broker/Docker state, remote CI, package publication, release
+  tag, or push changed. Phase 19 working-tree changes remain separate.

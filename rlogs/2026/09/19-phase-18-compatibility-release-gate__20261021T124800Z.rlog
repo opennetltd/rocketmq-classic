@@ -1,0 +1,26 @@
+Phase 18 `getParentTopicInfo` RPC and response DTO
+
+Date: 2026-10-21 UTC
+Branch: `phase/18-phase-18-compatibility-closure`
+
+Scope:
+- Added `MQClientApi::get_parent_topic_info` for pinned Java request 200075, with a nullable custom header, synchronous invocation, configured VIP conversion, caller deadline and nullable body decode.
+- Added `GetParentTopicInfoRequestHeader` and `GetParentTopicInfoResponseBody`; the body preserves primitive defaults, nullable topic/groups, nullable set elements, and mutable getter aliases.
+- Added seven invoked Java cases, Rust fixture differential coverage, a VIP loopback, a Java typed-header fixture, and Protocol request-header/body regression checks.
+- Made the existing Broker Lite info fixture generator's nested Set deterministic with a sorted set. The checked-in fixture remained unchanged.
+- Code commit: `315a681e` (`feat(core): add get parent topic info RPC`).
+
+Evidence:
+- Success fixture SHA-256: `1977e67d8e3c856784cf2628b82bcd14429e2118fb1a3e001db1e4ba2f2ad943`.
+- Focused Protocol body/header tests, `header_inventory`, Core VIP loopback, and invoked RPC fixture differential passed.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+- `cargo test --workspace --locked` and `cargo test --workspace --all-features --locked` passed.
+- Strict `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` passed.
+- Pinned `mvn -f compat/java-reference/pom.xml verify` passed with 37 scenario-manifest cases, 81 Java-decoded Rust typed header frames, and 15 typed body frames.
+- An initial Protocol matrix run caught the missing new-header row; it was added before both full workspace suites passed. The first Maven run exposed nondeterministic order in the existing Broker Lite fixture's nested Set; the generator now sorts that Set and Maven verification passes repeatably.
+
+Remaining:
+- Lite discovery calls `GET_LITE_CLIENT_INFO` (200077) and `GET_LITE_GROUP_INFO` (200078) remain unaudited/unimplemented.
+- Broad P18-V01 bidirectional API/settings/input/error/control-flow/reverse-export audit remains open.
+- Current Ubuntu/native Windows P18-V04 evidence and Phase 19 live Broker scenarios remain open.
+- Preserved Phase 19 worktree paths remain unstaged and untouched.

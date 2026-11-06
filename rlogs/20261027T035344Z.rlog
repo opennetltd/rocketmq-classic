@@ -1,0 +1,7 @@
+# Rust client version alignment — 20261027T035344Z
+
+- Scope: identify the Rust workspace as a port of Apache RocketMQ Java client 5.5.1.
+- Set the shared Cargo workspace package version and all eight workspace package versions to `5.5.1`; align internal path dependency requirements and `Cargo.lock`.
+- Updated the README introduction and current package-version statements in the release checklist. Kept the Java reference harness's own Maven version and historical audit records unchanged.
+- Verification: `cargo metadata --format-version 1 --locked` resolved all eight RocketMQ Classic packages at `5.5.1`; `git diff --check` passed.
+- Tests were not run.

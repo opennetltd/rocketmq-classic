@@ -1,0 +1,90 @@
+# Phase 18 compatibility release gate — 2026-10-18T02:38:43Z
+
+## Scope
+
+- Continued on `phase/19-phase-18-compatibility-release-gate`.
+- Completed the `MqClientAdmin.getTopicStatsInfo` source-backed slice against
+  the read-only Java 5.5.1 oracle. Added request code 202's typed header,
+  `TopicStatsTable`/`TopicOffset` DTOs, Core RPC, invoked Java fixtures, typed
+  header/body cross-decode fixtures, and scripted success/null/error/malformed
+  response coverage.
+- Code committed separately as `e53ad60c` (`feat(admin): add topic stats info
+  RPC`). Updated the Phase 17 method matrix and appended evidence to the Phase
+  18 release checklist. Phase 18 plan was not modified.
+- Preserved the existing unstaged Phase 19 runner/README/differential changes
+  and their existing rlog; none were included in this commit.
+
+## Validation
+
+- `cargo test -p rocketmq-classic-protocol --all-features --locked`: passed,
+  132 unit tests, all integration targets, 49 doctests.
+- `cargo test -p rocketmq-classic-core --test admin_rpc --locked`: passed,
+  28 tests.
+- Strict all-target/all-feature Clippy for Protocol, Remoting and Core passed.
+  The first run found a derivable `Default` implementation on the new private
+  DTO fields; deriving it fixed the warning, and the strict rerun passed.
+- `mvn -q -f compat/java-reference/pom.xml verify`: passed all 37 scenarios,
+  fixture drift checks, 60 typed-header and 14 typed-body cross-decodes.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+
+## Remaining work
+
+- `MqClientAdmin` has 4/19 complete source-backed slices; reconcile its other
+  15 methods and finish broad P18-V01 bidirectional public API/configuration,
+  input/error/control-flow and Rust reverse-export audit.
+- Refresh full-workspace P18-V02 after Phase 18 implementation work; obtain
+  current-revision Ubuntu/native Windows P18-V04 evidence and complete final
+  P18-V03 package/provenance review and pre-publication checks.
+- Phase 19 still lacks 30/37 local scenario runners, required Docker profiles,
+  and a passing full `run-local.sh --all` reconciliation. Owner-only production
+  validation remains separate and was not run.
+
+## P18-V01 `queryConsumeTimeSpan` admin RPC — 2026-10-18T02:53:02Z
+
+- Reconciled Java `MqClientAdminImpl.queryConsumeTimeSpan` (request 303) and
+  added an invoked fixture for the raw address, timeout, inherited header
+  fields, result body/list, and Broker exception. Rust's existing Core RPC now
+  sends to the provided address directly; Push Consumer applies VIP mapping
+  before the call to preserve its Java facade behavior. Added a VIP-enabled
+  Core direct-address regression and a fixture-driven Core RPC test.
+- Code commit: `72a37b17` (`feat(admin): reconcile query consume time span RPC`).
+- First fixture invocation used the fixed `compat.Main` entry point and failed
+  its usage check; added a Main dispatcher and regenerated through it. Initial
+  Core test compilation exposed a fixture-field type mismatch and local API
+  binding shadowing; corrected. The first Broker-error assertion showed the
+  scripted peer helper discarded remarks; added a remark-capable helper and
+  the comparison now passes.
+- Passed: Core query-time-span unit tests (2), Core `admin_rpc` (29), focused
+  Consumer VIP routing test, strict all-target/all-feature Clippy for Core and
+  Consumer, `cargo fmt --all -- --check`, `git diff --check`, and Maven
+  `verify` (37 scenarios, fixture checks, 60 typed-header and 14 typed-body
+  cross-decodes). The Java fixture is
+  `fixtures/admin/query-consume-time-span.json` (SHA-256
+  `5689eea4d53809d6ce2caa6bebc14ba4ebeb8b49b8fffe3000432bbe73dfaa4e`).
+- Updated Phase 17's admin matrix to 5/19 source-backed methods and appended
+  this evidence to the release checklist. Remaining 14 `MqClientAdmin` methods
+  and broad P18-V01 remain open; full-workspace P18-V02, Ubuntu/native Windows
+  P18-V04, final P18-V03 package/provenance review and local Phase 19 matrix
+  remain pending. Existing Phase 19 worktree changes remain unstaged.
+
+## P18-V01 `updateOrCreateTopic` admin RPC — 2026-10-18T02:58:08Z
+
+- Extended the invoked `MqClientAdminImpl` fixture with Java
+  `updateOrCreateTopic(address, CreateTopicRequestHeader, timeoutMillis)`.
+  The evidence covers request code 17, all header fields, a null request body,
+  direct broker address, success completion and Broker exception mapping.
+  Reused the fixture harness and file from the query-time-span slice.
+- Code/test commit: `24eae6bf` (`test(admin): cover topic update admin RPC`).
+  Existing `MQClientApi::create_topic` matched the fixture; no production RPC
+  change was needed. The first compile missed `CreateTopicRequestHeader.logical`
+  in the error-case literal; adding its Java-default `None` fixed the test.
+- Passed Core `admin_rpc` (30 tests), strict all-target/all-feature Core
+  Clippy, format/diff checks, and Maven `verify` (37 scenarios, fixture checks,
+  60 typed-header and 14 typed-body cross-decodes). The current shared admin
+  fixture SHA-256 is
+  `16939c20d844e02921a2634dc32af32521b8a36b5d0de27b256ae88c777056aa`.
+- Updated the Phase 17 admin matrix to 6/19 source-backed methods and appended
+  release evidence. Thirteen `MqClientAdmin` methods and broad P18-V01 remain
+  open; P18-V02 full workspace, P18-V03 package review, P18-V04 current
+  platform CI, and Phase 19 local Docker automation remain pending. The Phase
+  18 plan remains unchanged.

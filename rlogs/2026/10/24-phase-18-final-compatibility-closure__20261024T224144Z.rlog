@@ -1,0 +1,72 @@
+# Phase 18 final compatibility closure
+
+- Recorded: 2026-10-24 22:41:44 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Final code revision tested: `0cf294b710d06d40bd72ccec1ca5d1df121c5225`
+- Pinned Java reference: RocketMQ 5.5.1 source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Final current-code CI
+
+- [GitHub Actions run 40136756812](https://github.com/triotous/rocketmq-classic/actions/runs/40136756812)
+  completed successfully for both jobs.
+- Ubuntu `test` job passed formatting, strict all-target/all-feature Clippy,
+  default and all-feature locked workspace tests/doctests, the Taipei unique-ID
+  regression, differential comparator self-test and 37-scenario manifest
+  validation, fuzz smoke, 20-case × 3 offline stress smoke, pinned Maven
+  `verify`, release examples, offline benchmark compile, and workspace metadata
+  checks.
+- Windows `windows-stack-runtime` passed the native
+  `jstack_includes_current_and_other_named_threads` capture regression.
+- Earlier remote attempts exposed fixture portability only: run `40127545324`
+  first reported producer unique-ID address-family drift, and run `40130338168`
+  reported the trace fixture's environment-derived IPv6 `clientHost`. The
+  producer fixture now validates accepted IPv4/IPv6 shapes, the trace fixture
+  uses the deterministic documentation address `192.0.2.18`, and diagnostics
+  report producer fixture drift context. Run `40133957498` then passed all
+  gates on `be24c935`; run `40136756812` passed again on final code revision
+  `0cf294b7` after temporary Windows debug tracing was removed while retaining
+  the `RtlVirtualUnwind` pointer-storage fix.
+- Local pinned Maven verification and the focused Java 5.5.1 trace encoder
+  comparison also passed before the remote runs.
+
+## Compatibility closure
+
+- The final Phase 6 audit uses the pinned Java source and reconciles scoped
+  client methods, overloads, inherited members, settings/read boundaries,
+  inputs, errors, control flows, Rust crate/facade exports, Rustdoc, hidden
+  items, Cargo features, environment settings, and Controller DTOs.
+- Pinned `MQClientAPIImpl.java` inventory: 132 public declarations, 121
+  distinct names, seven overloaded groups; all overload members are
+  crosswalked and all 29 direct RPC invocation cases pass.
+- `ConsumeMessagePopOrderlyService` operations are mapped to the existing
+  `PushConsumer` lifecycle, orderly-lock owner, and POP workers. The pinned
+  Java class has no public getter for its private owner field; no standalone
+  Rust service type is claimed.
+- `ThreadPoolMonitor`, `ThreadPoolWrapper`, and `ThreadPoolStatusMonitor` are
+  pinned Java common utilities with no production references in
+  `client/src/main` or `remoting/src/main`; their Proxy/server callers place
+  them outside the audited Rust client scope.
+- Remaining provider/runtime/diagnostic/JVM-identity differences are
+  classified in `docs/compatibility/KNOWN_DIFFERENCES.md`; they are not
+  unexplained client capabilities or configuration gaps. These include
+  Tokio/Netty and Rust/JVM representation, user-accepted RustCrypto/rustls
+  provider algorithm limits, diagnostic stack/exception/object-identity
+  formatting, and deliberately constructed cross-process enum identity-hash
+  collisions.
+- A Phase 19 handoff inventory confirms all 17 validation IDs from Phases 0–17
+  are registered among the 37 differential scenarios. This does not claim live
+  Broker or Docker validation; those runs remain in the existing Phase 19
+  scope.
+
+## Workspace preservation
+
+- The four existing Phase 19 worktree paths (`integration-tests/README.md`,
+  `tests/differential/run.sh`, `integration-tests/run-local.sh`, and its
+  pre-existing validation rlog) remained unchanged and unstaged.
+- The Java checkout's pre-existing untracked
+  `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java` remained
+  untouched.
+- Final documentation updates were limited to the Phase 6 audit, Phase 10
+  method matrix, known-differences record, release checklist, and this run log.

@@ -1,0 +1,20 @@
+Phase 19 handoff source-case coverage audit — 2026-10-12 03:38–03:43 UTC
+
+Scope: compare every Phase 0–11 live verification ID in the plans with `tests/differential/scenarios.yaml`. No Docker, live Broker, TLS server, or mixed-language client scenario was run.
+
+Finding and correction:
+
+- Before this audit, the manifest had 22 scenarios. It contained the generic Phase 0 live cases, P5-V02 subcases, and P6-V04, but did not register original source IDs P0-V03, P3-V04, P7-V02/V03/V04, P9-V03, P10-V03, and P11-V03/V04.
+- Added those nine cases with `execution_phase: 19` and `live_status: PENDING_PHASE_19`.
+- Added `source_case_id: P5-V02` to the four existing P5-V02 subcases.
+- The manifest validator now reads unchecked verification IDs from the Phase 0–11 plans and requires them in the manifest; the current set has eleven IDs. The self-test removes P11-V04 from a copy and verifies that validation fails.
+- Current manifest count: 31. Every newly registered live case remains pending; no execution result is claimed.
+
+Commands and results:
+
+- `python3 tests/differential/compare.py --self-test` — PASS, including missing-ID and wrong-phase negative checks.
+- `python3 tests/differential/compare.py --validate-manifest` — PASS; validated 31 scenarios.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS; Maven also reported 31 scenarios and completed pinned Java fixture verification and Rust-generated header/body cross-decodes.
+- `git diff --check` — PASS.
+
+The Phase 19 manifest handoff inventory is now complete for the unchecked live case IDs in the Phase 0–11 plans. The Phase 6 broad source/API/input/platform reconciliation and actual Windows/BSD/IPv6-only host runtime evidence remain separately open. Phase 11 orderly queue locking remains Phase 12 scope.

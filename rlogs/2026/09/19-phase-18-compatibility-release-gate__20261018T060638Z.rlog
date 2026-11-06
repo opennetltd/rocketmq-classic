@@ -1,0 +1,32 @@
+# Phase 18 `updateOrCreateSubscriptionGroup` parity — 2026-10-18T06:06:38Z
+
+- Continued on `phase/19-phase-18-compatibility-release-gate-resume`; kept the
+  existing Phase 19 runner/readme changes separate and preserved.
+- Used the pinned Java 5.5.1 source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9` as the oracle.
+- Completed the Rust `SubscriptionDataSet` as an insertion-ordered Set model.
+  Insert, lookup, removal and set equality use Java `SimpleSubscriptionData`
+  equality (which ignores `version`); duplicate null elements collapse, JSON
+  decode applies the same membership rule, and serialization remains an array.
+- Added Java fixture assertions for version-insensitive Set deduplication and
+  single-null membership. Converted all `SubscriptionDataSet` construction and
+  indexing sites in the new DTO/RPC tests. Committed implementation and fixture
+  as `10db6f10 feat(admin): match subscription group update RPC`.
+- Updated the Phase 17 admin matrix to 18/19 source-backed `MqClientAdmin`
+  methods, with `getConsumerRunningInfo` still missing; added the fixture and
+  verification evidence to the Phase 18 release checklist.
+- Verification passed: Protocol all-feature tests (141 unit tests, all
+  integration targets, 51 doctests); Core `admin_rpc` (49 tests); strict
+  all-target/all-feature Clippy for Protocol, Remoting and Core; pinned Maven
+  `verify` (37 scenarios, 66 typed-header cross-decodes, 15 typed-body
+  cross-decodes); `cargo fmt --all -- --check`; `git diff --check`; and the
+  focused Set regression after removing a nonfunctional unused-`mut` warning.
+- A first Maven fixture-generation invocation used the wrong Main route and
+  exited with usage text; corrected it to the existing
+  `mq-client-admin-fixtures` subcommand and regenerated the fixture. Maven
+  `verify` subsequently confirmed fixture stability and all Java/Rust checks.
+- No Broker or Docker was used. Broad P18-V01 source/API/settings/input/error/
+  flow and reverse-export audit, full-workspace P18-V02 on the current revision,
+  P18-V03 package/provenance review, current-revision Ubuntu/Windows P18-V04,
+  and Phase 19 local Docker/Broker scenarios and profiles remain open. The
+  owner-only manual handoff remains separate.

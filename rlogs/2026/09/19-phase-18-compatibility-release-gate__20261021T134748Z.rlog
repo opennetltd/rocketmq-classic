@@ -1,0 +1,32 @@
+# Phase 18 `MqClientAdmin` public wrapper closure — 2026-10-21T13:47:48Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+- Found a Rust public-surface gap: Java `MqClientAdmin` declares 19 methods,
+  while `MQClientApi::mq_client_admin()` exposed only 8. Added the missing 11
+  typed wrappers by routing to the already audited direct Core operations.
+- `update_or_create_topic` uses the direct request path. The lower-level
+  `MQClientApi::create_topic` also performs local topic-permission validation,
+  which Java's `MqClientAdminImpl.updateOrCreateTopic` does not. Added an
+  invoked Java case and a Rust scripted regression proving an invalid permission
+  is sent to the peer.
+- Added the pinned Java interface method-signature inventory to
+  `fixtures/admin/query-consume-time-span.json`. The Core integration test
+  checks all 19 Java names and compile-calls all 19 Rust wrapper methods.
+- Fixture SHA-256:
+  `670a5ee121a41def537a4a97c806e5c6d25176917f945742495b5c2995217d62`.
+
+Verification passed:
+- `cargo test -p rocketmq-classic-core --test admin_rpc --locked` (82 tests).
+- `cargo clippy -p rocketmq-classic-core --all-targets --all-features --locked -- -D warnings`.
+- `mvn -f compat/java-reference/pom.xml verify` (37 scenarios, 83 Java-decoded
+  Rust typed header frames, 16 typed body frames).
+- `cargo fmt --all -- --check` and `git diff --check`.
+
+A first focused run exposed that the new invalid-permission oracle case had
+been attached to the neighboring Java helper; it was moved into
+`updateOrCreateTopic`, the fixture was regenerated, and the complete 82-test
+admin RPC target passed. Broad P18-V01, final full-workspace P18-V02 and current
+platform CI evidence remain open. Preserved Phase 19 paths remain unstaged and
+untouched.

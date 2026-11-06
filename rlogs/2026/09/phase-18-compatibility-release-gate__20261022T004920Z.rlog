@@ -1,0 +1,49 @@
+# Phase 18 compatibility release gate — 2026-10-22 00:49:20 UTC
+
+Base revision: `95be2512`. This entry records the current uncommitted Phase 18
+compatibility work only.
+
+## Current local checks
+
+- `cargo fmt --all` passed.
+- `mvn -f compat/java-reference/pom.xml compile` passed.
+- The pinned Java `producer-core-fixtures` command regenerated
+  `fixtures/producer/core.json` successfully.
+- `query_correction_offset_matches_java_fixture` passed.
+- `update_and_get_group_forbidden_matches_java_fixture` passed.
+- `group_forbidden_java_object_methods_match_pinned_fixture` passed.
+- `cargo test -p rocketmq-classic-protocol --test header_inventory --locked`
+  passed all 13 tests.
+- The `header_validation_matrix` test passed.
+- `git diff --check` passed.
+- SHA-256 of `fixtures/producer/core.json`:
+  `de2c8c08c40b50d5cce184f436b7423ff79b59a56f3c40b780cb7e092d48975e`.
+
+## Compatibility changes
+
+`queryCorrectionOffset` request 308 maps to
+`MQClientApi::query_correction_offset`; its Java fixture covers nullable
+inputs, filtered group strings, response body and broker error behavior.
+`updateAndGetGroupForbidden` request 353 maps to
+`MQClientApi::update_and_get_group_forbidden`; its request header and nullable
+`GroupForbidden` response DTO are fixture-backed. `GroupForbidden` also matches
+the pinned Java getters, setters, value equality, `hashCode`, and `toString`.
+The API audit now marks these two operations closed and lists 16 remaining
+direct API gaps.
+
+## Evidence still open
+
+The wider P18-V01 settings, inputs, errors, control flows and reverse-export
+audit remains open. Current-revision GitHub Ubuntu/native-Windows P18-V04
+results are unavailable under the no-remote-CI constraint. No Docker or Broker
+was used. The four pre-existing Phase 19 worktree paths remain untouched and
+unstaged.
+
+## Follow-up after DTO serialization check — 2026-10-22 00:50:30 UTC
+
+`GroupForbidden` now uses the pinned Fastjson-compatible serialization path and
+omits nullable fields like Java. The producer-core Java fixture was regenerated
+again; the DTO object-method test also checks populated/default JSON encoding
+and passed. The final SHA-256 of `fixtures/producer/core.json` is
+`ad32bf3c827e5d2d278e8c5bb932304a624d5efb52db3d35fb77859be39aeac5`. This
+supersedes the earlier hash recorded above.

@@ -1,0 +1,35 @@
+# Phase 18 offset table aliases and partial mutation
+
+- Recorded: 2026-10-23 16:54:53 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source revision: `38194e8a` (`fix: preserve offset table mutation semantics`)
+- Pinned Java source: RocketMQ 5.5.1,
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Java fixture: `fixtures/runtime/offsets.json`, SHA-256
+  `f8298b31303536f9d97d172444bc63bb8a63708f7e1e93e33c148d01e3511af2`
+
+## Change
+
+`MQClientInstance.parseOffsetTableFromBroker` mutates each input
+`MessageQueue` key's topic and stores that same object in its returned
+`HashMap`. If iteration later reaches a null key, Java throws after retaining
+earlier key mutations. Rust now borrows `Option<&BrokerOffsetTable>`, where the
+shared insertion-ordered input carries nullable shared queue keys and nullable
+offsets. It mutates those queue objects in place, returns a new `HashMap` with
+the same queue handles, and preserves prefix mutation on error. Null/empty
+namespace still copies entries without mutating keys. The existing fixture
+already captured both original and mutated input rows, including the
+valid-key-before-null LinkedHashMap case; the Rust regression now checks those
+mutations and returned-key pointer identity across all seventeen cases.
+
+## Verification
+
+- `cargo test --offline -p rocketmq-classic-core --test runtime_metadata explicit_offset_namespace_conversion_matches_invoked_java` — passed.
+- `cargo test --workspace --offline` — passed on the final borrowed signature; log: `/tmp/p18-offset-alias-final-workspace.log`.
+- `cargo clippy --workspace --all-targets --all-features --offline -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and targeted `git diff --check` — passed.
+- Java fixture and source were unchanged; Maven fixture verification was not rerun.
+- No Phase 19 user-owned paths were staged. No push or remote CI was run.
+
+This closes the recorded offset-table alias and partial-mutation gap only.
+Broad P18-V01 reconciliation remains PARTIAL.

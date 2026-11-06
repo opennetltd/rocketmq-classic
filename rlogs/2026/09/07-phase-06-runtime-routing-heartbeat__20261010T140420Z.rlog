@@ -1,0 +1,17 @@
+Execution session: 2026-10-10T14:04:20Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Initial state: worktree clean; head 3136a458 after client-check null-subscription coverage. The Java source checkout at /Users/nanashi07/Projects/3rd/rocketmq is absent; pinned 5.5.1 client/common/remoting artifacts and the offline Maven oracle are present. P6-V01/V02/V03/U01 remain checked, P6-V04 remains assigned to Phase 19, and the requirement audit still marks full source/API/input/platform reconciliation PARTIAL.
+
+Selected slice: check whether VIP channel enablement is re-read after runtime construction specifically through the `MQClientInstance.checkClientInBroker` -> `MQClientAPIImpl.checkClientInBroker` path. Existing check-client fixture constructs with VIP enabled; a separate runtime lookup oracle covers post-construction VIP changes for consumer-list and assignment RPCs, but not check-client.
+
+Evidence gathered: pinned `javap` of `MQClientAPIImpl.checkClientInBroker` reads `clientConfig.isVipChannelEnabled()` immediately before `MixAll.brokerVIPChannel`. Native `ClientRuntime::check_client_in_broker` reads the retained shared config at each invocation. Next: add an invoked Java before/after mutation sequence and a two-peer Rust loopback differential, then run focused/workspace checks and update the inventory.
+
+Implementation outcome: no production fix was needed. Added a Java runtime/API sequence that invokes check-client with VIP disabled, mutates the retained setting after construction, invokes again, and records `127.0.0.1:10911` then `127.0.0.1:10909`. Added a Rust two-listener loopback differential that matches both request bodies and destination ports. The initial harness omitted a strong consumer owner; the registry intentionally stores weak owner references, so the check correctly found no consumer and the peer wait exposed the mistake. Retaining the owner corrected the test setup; the focused differential passes.
+
+Fixture: `fixtures/runtime/client-check.json`, SHA-256 `13995e39a081b83f763d5437370f64fa5ba93027464a3c32d1903de98b9656f9`; 17 case-array runtime/API cases plus one two-call VIP mutation sequence and 43 body-input cases.
+
+Validation: `cargo test -p rocketmq-classic-core --test client_check --locked` passed 6/6; `cargo test --workspace --all-targets --locked` passed; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` passed; `mvn -o -f compat/java-reference/pom.xml verify` passed (22 scenarios); comparator self-test and manifest validation passed (22); `cargo fmt --all -- --check` and `git diff --check` passed.
+
+Documentation updates: `PHASE_6_API_CONFIG_MAP.md` records live VIP sampling at check-client, consumer-list, and assignment calls; `PHASE_6_RUNTIME_INVENTORY.md` and `PHASE_6_REQUIREMENT_AUDIT.md` record the new oracle/test evidence and keep overall Phase 6 PARTIAL with P6-V04 pending Phase 19. Work is split into an executable-oracle/test commit and a separate audit/log commit; phase completion remains unverified.

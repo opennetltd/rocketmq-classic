@@ -1,0 +1,7 @@
+# Phase 6 execution session — 2026-10-10T16:48Z
+
+- Continued bidirectional ClientConfig API inventory on `07-phase-06-runtime-routing-heartbeat`.
+- Compared `pub` fields parsed from `ClientConfig` in `crates/rocketmq-classic-core/src/config.rs` against the Rust-field column of `docs/compatibility/PHASE_6_API_CONFIG_MAP.md`, excluding the row explicitly marked as private.
+- Result: all 33 Rust public fields match exactly 33 public map rows; no unmatched public Rust field and no map-only public field. The additional `namespace_initialized` row is private and maps Java's private `namespaceInitialized` cache. Existing Java accessors/default/property behavior evidence remains linked in the same map section.
+- Updated the API map and requirement audit. This closes the reverse field-inventory check only; settings activation branches and whole Phase 6 reconciliation remain open. P6-V04 remains `PENDING_PHASE_19`.
+- Validation: source/map set comparison and `git diff --check`; no production code changed.

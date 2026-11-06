@@ -1,0 +1,110 @@
+2026-10-15 17:46 UTC — corrected the Phase 8 decoder evidence summary.
+
+The P8-V01 local verification row now records eleven pinned Java message
+records and calls out the direct invocation of every `decode` overload and
+both `clientDecode` variants, including nullable body/properties states. This
+aligns the summary with the fixture and the current release checklist.
+
+Validation: `git diff --check` passed. This is a documentation-only correction;
+no test was needed. No plan, push, tag, publication, deployment, or live Broker
+action occurred.
+
+2026-10-15 17:59 UTC — closed one P18-V01 Remoting codec behavior mismatch.
+
+Pinned Java 5.5.1 `RocketMQSerializable` uses `writeShort` for both request
+code and version, so i32 inputs retain their low 16 bits. The Rust private
+header encoder previously rejected values outside the signed range. Added a
+Java-generated `PRIVATE-LARGE-CODE-VERSION` frame for code/version `987654`,
+which decode as `4614`; the new Rust regression first failed with
+`FieldTooWide("code")`. Rust now narrows both fields exactly like Java, and
+the complete encoded frame matches byte-for-byte. Removed this resolved item
+from `KNOWN_DIFFERENCES.md` and added the new fixture to the compatibility
+matrix.
+
+Validation passed: `cargo test -p rocketmq-classic-remoting --all-features
+--locked` (96 unit, 7 codec, 1 fuzz regression, 5 security, 100 transport and
+5 doctests); strict all-target/all-feature Remoting Clippy; Maven verify (37
+scenarios); `cargo fmt --all -- --check`; `git diff --check`; and byte-for-byte
+comparison of the checked-in fixture against fresh pinned-Java output. Fixture
+SHA-256: `033e89778d92def6f5e1875211ea4ca7b59facaf813a72a57de8c386c5e4acf8`.
+Code/test/fixture/compatibility-matrix commit: `c0878056`. Broad P18-V01,
+current GitHub Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker automation
+and release version/registry resolution remain open. No plan, push, tag,
+publication, deployment or live Broker action occurred.
+
+2026-10-15 18:09 UTC — closed a second P18-V01 Remoting serialization mismatch.
+
+Pinned Java 5.5.1 `RocketMQSerializable.writeStr(true, key)` writes the UTF-8
+key byte count with `setShort`, retaining only its low 16 bits while keeping
+the full key bytes. Added an oracle frame with a 32,768-byte key; its wire
+length is `0x8000` (signed `-32768`). The Rust regression first failed with
+`FieldTooWide("ext field key")`; the encoder now matches Java byte-for-byte.
+The fixture is in `fixtures/remoting/edge-cases/` because the intentionally
+wrapped length makes it invalid for ordinary decoding.
+
+Validation passed: `cargo test -p rocketmq-classic-remoting --all-features
+--locked` (96 unit, 8 codec, 1 fuzz regression, 5 security, 100 transport and
+5 doctests); strict all-target/all-feature Remoting Clippy; Maven verify (37
+scenarios); rustfmt, diff checks and fixture comparison against freshly
+generated Java output. Fixture SHA-256:
+`7af64d29f396b2e7a1dd70a57066920890559fce1f170844ca8d4e1ba3a453ca`. Commit
+`c62e0740` closes this private-key-length slice only. Broad P18-V01, current
+GitHub Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker automation and
+release version/registry resolution remain open. No plan, push, tag,
+publication, deployment or live Broker action occurred.
+
+2026-10-15 18:11 UTC — corrected one stale Common reverse-API mapping.
+
+The Phase 8 Rust-to-Java table listed `java_to_string` as a public method even
+though the current Rust helpers are private and public formatting is provided
+through `Display`/blanket `ToString`. The table now maps the observable Java
+`Message.toString()` / `MessageExt.toString()` behavior through those public
+traits. `git diff --check` passed; this documentation-only sync needed no test.
+It does not close the broader P18-V01 inherited API, input/control-flow, or
+reverse-export audit. No plan, publication, deployment, or live Broker action
+occurred.
+
+2026-10-15 18:21 UTC — closed a bounded `MessageClientExt` inherited-API evidence slice.
+
+Pinned Java 5.5.1 `MessageClientExt` extends `MessageExt`, which inherits the
+`Message` methods. The invoked `messageClientExtApi` fixture now calls the
+inherited topic, queue-ID, and store-timestamp setters/getters; Rust exercises
+the same methods through `MessageClientExt`'s `Deref`/`DerefMut` chain. Fixture
+comparison showed no unrelated case changes. The initial fixture-generation
+call used stale Maven classes; rerunning `compile exec:java` regenerated the
+oracle before the Rust differential passed.
+
+Validation passed: the focused `message_client_ext_api_matches_java_551_fixture`
+test; all-feature Common tests (21 unit, 20 message-decode integration, 1 topic
+validator, 17 doctests); strict all-target/all-feature Common Clippy; pinned
+Maven `verify` (37 scenarios and Java/Rust cross-decodes); rustfmt and
+`git diff --check`. Code/fixture/matrix commit: `ae416072`. This closes only
+the listed inherited-method evidence slice; broad P18-V01 and the final
+full-workspace P18-V02 rerun remain open. No plan edit, push, tag, publication,
+deployment, Docker, or live Broker action occurred.
+
+2026-10-15 18:32 UTC — reran server-free P18-V02 gates on the current code tree.
+
+At the tested code revision `ae416072` (HEAD `a6f3010c` adds only the preceding
+execution-log entry), both `TZ=UTC cargo test --workspace --locked` and
+`TZ=UTC cargo test --workspace --all-features --locked` pass. The initial
+attempt started those two full suites concurrently and exposed shared
+offset-store fixture collisions (`OffsetStore(AlreadyOpen)`) in three tests;
+the affected tests and both complete suites passed when rerun serially. Strict
+all-target/all-feature workspace Clippy and all-target workspace check pass.
+
+Other P18-V02 evidence on the same source tree: pinned Maven `verify` (37
+scenarios and Java/Rust cross-decodes), differential self-test and manifest
+(37 scenarios), deterministic race/leak smoke (16 cases × 3), fuzz smoke (105
+frame seeds, 11 message seeds, 1,856 bounded mutations), release examples,
+workspace benchmark compilation, locked Cargo metadata (7 workspace packages,
+208 crates.io dependencies), workspace metadata/license/dependency checks, all
+seven package listings with LICENSE/NOTICE, the unique-ID fixture under
+`TZ=UTC` and `TZ=Asia/Taipei`, rustfmt, and `git diff --check` all pass. The
+Maven verify and formatting checks ran on the same source tree before its code
+commit; no source changes followed. This closes server-free P18-V02 on this
+code tree only. Broad P18-V01, current-revision GitHub Ubuntu/P18-V04 evidence,
+and pre-publication version/registry checks remain open. Phase 19 local
+Docker/Broker scenarios and owner-run deployment/live Broker checks remain
+outside this Phase 18 gate. No plan edit, push, tag, publication, deployment,
+Docker, or live Broker action occurred.

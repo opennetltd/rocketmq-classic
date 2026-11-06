@@ -1,0 +1,40 @@
+# Phase 18 compatibility release gate — ProcessQueue clear dispatch parity
+# Recorded: 2026-10-23 00:32:19 UTC
+# Code revision: 85f210bd
+
+## Compatibility finding
+
+Pinned Java 5.5.1 `ProcessQueue.clear()` empties the ready and orderly
+in-flight maps, resets cached count/size and `queueOffsetMax`, and leaves
+`consuming` unchanged. Rust now preserves the dispatch flag. The invoked
+facade fixture checks the next `putMessage` result after clearing a queue that
+had already started dispatch, along with the refilled tree and counters.
+Fixture SHA-256:
+`8ab5b2da6cd00449b2af89e5f4a3879608e00990cd2b5562cc2eef2dc23f18ff`.
+
+## Verification on this revision
+
+- `cargo test --offline --workspace --locked --quiet` — PASS.
+- `cargo test --offline --workspace --all-features --locked --quiet` — PASS.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — PASS.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+- Pinned offline Maven `verify` — PASS: 37 differential scenarios, 11 message fixtures/runtime cases, 36 route/VIP cases, 106 typed Java header cross-decodes, and 19 typed Java body cross-decodes.
+- Differential comparator `--self-test` — PASS; `--validate-manifest` — PASS, 37 scenarios.
+- Fuzz smoke — PASS: 163 frame seeds, 11 message seeds, 2,784 bounded mutations, 245 frame decodes, and 192 message decodes.
+- Offline race/leak smoke — PASS: 17 cases repeated three times.
+- `cargo build --offline --workspace --examples --release --locked` — PASS.
+- `cargo bench --offline -p rocketmq-classic --bench offline --locked` — PASS. The current sample is recorded in `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`; it sets no performance threshold.
+
+## Remaining acceptance work
+
+P18-V01's broad Java source/API/settings/input/error/control-flow and Rust
+reverse-export reconciliation remains PARTIAL. Thirty live handoff scenarios
+remain `PENDING_PHASE_19`. Native Windows runtime and current-revision remote
+Ubuntu CI remain unverified; the MSVC cross-check remains stopped by missing
+local Windows SDK headers. Phase 19 Broker/Docker evidence is outstanding.
+
+The external Java checkout at RocketMQ 5.3.3 and its pre-existing untracked
+`broker/src/test/java/org/apache/rocketmq/broker/aaaa.java` were left
+untouched. Compatibility source review uses pinned Java 5.5.1 commit
+`efa1be59d6fc747ad220f036c86030f05f0419f9` and the pinned 5.5.1 artifact.
+Existing Phase 19 working-tree changes were left untouched and unstaged.

@@ -1,0 +1,44 @@
+# Phase 18 Remoting invokeSync timeout-order gate
+
+- Recorded: 2026-10-23 03:23:17 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Implementation commit: `18dd1eefef2c9ed4404724ce8420aafcd79641ba`
+
+## Finding and change
+
+Pinned `NettyRemotingClient.invokeSync` captures the start time and obtains or
+creates its channel before subtracting elapsed milliseconds and rejecting an
+exhausted budget. Rust's public `RemotingClient::invoke_sync(Duration)` had
+converted the duration into an absolute deadline, which let the request budget
+expire during connection acquisition. It now converts to Java whole
+milliseconds and delegates to the signed connection-first path. The explicit
+`invoke_sync_with_deadline` remains available for Rust operations that carry an
+outer absolute deadline.
+
+The new regression uses a zero timeout and confirms the TCP channel is accepted,
+no remoting frame is sent, and shutdown closes the channel. The Remoting
+inventory row now records this flow and test.
+
+## Verification
+
+- `cargo test --offline -p rocketmq-classic-remoting` — passed: 140 unit tests,
+  8 codec tests, 1 bounded-fuzz regression, 7 security tests, 108 transport
+  tests, and 20 doctests.
+- `cargo test --offline -p rocketmq-classic-core --test runtime_lookup` — passed
+  (17 tests).
+- `cargo clippy --offline -p rocketmq-classic-remoting --all-targets --all-features -- -D warnings` — passed.
+- `cargo fmt --all --check` and `git diff --check` — passed.
+- `zero_timeout_connects_before_expiring_without_sending_a_frame` confirms the
+  channel side effect without a Broker request frame.
+- Pinned Java source review: `NettyRemotingClient.invokeSync` lines 556–569.
+
+## Scope and remaining evidence
+
+This closes timeout/channel-acquisition ordering for the public duration-based
+Remoting sync entry and the typed runtime consumer-list/assignment lookups.
+Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export
+reconciliation remains PARTIAL. Current-revision remote Ubuntu CI, native
+Windows runtime evidence, and Phase 19 live Broker/Docker validation remain
+open. No Phase 19 worktree file, external Java checkout, remote CI, or live
+Broker was changed or used.

@@ -1,0 +1,87 @@
+# Phase 18 Producer end-transaction hook and P18-V02 rerun — 2026-10-14T01:30:55Z
+
+- Resumed `phase/19-phase-18-compatibility-release-gate` from `192724bf`. The pinned RocketMQ Java client source/artifact baseline is 5.5.1 at `efa1be59d6fc747ad220f036c86030f05f0419f9`; the external checkout remains read-only.
+- Reviewed and committed the Producer `EndTransactionHook` API, transaction and Broker-check invocation, shared ordered trace-hook list, invoked Java fixture and Rust tests as `52ef36ab` (`feat(producer): expose end transaction hooks`). The fixture SHA-256 is `69185081811cea48e5b0f3f0f6bc17fd37e7faec6f802a98ec670e4d5d355a47`.
+- Updated Phase 7 Producer and Phase 14 transaction matrices, the Phase 6 audit, and `docs/release-checklist.md`. The release checklist records P18-V01 as open and distinguishes the prior full workspace gate revision from `52ef36ab`.
+- Appended this session log; the Phase 18 plan files were not changed.
+
+## Verification
+
+- PASS: `cargo test -p rocketmq-classic-producer --locked` (113 unit tests and all Producer integration/doc targets).
+- PASS: `cargo clippy -p rocketmq-classic-producer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `cargo test --workspace --all-features --locked` on `52ef36ab`.
+- PASS: `cargo test --workspace --locked` on `52ef36ab` when run serially. The initial concurrent default/all-feature invocations made two Pull tests report `OffsetStore(AlreadyOpen)`; both same cases passed in the all-feature run and the serial default rerun. Keep the initial result visible here as a test-process overlap, not a code fix.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, fixture drift checks and Java/Rust cross-decodes).
+- PASS: `python3 tests/differential/compare.py --self-test`; `python3 tests/differential/compare.py --validate-manifest` (37 scenarios).
+- PASS: `bash tests/stress/run-offline-smoke.sh` (16 deterministic race/leak cases × 3 repetitions).
+- PASS: `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` (1,824 bounded mutations).
+- PASS: `cargo build -p rocketmq-classic --examples --release --locked`; `cargo bench -p rocketmq-classic --bench offline --locked --no-run`.
+- PASS: final format and diff checks.
+
+## Remaining work
+
+- P18-V01 remains PARTIAL: complete bidirectional Java source/API/input/control-flow reconciliation and Rust reverse-export audit, including inherited/trait API disposition.
+- No current GitHub Ubuntu workflow result exists for the Linux-specific Java address profile.
+- Phase 19 Docker/Broker scenarios and release version/registry dependency checks remain open; production-only validation stays outside this Phase 18 session.
+- No push, publication or release tag was performed.
+
+## P18-V01 Producer implementation inventory follow-up — 2026-10-14
+
+- Added pinned Java reflection evidence for `DefaultMQProducerImpl`: 2 public constructors and 82 declared public method signatures. Rust integration test `pinned_java_default_producer_impl_public_surface_is_recorded` pins the count and selected hook, route-table, and lifecycle accessor signatures.
+- The first fixture-generation compile failed because Java 11 does not provide `Stream.toList()`. Replaced it with `Collectors.toList()`; Java 11 compilation then succeeded. Record the initial compile failure rather than silently dropping it.
+- Regenerated `fixtures/producer/core.json`; SHA-256 `f1fb6863e432b5ae9c372b3ef8862c46d1dc80025cd3fcda7e443488356cc2cb`. `mvn -q -f compat/java-reference/pom.xml -Dproducer.core.fixture.verify=false verify` passed; subsequent default `mvn -q -f compat/java-reference/pom.xml verify` passed with drift checks and cross-decodes.
+- PASS: `cargo test -p rocketmq-classic-producer --locked` (113 unit tests and Producer integration/doc targets), including the 9-test Producer integration file and new method inventory assertion.
+- PASS: `cargo clippy -p rocketmq-classic-producer --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- Updated the Phase 7 matrix, Phase 6 audit, and release checklist with the inventory and explicit unresolved method dispositions. The direct CheckForbidden/SendMessage helper APIs, raw table/state/runtime accessors, and per-overload input/branch crosswalk are still P18-V01 work.
+- The full workspace P18-V02 suite most recently passed on runtime revision `52ef36ab`; this follow-up adds fixture/test inventory only. Rerun final workspace gates after the remaining P18-V01 implementation work.
+
+## P18-V01 Producer CheckForbidden/SendMessage direct helper follow-up — 2026-10-14T01:57:53Z
+
+- Added the five public `Producer` mappings present on pinned Java `DefaultMQProducerImpl`: `hasCheckForbiddenHook`, `executeCheckForbiddenHook`, `hasSendMessageHook`, and `executeSendMessageHookBefore/After`. Shared snapshot runners now serve both direct invocation and send flows; check-hook execution reuses one snapshot so concurrent registration cannot split its empty check from the executed hooks.
+- Added invoked Java cases for registration/presence, ordered check-hook mutation and rejection short-circuit, and before/after send ordering with per-hook exception isolation. The Java surface remains 2 constructors and 82 methods; this work maps already inventoried methods and does not change the count.
+- The first Rust differential run failed because the checked-in fixture did not yet contain the newly added Java result. Regenerated `fixtures/producer/core.json` with the pinned Java harness, then the focused test and full Producer crate suite passed. Retain this first failure as fixture-update sequencing evidence.
+- Fixture SHA-256: `ca42f599afeb81e9a977c7ae88547fe7ce2b3b7fa9dec3940055962219a9cb9e`.
+- Code/test/fixture commit: `eeee3b5f` (`feat(producer): expose implementation hook helpers`). Documentation and this log are committed separately.
+
+### Verification
+
+- PASS: `mvn -q -f compat/java-reference/pom.xml -Dproducer.core.fixture.verify=false verify` (fixture regeneration and all Java reference checks).
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and fixture drift checks).
+- PASS: `cargo test -p rocketmq-classic-producer --locked` (113 unit tests and all Producer integration/doc targets, including the new public API fixture test).
+- PASS: `cargo clippy -p rocketmq-classic-producer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- P18-V01 remains PARTIAL: raw route/state/runtime accessor dispositions and per-overload input/branch reconciliation, plus the broader bidirectional Java/Rust audit, remain open. Full workspace P18-V02 gates still need a final rerun after the remaining audit work.
+
+## P18-V01 Producer service-state accessor follow-up — 2026-10-14T02:12:49Z
+
+- Added public `ProducerServiceState` with Java names, ordinal order, enum lookup and comparison; added nullable `Producer::service_state` / `set_service_state` and `is_unit_mode`. Producer lifecycle now reports `CREATE_JUST`, `START_FAILED`, `RUNNING`, and `SHUTDOWN_ALREADY`; duplicate group registration restores `CREATE_JUST`, and a failed start remains `START_FAILED`.
+- Extended the pinned Java fixture for default producer identity/config, unit mode, nullable state, and all Java `ServiceState` names/ordinals. The 82-method Java inventory is unchanged; the existing methods now have a direct Rust state/configuration mapping.
+- The initial state accessor test failed against the old fixture because the fixture had not yet been regenerated. After generation, the fixture-backed test passed. Preserve the sequencing failure here.
+- Fixture SHA-256: `04bd2ccab1dbf48ba1101f3a1df84e6e16ae9ac339f2ca69a4724dbc5e16c14f`.
+- Code/test/fixture commit: `b9e69c3e` (`feat(producer): expose implementation service state`). Matrix/checklist and this log are committed separately.
+
+### Verification
+
+- PASS: `mvn -q -f compat/java-reference/pom.xml -Dproducer.core.fixture.verify=false verify` (Java fixture regeneration and reference checks).
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and fixture drift checks).
+- PASS: `cargo test -p rocketmq-classic-producer --locked` (114 unit tests and all Producer integration/doc targets).
+- PASS: `cargo clippy -p rocketmq-classic-producer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- P18-V01 remains PARTIAL. The live Java topic-publish table alias and returned client-factory surface still need a method-level mapping/disposition; nested `MQFaultStrategy` helper methods and per-overload branches remain under audit. Full workspace P18-V02 gates are deferred until this audit slice is complete.
+
+## P18-V01 Producer live topic-publish table slice — 2026-10-14T02:30:41Z
+
+- Added a shared `TopicPublishInfoTable` returned by `Producer::get_topic_publish_info_table`, with shared mutable `TopicPublishInfo`, queue-list, route-data and queue-cursor handles. Producer route updates and sends use those shared values; later default sends now observe queue-list mutation, and fault selection advances the live per-info cursor.
+- Added an invoked pinned Java fixture for map/value/list/route/cursor identity, setter replacement, selection, write-queue count and removal. Updated the Rust producer fixture differential and scripted-send regression. Fixture SHA-256: `685440b6a611c6ed64988dc7761623a8915d070354ea84b09ec5349d3418353d`.
+- Preserve failure history: the first full Producer test run exposed a regression where an explicit-queue future retry consulted the route table and selected a different Broker. Dynamic table refresh is now limited to default-route sends when the Java flow carries `TopicPublishInfo`; the focused retry test and subsequent complete Producer run pass.
+- Code/test/fixture commit: `aee34905` (`feat(producer): expose live publish info table`).
+
+### Verification
+
+- PASS: `mvn -q -f compat/java-reference/pom.xml -Dproducer.core.fixture.verify=false verify` (fixture generation/drift check and 37 scenarios).
+- PASS: `cargo test -p rocketmq-classic-producer --locked` (116 unit tests; all Producer integration and doc targets).
+- PASS: `cargo clippy -p rocketmq-classic-producer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- P18-V01 remains PARTIAL. The Rust live table slice covers the exercised get/put/putIfAbsent/remove/clear path and nested aliases; Java `ConcurrentMap` remapping methods and retained key/value/entry views still need method-level mapping. The returned client-factory surface, nested `MQFaultStrategy` helpers and per-overload input/branch mapping remain open. Rerun full workspace P18-V02 gates after the remaining P18-V01 audit slices.

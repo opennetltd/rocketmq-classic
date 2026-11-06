@@ -1,0 +1,5 @@
+# Phase 6 API inventory continuation — 2026-10-10T19:00Z
+
+- Cross-checked the central Java-to-Rust public API table against recent commits. Updated it to list nullable runtime creation overloads, ordered nullable `putAll` rows, `replaceAll` nullable results, and nullable `Map.Entry.setValue` explicitly.
+- Documentation-only reconciliation; runtime behavior and fixture are unchanged. `git diff --check` passes.
+- Broader Phase 6 source/API/input/reverse-export reconciliation remains open; P6-V04 stays a Phase 19 handoff.

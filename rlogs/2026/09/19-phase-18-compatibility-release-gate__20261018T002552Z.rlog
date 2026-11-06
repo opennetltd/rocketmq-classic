@@ -1,0 +1,77 @@
+# P18-V01 CreateTopicRequestHeader reflection decoding — 2026-10-18T00:25:52Z
+
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Pinned Java oracle: RocketMQ client 5.5.1 at
+  `efa1be59d6fc747ad220f036c86030f05f0419f9` in the read-only checkout
+  `/Users/bruce.tsai/Projects/3rd/rocketmq`.
+- Source inspection confirmed `CreateTopicRequestHeader` does not implement
+  `FastCodesHeader`. Both `useFastEncode` hints fall through to
+  `RemotingCommand.decodeCommandCustomHeaderDirectly`'s reflection loop. Each
+  field conversion exception is caught independently; nullable fields retain
+  null/default state, Boolean parsing follows `Boolean.parseBoolean`, and
+  `checkFields()` validates `topicFilterType` after all fields are visited.
+- Rust now exposes the Java nullable/reference fields as `Option`, skips failed
+  numeric field conversions for this header, preserves the initialized false
+  values of `order` and `force`, and runs the final `topicFilterType` check.
+  Producer/consumer topic-creation call sites and tests now pass explicit
+  `Some` values. The invoked Java fixture covers both mode hints, valid values,
+  missing/malformed numeric fields, malformed Boolean text, and valid/invalid/
+  missing topic filter type. Fixture SHA-256:
+  `20e0a1c2dd78af55b220976ad6faecc37673d0d6951954a4a0c2bc433a7053a7`.
+- Implementation commit: `4f7f9435 fix(protocol): match create-topic reflection decode`.
+
+## Verification
+
+- `cargo test -p rocketmq-classic-protocol --test headers --locked --offline`:
+  PASS (12 tests).
+- `cargo test -p rocketmq-classic-remoting --lib
+  create_topic_header_reflection_modes_match_invoked_java --locked --offline`:
+  PASS.
+- `cargo test --workspace --locked --offline -- --test-threads=1`: PASS,
+  including workspace integration tests and doc tests.
+- `cargo test --workspace --all-features --locked --offline
+  -- --test-threads=1`: PASS, including workspace integration tests and doc
+  tests.
+- `cargo check --workspace --all-targets --all-features --locked --offline`:
+  PASS.
+- `cargo clippy --workspace --all-targets --all-features --locked --offline
+  -- -D warnings`: PASS after simplifying the validation-test Boolean
+  expression flagged on the first run.
+- `mvn -o -q -f compat/java-reference/pom.xml verify`: PASS. This verified the
+  new fixture, 37 differential scenarios, fixture drift, 56 typed-header
+  cross-decodes and 14 typed-body cross-decodes. Existing JDK Unsafe and
+  reflective-final-field warnings were emitted.
+- `python3 tests/differential/compare.py --self-test` and `--validate-manifest`:
+  PASS; 37 rows.
+- `bash tests/stress/run-offline-smoke.sh`: PASS; 16 race/leak cases × 3.
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked
+  --offline`: PASS; 107 frame seeds, 11 message seeds, 1,888 mutations, 165
+  frame decodes and 116 message decodes.
+- Release examples, `cargo bench --workspace --no-run`, and the offline
+  benchmark all passed. macOS ARM64 Apple M5 Max, Rust 1.85.0 observations per
+  iteration: frame encode/decode 2,233.7 ns; Zstd message decode 1,076.2 ns;
+  Producer request construction 1,162.2 ns; 128-entry route lookup 15.1 ns;
+  loopback pending completion 66,511.7 ns. These are observations, not
+  acceptance thresholds.
+- Locked Cargo metadata, workspace license/dependency-direction checks,
+  package-content listing, UTC and Asia/Taipei Unique ID tests, `cargo fmt --all
+  -- --check`, and `git diff --check`: PASS.
+- The first header validation-matrix run exposed stale strict-required
+  expectations; those were updated to the Java reflection outcomes and rerun
+  successfully. An initial Maven fixture-generation invocation used the
+  project's default `Main` entry point; generation then succeeded through its
+  explicit fixture dispatch, and full Maven verify passed.
+
+## Remaining scope
+
+- This closes only the CreateTopic header decoding slice and records current
+  server-free P18-V02 evidence. Broad P18-V01 bidirectional API/settings/input/
+  error/flow and Rust reverse-export reconciliation remains open.
+- Current-revision Ubuntu/native Windows P18-V04 evidence and final P18-V03
+  package/provenance review remain open. Phase 19's remaining 30 live scenarios
+  and required profiles remain open; owner environment checks are separate.
+- The worktree's existing Phase 19 runner/README changes were preserved and
+  excluded from this P18 implementation commit. The Java oracle checkout and
+  plans were not modified; no Docker resources, Broker operations, remote
+  branch updates, tags, publication, or deployment were performed.

@@ -1,0 +1,42 @@
+# Phase 18 MessageClientExt offset-ID subtype closure — 2026-10-21T21:49:22Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `9cdd1308` (`fix(common): dispatch client offset ID overrides`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Runtime consumer fixture SHA-256:
+`403b79b69f30957ae2f935be37ec0b8537696909d91066d2126f216eff31996d`.
+
+## Change
+
+- Added `MessageExtSubtype` hooks for Java `MessageClientExt.getOffsetMsgId()`
+  and `setOffsetMsgId(String)`. The owned getter result supports custom
+  subtypes backed by interior mutable state.
+- Routed Rust `MessageClientExt` get/set methods through the retained subtype.
+  `getMsgId()` continues to prefer the live `UNIQ_KEY` property, then reaches
+  the virtual offset getter. Base `setMsgId` remains a no-op unless the
+  runtime subtype overrides it.
+- Added two invoked Java direct-consume cases for an offset-only subclass,
+  both without and with `UNIQ_KEY`. Rust also tests wrapper setter dispatch,
+  unique-ID precedence/live changes, and conversion to `MessageExt`.
+
+## Verification
+
+- Focused Common wrapper-dispatch test — passed.
+- Focused Rust direct-consume fixture comparison — passed.
+- `cargo test --workspace --locked --quiet` — passed.
+- `cargo test --workspace --all-features --locked --quiet` — passed.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+  — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- `mvn -q -f compat/java-reference/pom.xml verify` — passed: 37 scenarios,
+  9 Running Info, 29 direct-consume, 15 reset, 85 typed headers, and 16 typed
+  bodies. Existing JDK/Netty `Unsafe` and reflective-final-field warnings were
+  emitted.
+
+## Remaining work
+
+Broad P18-V01 source/API/settings/input/error/control-flow/reverse-export
+reconciliation remains open. The full current-revision supplemental P18-V02
+stress/fuzz/benchmark/package refresh and GitHub Ubuntu/native Windows P18-V04
+evidence remain open. No push, remote CI, Broker, or Docker run was performed.
+Protected Phase 19 worktree paths were unchanged and unstaged.

@@ -1,0 +1,41 @@
+# Phase 18 consumer statistics callback ownership parity
+
+- Recorded: 2026-10-23 21:02:29 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Starting revision: `8e801833`
+- Implemented revision: `b0189bd3`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: identity and behavior of the five `ConsumerStatsManager` `StatsItemSet` schedules
+
+## Finding and change
+
+Pinned Java creates five `StatsItemSet`s and registers six jobs per set. Each
+sample and print callback operates on that set's own metric map. Rust had
+queued the same 30 jobs and emitted all five metric groups from every print
+callback, multiplying output by five; sample callbacks also advanced every
+series at once.
+
+Rust schedule tasks now retain a `StatsItemSetKind`. Each sampler advances only
+its matching series, and each print callback emits only its matching metric
+group. The schedule remains 30 jobs in Java constructor order. Regressions
+verify schedule identity, isolated sampling, and exactly one matching log event
+per set.
+
+## Verification
+
+- `cargo test -p rocketmq-classic-core --lib runtime::stats::tests -- --nocapture` — passed (8 tests).
+- `cargo test -p rocketmq-classic-core --lib stats_schedules_keep_each_java_item_set_identity -- --nocapture` — passed (1 test).
+- `cargo test --workspace --locked` and `cargo test --workspace --all-features --locked` — passed, including doctests.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — passed.
+- Windows GNU workspace all-target/all-feature check and strict Clippy — passed.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — passed, including 37 scenarios and Java/Rust cross-decodes for 11 message fixtures, 106 headers, and 19 bodies.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+## Acceptance boundary
+
+The duplicate statistics log fan-out and cross-series sampling discrepancy are
+closed. Broad P18-V01 bidirectional API/settings/input/error/control-flow and
+reverse-export reconciliation remains PARTIAL. Native Windows execution and
+current-revision remote CI remain open. No plan was edited, no push or remote
+CI was run, and the four user-owned Phase 19 paths remain untouched and
+unstaged.

@@ -1,0 +1,43 @@
+# Phase 18 compatibility release gate — 2026-10-22 03:28:21 UTC
+
+Base revision: `d73593a9`. This entry records the request 513
+`createStaticTopic` Broker RPC slice. Pinned Java source is
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Compatibility changes
+
+- Added `MQClientApi::create_static_topic`, mapping `TopicConfig` fields to
+  `CreateTopicRequestHeader`, encoding `TopicQueueMappingDetail` as the body,
+  applying configured VIP conversion and the Java timeout, and preserving
+  Java's lack of local topic-permission validation.
+- Extended the shared Fastjson body writer to emit integer keys in
+  `hostedQueues` unquoted, matching Java alongside the existing `currIdMap`
+  handling.
+- Added invoked Java/Rust coverage for populated and default mapping details,
+  null and empty default topics, force/order/filter fields, invalid
+  permission, Broker rejection, exact body bytes, VIP routing, and timeout.
+- Updated request-code and Phase 6 API/reverse-audit documentation. The
+  direct-operation reverse audit now has 8 open rows; wider Phase 18 work
+  remains open.
+
+## Local verification
+
+- `cargo test -p rocketmq-classic-protocol --locked`: 155 unit tests, 57
+  integration tests, and 156 doctests passed.
+- `cargo test -p rocketmq-classic-core --test admin_rpc --locked`: 100 passed.
+- `cargo test -p rocketmq-classic-core --lib --locked`: 200 passed.
+- `cargo clippy -p rocketmq-classic-protocol -p rocketmq-classic-core --all-targets --all-features --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- `mvn -o -f compat/java-reference/pom.xml verify`: BUILD SUCCESS; the
+  Java producer fixture verified, and Java decoded 96 Rust typed headers and
+  19 Rust typed bodies.
+- SHA-256 `fixtures/producer/core.json`:
+  `1b8c764c1efe3c4b11299d8b7ae847904a25f191e210b23412f92f8190d4e48d`.
+
+## Remaining work
+
+Request 513 is closed. The direct-operation reverse audit still has 8 open
+rows, and the broader Phase 18 settings, input, error, control-flow,
+reverse-export, and platform reconciliation remains open. No Broker, Docker,
+or remote CI was used. Pre-existing Phase 19 worktree paths remain unstaged
+and outside this slice.

@@ -1,0 +1,1 @@
+{"java_client_version":"5.5.1","server_baseline_not_contacted":"5.3.4","scenario_id":"P5-RPC-PULL-19","request_code":11,"response_code":19,"response":true,"ext_fields":{"suggestWhichBrokerId":"1","nextBeginOffset":"10","maxOffset":"100","minOffset":"0"},"body_hex":"","frame_sha256":"f2c8283a3eb90e4a134da57983ee58bf46601c6dce5731d40f15494b9896bbcc","java_outcome":"NO_NEW_MSG"}

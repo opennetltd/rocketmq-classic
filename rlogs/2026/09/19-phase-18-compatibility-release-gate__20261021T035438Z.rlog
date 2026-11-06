@@ -1,0 +1,19 @@
+# P18 Pull rebalance settings slice — 2026-10-21T03:54:38Z
+
+- Pinned Java client 5.5.1 `RebalancePullImpl` behavior now records group,
+  message-model and allocation-strategy setter results and strategy identity.
+  The facade behavior fixture regenerated and drift verification passed.
+- Pull rebalance message model and allocation strategy are shared between the
+  consumer owner and active `PullConsumerRegistration`. Setters can be called
+  through the shared owner and trigger an immediate rebalance after startup;
+  heartbeat data retains the facade's configured model snapshot.
+- Fixture SHA-256:
+  `7a7234d87c260b398f73bbf4b868714f87c5c9f27a6f0659cb0b93a7e9e834f0`.
+- PASS: `cargo test -p rocketmq-classic-consumer --test facade_api_surface
+  --locked` (9 tests); `cargo test -p rocketmq-classic-consumer --locked
+  --all-features` (236 unit tests, all integration targets and 13 doctests);
+  strict all-target/all-feature Consumer Clippy; pinned Java fixture drift
+  verification; formatting and `git diff --check`.
+- Broad P18-V01 remains open, as do the current-revision full-workspace P18-V02
+  gate, final P18-V03 review and current Ubuntu/native Windows P18-V04 evidence.
+  No remote CI or Phase 19 Broker/Docker run was performed.

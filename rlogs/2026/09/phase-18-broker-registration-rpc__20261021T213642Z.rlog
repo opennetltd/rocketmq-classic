@@ -1,0 +1,51 @@
+# Phase 18 Broker registration RPC slice and current-revision gates — 2026-10-21T21:36:42Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `ada87ea9` (`test(protocol): simplify header API inventory`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Producer core fixture SHA-256: `9510b46415e7f00c7932c95d9e33dbb02e9b9cc56d1afecec01dfede60ae5e6a`.
+
+## Change recorded
+
+- Mapped Java `MQClientAPIImpl.addBroker(String,String,long)` request 902 and
+  `removeBroker(String,String,String,long,long)` request 903 to Core methods.
+- Added public typed request headers preserving nullable Java fields and the
+  signed boxed-`Long` broker ID. Both methods use the supplied Broker address,
+  caller timeout, and Java success/error response boundary.
+- Invoked Java fixtures and Rust loopback tests cover signatures, request
+  fields, nullable values, signed ID boundaries, success/rejection, direct
+  address, and timeout behavior. A delayed peer checks `add_broker` timeout.
+- Updated the request-code inventory to 85 typed header frames and added the
+  controller-admin scope finding to Phase 17 documentation.
+
+## Scope evidence
+
+Pinned-source call-site scan for `getControllerMetaData`, `getInSyncStateData`,
+`getBrokerEpochCache`, `getControllerConfig`, `updateControllerConfig`,
+`electMaster`, and `cleanControllerBrokerData` found the corresponding admin
+facade workflows in `tools/.../MQAdminExt`, `DefaultMQAdminExt`,
+`DefaultMQAdminExtImpl`, and controller/HA CLI commands. The three workflows
+`getInSyncStateData`, `electMaster`, and `cleanControllerBrokerData` also call
+`getControllerMetaData` internally. Following Phase 17's explicit exclusion
+of the separate `rocketmq-tools` suite, these seven admin facade workflows are
+recorded as `TOOLS_OUT_OF_SCOPE`. The broader P18-V01 inventory remains open.
+
+## Verification
+
+- `cargo test --workspace --locked --quiet` — passed.
+- `cargo test --workspace --all-features --locked --quiet` — passed.
+- `cargo fmt --all -- --check` — passed.
+- `git diff --check` — passed.
+- `mvn -q -f compat/java-reference/pom.xml verify` — passed: 37 scenarios,
+  85 Rust typed header frames decoded by Java, and 16 typed body frames.
+  Existing JDK/Netty `Unsafe` and reflective-final-field warnings were emitted.
+- Strict all-target/all-feature Clippy passed on code revision `ada87ea9`.
+  Differential comparator self-test and manifest validation are recorded as
+  passing in the current Phase 18 test inventory.
+
+## Remaining gates and environment
+
+Broad P18-V01 source/API/settings/input/error/control-flow/reverse-export
+reconciliation and current-revision GitHub Ubuntu/native Windows P18-V04
+evidence remain open. No push, remote CI, Broker or Docker run was performed.
+Protected Phase 19 worktree paths were left unchanged and unstaged.

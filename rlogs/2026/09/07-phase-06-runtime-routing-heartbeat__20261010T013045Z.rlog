@@ -1,0 +1,9 @@
+Session: 2026-10-10T01:30:45Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Inactive inbound capability continuation: added `absent_consumer_group_and_handler_capabilities_return_phase_errors` in `runtime/inbound.rs`. For all five consumer-operation codes, it tests an absent required group field and a registered consumer whose default `inbound_processor` returns None; both inputs yield `REQUEST_CODE_NOT_SUPPORTED` and the expected Phase 9/17 remark. Test commit `aee49ffa`; matrix/audit commit `497b9a1b`.
+
+Verification passed: `cargo test -p rocketmq-classic-core --lib runtime::inbound::tests --locked` (6 passed); `cargo clippy -p rocketmq-classic-core --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`. An earlier formatter check reported only formatting of the new test; `cargo fmt --all` applied the requested layout before the final six-test run. No production behavior changed.
+
+Other inactive features remain assigned to their owner phases; whole Phase 6 source/input/API reconciliation remains open and P6-V04 stays assigned to Phase 19.

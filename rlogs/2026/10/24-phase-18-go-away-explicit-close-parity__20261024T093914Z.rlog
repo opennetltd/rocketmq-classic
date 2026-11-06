@@ -1,0 +1,44 @@
+Phase 18 GO_AWAY explicit-close lifecycle parity
+Date: 2026-10-24 UTC
+
+Source review
+- Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- `NettyRemotingClient.closeChannels(List)` obtains each address's `ChannelWrapper` and calls `closeChannel(addr, cw.getChannel())`, closing only its current channel.
+- `ChannelWrapper` retains its previous future in `channelToClose`; `ChannelWrapper.close()` closes both current and retained previous channels during shutdown.
+- Rust previously removed and closed every `retired_connections` entry from `close_channels`, terminating work that Java leaves on the old channel.
+
+Change
+- Code commit `dbbed745` removes retired-generation closure from explicit `close_channels`.
+- The scripted-peer regression now holds one request on the old generation while GO_AWAY causes another request to retry on the replacement. Explicit close terminates the replacement retry; the old request completes normally on its retained socket. Client shutdown then closes that old socket.
+- Documentation correction is committed separately.
+
+Verification
+- `cargo test --offline --locked -p rocketmq-classic-remoting --test transport p3_close_channels_closes_go_away_current_but_keeps_retired_generation` — PASS (1 passed).
+- `cargo fmt --all -- --check` — PASS before the code commit.
+- `git diff --check` — PASS after code changes and again after documentation edits.
+- Full workspace tests, Maven verification, Clippy and P18-V02 gate were not rerun for this slice.
+- No remote CI or push was run. Phase 19 worktree files were not modified or staged.
+
+## Post-commit Remoting package verification — 2026-10-24 09:43 UTC
+
+- At code revision `dbbed745`, `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo test --offline --locked -p rocketmq-classic-remoting` passed: 145 unit tests, 9 codec tests, 1 fuzz-regression test, 7 security tests, 109 transport tests, and 20 doctests.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo clippy --offline --locked -p rocketmq-classic-remoting --all-targets --all-features -- -D warnings` passed.
+- Full workspace gates and Maven verification were not repeated for this slice. No remote CI or push was run.
+
+## Current-tree P18-V02 server-free gates — 2026-10-24 10:02 UTC
+
+- Code/test revision: `dbbed745`; documentation head before this record: `83ce3bda`; pinned Java: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo test --offline --workspace --locked` — PASS, including package tests and doctests.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo test --offline --workspace --all-features --locked` — PASS, exit code 0, including package tests and doctests.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — PASS.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+- `python3 tests/differential/compare.py --self-test` and `python3 tests/differential/compare.py --validate-manifest` — PASS; manifest has 37 scenarios.
+- `TERM=dumb mvn -o -q -f compat/java-reference/pom.xml verify` — PASS; 37 scenarios, 11 message fixtures, 106 typed headers, 19 typed bodies, fixture drift checks, and Java/Rust cross-decodes.
+- `CARGO_NET_OFFLINE=true CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target bash tests/stress/run-offline-smoke.sh` — PASS, 20 deterministic race/leak cases × 3 repetitions.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo run --offline --locked -p rocketmq-classic-remoting --example fuzz_smoke` — PASS, 163 frame seeds, 11 message seeds, 2,784 bounded mutations, 564 frame decodes, 192 message decodes.
+- Windows GNU `cargo check --workspace --all-targets --all-features --locked --offline --target x86_64-pc-windows-gnu` and strict matching `cargo clippy ... --target x86_64-pc-windows-gnu -- -D warnings` — PASS as compile-only checks.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo build --release --offline --locked -p rocketmq-classic --examples` — PASS.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo bench --offline --locked -p rocketmq-classic --bench offline` — PASS. Sample recorded in `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`; timing has no threshold.
+- `python3 scripts/check-workspace-metadata.py` and `cargo metadata --offline --locked --format-version 1 --no-deps` — PASS.
+
+Native Windows runtime and current-revision remote Ubuntu CI were not run. Phase 19 Broker/Docker validation remains separate. No remote CI or push was run. The protected Phase 19 worktree paths were not modified or staged.

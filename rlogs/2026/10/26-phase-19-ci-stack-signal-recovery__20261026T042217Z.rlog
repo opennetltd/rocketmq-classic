@@ -1,0 +1,130 @@
+# Execution log: Phase 19 Linux stack-capture CI correction
+
+- Session date: 2026-10-26 UTC
+- Candidate under initial remote CI: `187b0427263c476ddee7808d67b7aa79e9ddb7f8`
+- Stress implementation: `5e1c80b1716936a04f319832adc9d382adc2b500`
+- Initial aggregate evidence commit: `187b0427`
+- Java oracle: Apache RocketMQ 5.5.1 source
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`, read-only.
+- Scope: diagnose the parallel Linux CI failure, improve the safe signal
+  fallback pool, and align CI's workspace test execution with the serial mode
+  required by the complete local aggregate. No plan files were edited.
+
+## Remote CI diagnostic
+
+- Pushed commit `187b0427` triggered GitHub Actions run
+  `40266865631` at
+  `https://github.com/triotous/rocketmq-classic/actions/runs/40266865631`.
+- The `windows-stack-runtime` job passed. The standard Linux job passed format
+  and strict Clippy, then failed the default parallel
+  `cargo test --workspace --locked` command. The failing test was
+  `stack::tests::concurrent_jstack_captures_are_serialized_without_losing_threads`;
+  the captured panic reported that no unused, unblocked default-ignore signal
+  was available. The required Docker Phase 19 matrix remained in progress at
+  this log's initial write.
+- The signal choice is process-wide and depends on every live thread's blocked
+  mask. Four signals whose default action is ignore are now considered, and the
+  Linux unit tests cover selection of the fourth candidate. When another test
+  process thread blocks all four or installs handlers for them, the stack
+  implementation's existing current-thread fallback remains appropriate.
+
+## Corrective change and checks
+
+- `.github/workflows/ci.yml` now runs both default and all-feature workspace
+  test suites with `-- --test-threads=1`, matching the existing
+  `integration-tests/run-local.sh` command and keeping process-global signal
+  tests isolated from unrelated concurrently running test threads.
+- A Linux ARM64 container using Rust 1.85.0 ran the consumer library suite
+  without serialization once: 275 tests passed, then a repeat reproduced the
+  signal-mask limitation in `jstack_includes_current_and_other_named_threads`.
+  This confirmed the process-wide concurrency issue and justified serial test
+  execution rather than weakening either stack-capture assertion.
+- The same Linux container then ran the consumer suite with
+  `-- --test-threads=1`: all 275 tests passed in 77 seconds. Strict Clippy for
+  the consumer library passed in 27.52 seconds. `cargo fmt --all -- --check`
+  and `git diff --check` passed on the worktree.
+- The remote workflow for the corrected candidate and its Docker matrix remain
+  pending; the initial workflow does not validate the correction.
+
+## Owner and release constraints
+
+- MAN-01 through MAN-04 remain blocked on owner-provided network, security, HA,
+  and representative workload/SLO inputs. The source-backed MAN-05 audit is
+  unchanged. No owner or production environment was accessed, and no plan file
+  was modified.
+- No tag or package was created or published.
+
+## Clean committed-source verification
+
+- Correction commit: `2a81b58ca9f1ea9b9b3623654d139f94657e89e0`.
+- After commit, the Linux ARM64 Rust 1.85.0 container reran the consumer
+  library suite with `-- --test-threads=1`: 275 passed, 0 failed, in 82.78
+  seconds. Consumer-library strict Clippy passed with `-D warnings`.
+- Archived serial test, Clippy, parallel diagnostic, and initial GitHub failure
+  excerpt files are in
+  `docs/compatibility/evidence/phase-19/CI-STACK-001/20261026T042217Z/`.
+  Metadata records the committed source revision and container commands.
+- `cargo fmt --all -- --check` and `git diff --check` pass. No plan files were
+  changed. The correction has not yet been pushed; GitHub Actions must validate
+  the final pushed candidate.
+
+## 2026-10-26 GitHub revalidation of `b2e2c54e`
+
+- GitHub Actions run `40269062847` checked source revision
+  `b2e2c54e90f922c6b28960c42b608d49a22e3801`. Its Windows stack-runtime and
+  general Rust test jobs passed. The 23 server-free gates passed on all three
+  Docker-matrix attempts.
+- Initial matrix job `121397722605` failed during
+  `P5-V02-extensions` after beginning live scenarios. The completed job log
+  did not contain a useful assertion or probe diagnostic.
+- Manual rerun job `121429283601` failed during
+  `REQ-001-request-reply-success` after probe compilation began, again without
+  a compiler or assertion diagnostic. Focused local runs of
+  `P5-V02-extensions` passed twice at `20261026T061536Z` and
+  `20261026T061937Z`; a focused clean-source run of
+  `REQ-001-request-reply-success` passed in 103 seconds at `20261026T075406Z`.
+- Manual rerun job `121459038369` completed as cancelled. It ran from
+  `2026-10-26T07:56:32Z` to `2026-10-26T09:26:17Z`; its aggregate gate ran
+  from `08:03:18Z` to `09:26:15Z` and ended with `Terminated` and
+  `The operation was canceled` while `live-scenarios` was active. All
+  server-free gates had passed. This was not a scenario assertion failure.
+- The full logs for all three matrix jobs are archived in
+  `docs/compatibility/evidence/phase-19/CI-DOCKER-RETRY-001/20261026T042612Z/`.
+  The manual rerun cancellation occurred about 90 minutes after job start even
+  though `.github/workflows/ci.yml` declares `timeout-minutes: 180`.
+- Pending: push this retry evidence and the two local scenario evidence
+  directories, then await the fresh push-triggered workflow on that final
+  source revision. No plan files were edited. MAN-01 through MAN-04 remain
+  blocked on owner input; no tag or package was created or published.
+
+## 2026-10-26 push-triggered CI diagnosis and correction
+
+- GitHub Actions run `40299960470` checked `c24044f5376f2860121a95af032406ace41c1ab5`.
+  Matrix job `121495132354` passed `workspace-tests-default` and failed
+  `workspace-tests-all-features` in both Linux stack-capture tests because no
+  safe capture signal was unblocked across every process thread. Docker-backed
+  gates and live scenarios did not start.
+- General test job `121495132815` failed its default serialized workspace
+  suite: 274 passed and `stack::tests::concurrent_jstack_captures_are_serialized_without_losing_threads`
+  failed with `no unused, unblocked default-ignore signal is available for
+  stack capture`. Later steps were skipped.
+- Windows job `121495132701` failed
+  `stack::tests::jstack_includes_current_and_other_named_threads`. The panic at
+  `stack.rs:1283` showed that `jstack-worker` was absent from the dump and that
+  two remaining threads had no captured stacks. The Windows capture loop used
+  one global five-second deadline and did not query names for entries left
+  after that deadline.
+- Archived all three job logs and metadata in
+  `docs/compatibility/evidence/phase-19/CI-DOCKER-RETRY-002/20261026T093620Z/`.
+- Corrective worktree changes select safe Linux signals per target thread and
+  return a partial dump when no safe signal can reach a specific thread. The
+  Windows capture resolves thread names before walking, visits named threads
+  before unnamed ones, and gives each thread at most 100 ms within the existing
+  five-second snapshot deadline.
+- Linux ARM64 Rust 1.85.0 focused stack tests passed 7/7, the full consumer
+  library suite passed 276/276, and strict consumer Clippy passed with
+  `-D warnings`. A Windows GNU cross-check could not run because the Docker
+  container does not have `x86_64-w64-mingw32-gcc`.
+- A fresh push-triggered workflow is required to validate the correction and
+  resume the matrix gates. No plan files were edited. MAN-01 through MAN-04
+  remain owner-input blocked; no tag or package was created or published.

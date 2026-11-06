@@ -1,0 +1,54 @@
+Session: 2026-10-16T00:46:03Z
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Branch: phase/19-phase-18-compatibility-release-gate
+Code revision: 375aeff5
+
+P18-V01 Remoting reverse-surface correction:
+- Made `ClientConfig::validate` internal (`pub(super)`) because pinned Java
+  `NettyClientConfig` has no public standalone validator. `RemotingClient::with_config`
+  continues to validate before construction.
+- Added compile-fail rustdoc coverage and changed transport validation checks
+  to exercise the public constructor. Updated the Phase 3 Remoting inventory.
+- Commit: `375aeff5 fix(remoting): keep config validation internal`.
+- Scoped validation passed: Remoting all-feature tests (97 unit, 8 codec,
+  1 fuzz regression, 7 security, 100 transport, 8 doctests); strict Remoting
+  all-target/all-feature Clippy; `cargo fmt --all -- --check`; `git diff --check`.
+
+Final server-free P18-V02 run on `375aeff5` (macOS 26.6.1 arm64):
+- `rustc 1.85.0`, `cargo 1.85.0`, Maven 3.10.0 with Java 27.
+- `TZ=UTC cargo test --workspace --locked` — passed.
+- `TZ=UTC cargo test --workspace --all-features --locked` — passed.
+- `cargo check --workspace --all-targets --all-features --locked` — passed.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+  — passed.
+- `mvn -f compat/java-reference/pom.xml verify` — passed; 37 scenarios,
+  Java/Rust cross-decodes and fixture checks.
+- Differential comparator self-test and `--validate-manifest` — passed;
+  37 scenarios validated.
+- `bash tests/stress/run-offline-smoke.sh` — 16 race/leak cases × 3 passed.
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` —
+  105 frame seeds, 11 message seeds, 1,856 mutations, 146 frame decodes and
+  113 message decodes passed.
+- `cargo build -p rocketmq-classic --examples --release --locked` and
+  `cargo bench --workspace --no-run --locked` — passed.
+- `cargo metadata --locked --format-version 1 --no-deps`, full locked metadata,
+  `scripts/check-workspace-metadata.py`, and
+  `cargo package --workspace --list --locked --allow-dirty` — passed. Metadata
+  contains 215 packages, 208 registry packages with license metadata; all
+  seven package lists include LICENSE and NOTICE.
+- `TZ=Asia/Taipei cargo test -p rocketmq-classic-core --all-features --locked
+  unique_id::tests::` — 4 tests passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+One metadata-summary `python3 -c` attempt had a quoting-related SyntaxError;
+the corrected command passed and reported 215 total / 208 registry packages.
+No source issue was involved.
+
+Remaining non-manual work: broad bidirectional P18-V01 source/API/input/error/
+control-flow and Rust reverse-export audit; current-revision GitHub Ubuntu and
+Linux runtime evidence for P18-V04; Phase 19 Docker/Broker automation and
+scenarios; and pre-publication version/registry dependency-resolution checks.
+The last release checks remain deferred until the Phase 19 gate. Owner-run
+deployment topology, credentials/CA, and production checks remain manual.
+No push, tag, publication, deployment, Docker run, or live Broker action was
+performed.

@@ -1,0 +1,19 @@
+# Phase 18 current-tree Windows GNU cross-compilation refresh
+
+- Recorded: 2026-10-22 19:04:06 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source tree: `5965b62f402a2e56ddf82870a771832569d390ff`
+- Target: `x86_64-pc-windows-gnu`
+- Rust toolchain: `1.85.0-aarch64-apple-darwin`
+
+## Verification
+
+- `cargo check -p rocketmq-classic-core --all-targets --target x86_64-pc-windows-gnu --locked` — passed.
+- `cargo test --target x86_64-pc-windows-gnu -p rocketmq-classic-consumer --lib stack::tests::jstack_includes_current_and_other_named_threads --no-run --locked` — passed; the Windows test executable was built, not run.
+- `git status --short` before documentation showed only the four protected Phase 19 paths; the Phase 18 code tree had no uncommitted changes.
+
+This is compile-time evidence only and does not establish native Windows
+runtime behavior. No push or external CI was run. Broad P18-V01 reconciliation,
+remote Ubuntu CI, native Windows execution, and Phase 19 Broker/Docker
+validation remain open. The protected Phase 19 worktree files and Phase 18
+plan were not staged or modified.

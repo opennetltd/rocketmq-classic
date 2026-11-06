@@ -1,0 +1,48 @@
+# Phase 18 Java-compatible PopRequest public API
+
+- Recorded: 2026-10-24 16:17:50 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Code revision: `f5ecf2ca`
+- Host: macOS AArch64, Rust 1.85.0
+- Java reference: pinned offline Maven build
+
+## Change
+
+- Added public `rocketmq_classic_consumer::PopRequest` and exported it through
+  the facade alongside `PopProcessQueue`.
+- Mapped Java's 16 declared public methods, null defaults, `POP` mode,
+  `equals`/`hashCode` fields, UTF-16 String hashing, mutable `MessageQueue`
+  reference, `PopProcessQueue` reference, and text rendering.
+- Changed `MessageRequest::consumer_group` to `Option<&str>` so null stays
+  distinct from an empty group and runtime dispatch uses the nullable selector.
+- Added invoked Java surface/behavior cases to
+  `ConsumerFacadeApiFixtures.java`; fixture SHA-256:
+  `43fed5547743887f35764b8f89d3558126c59958bc152518c433aae54a77a19c`.
+- Java fixture source SHA-256:
+  `9e2b43dc8e40e6a671fd9f442c44a25bfda89213ff505932ba1eebf959f8db3e`.
+
+## Verification
+
+- Focused PopRequest fixture differential and public facade export tests pass.
+- `cargo test --workspace --all-features --locked` passes all workspace tests
+  and doctests. An initial `--all-targets` run also launched the `harness =
+  false` offline benchmark, which intentionally rejects non-release execution;
+  the standard workspace test command excludes that bench target.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings` passes.
+- Pinned offline Maven `verify` passes with 37 scenarios, 11 message fixtures,
+  106 typed headers, and 19 typed bodies.
+- Nightly workspace Rustdoc JSON generation passes. It reports 442 Common,
+  472 Consumer, 800 Core, 379 Producer, 1,528 Protocol, and 341 Remoting
+  distinct public names, excluding crate roots; the root facade has 127 direct
+  re-exports.
+- Formatting and `git diff --check` pass.
+
+## Remaining audit status
+
+- This closes the Java `PopRequest` direct value/API row only. Broad P18-V01
+  source/settings/input/error/control-flow and reverse-export reconciliation
+  remains PARTIAL.
+- Native Windows runtime and current-revision remote Ubuntu CI remain
+  unverified. No push or remote CI ran.
+- Phase 19 user-owned paths remain unchanged and unstaged.

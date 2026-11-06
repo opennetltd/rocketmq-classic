@@ -1,0 +1,6 @@
+# Phase 6 API compatibility session — 2026-10-10T18:10Z
+
+- Pinned Java 5.5.1 probes cover all null key/value/function positions for `computeIfAbsent`, `computeIfPresent`, `compute`, and `merge` on the factory, producer, and consumer tables. All nine probed positions per table family throw `NullPointerException`.
+- Code/oracle fixture commit: `e9773251` (`Match nullable live table remapping inputs`). Rust adds nullable adapters and callback aliases with borrowed lifetimes; regressions cover the typed `InvalidRoute` boundary, unchanged table state, and forwarding of valid callbacks. `client-config.json` SHA-256: `43c64a75c7bcb93d2ff3d4ecb577c28ef5fc40d3b48365c66b522db5764adead`.
+- Validation passed: manager-table 12/12, registry-table 14/14, locked workspace/all-target tests with local socket access, strict workspace/all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and Java cross-decodes), comparator self-test/manifest22, formatting, and diff checks.
+- API map and requirement audit updated. Null elements inside non-null collection inputs and broader map/view plus source/API/input/reverse-export reconciliation remain open; P6-V04 is a Phase 19 handoff.

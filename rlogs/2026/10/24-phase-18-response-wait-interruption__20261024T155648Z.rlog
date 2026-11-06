@@ -1,0 +1,54 @@
+# Phase 18 ResponseFuture wait interruption mapping
+
+- Recorded: 2026-10-24 15:56:48 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Code revision: `ba2fb950`
+- Host: macOS AArch64, Rust 1.85.0
+- Java reference: pinned RocketMQ 5.5.1 offline Maven fixture
+
+## Change
+
+- Added public Rust-native `ResponseWaitInterrupt` and `ResponseWaitError`
+  types plus `ResponseFuture::wait_response_interruptible`.
+- Signaling a registered waiter wakes the blocking Condvar; wait returns the
+  typed `Interrupted` error and consumes the signal. A signal delivered before
+  the wait is retained until the wait consumes it. `wait_response` retains its
+  existing noninterruptible behavior.
+- The existing Java `responseFutureWaitResponseInterruptionBehavior` fixture
+  records external thread interruption, `InterruptedException`, null response,
+  and the cleared Java interrupt flag. Rust compares the Java exception name
+  and verifies wakeup, signal consumption, and an already-completed response
+  with an interruption pending.
+- Public integration coverage confirms the new types are available through
+  `rocketmq_classic_remoting::client`.
+
+## Verification
+
+- Focused Java-fixture and external public-export tests pass.
+- Default and all-feature locked workspace tests/doctests pass.
+- Strict workspace all-target/all-feature Clippy passes.
+- Windows GNU all-target/all-feature workspace check and strict Clippy pass;
+  all-feature workspace test harnesses compile/link. Windows runtime was not
+  executed.
+- Pinned offline Maven `verify` passes: 37 scenarios, 11 message fixtures,
+  106 typed headers, 19 typed bodies, and fixture drift checks.
+- Offline deterministic race/leak smoke passes 20 cases × 3 repetitions.
+- Fixed-seed fuzz smoke passes 163 frame seeds, 11 message seeds, 11 property
+  seeds, 2,960 mutations, and 564/192/176 frame/message/property decodes.
+- Release examples, comparator self-test, 37-scenario manifest validation,
+  workspace metadata/license/dependency checks, and all seven product package
+  listings pass.
+- All-feature Rustdoc JSON passes. Remoting reports 405 public item records
+  and 341 distinct public identifiers after excluding the generated crate-root
+  marker.
+- `cargo fmt --all -- --check` and `git diff --check` pass.
+
+## Remaining audit status
+
+- This closes the Java external-wait interruption behavior row only.
+  `ResponseFuture.toString()` still has JVM identity-hash and object-rendering
+  differences that are not stable across Rust representations.
+- Broad P18-V01 method/overload/input/error/control-flow and reverse-export
+  reconciliation remains PARTIAL. Native Windows runtime and current-revision
+  remote Ubuntu CI remain unverified. No push or remote CI was run.
+- Phase 19 user-owned paths remain unchanged and unstaged.

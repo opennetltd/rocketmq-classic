@@ -1,0 +1,44 @@
+# Phase 18 factory null client-array slot parity
+
+- Recorded: 2026-10-23 10:12:20 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Implementation revision: `1b1d4e2a`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: `MQClientAPIFactory.onNameServerAddressChange` behavior when the public client array contains null
+
+## Finding and change
+
+Pinned Java iterates the mutable array returned by `getClients()` in index
+order and invokes each client. A null slot raises `NullPointerException` when
+reached, after earlier clients have already received the address update. A
+null address still invokes earlier clients before encountering the same null
+slot. Rust previously skipped null client slots. The factory now checks and
+updates slots in order and returns `NullClient(index)` at the first missing
+client, preserving prior slot updates.
+
+The invoked Java factory fixture records the null-slot error for both a
+non-null and null address, plus the address arrays after each partial failure.
+The Core factory regression consumes those fields and restores the mutated
+slot before continuing the existing change and shutdown checks.
+
+## Verification
+
+- Focused `factory_starts_named_clients_updates_shared_array_and_shuts_down` test — passed.
+- `cargo test --offline -p rocketmq-classic-core --lib --all-features --locked` — passed, 240 tests.
+- Default and all-feature locked workspace test suites — passed.
+- Strict all-target/all-feature workspace Clippy — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- Pinned offline Maven `verify` — passed, 37 scenarios including the refreshed factory fixture.
+- Differential comparator self-test and 37-scenario manifest validation — passed.
+- Workspace metadata and all seven product package license listings — passed.
+- Fuzz smoke — passed: 163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes, 192 message decodes.
+- Deterministic race/leak smoke — passed, 17 cases × 3 repetitions.
+- Release examples, offline benchmark, and all-target/all-feature Windows GNU cross-compilation — passed.
+
+## Acceptance boundary
+
+This closes the null-slot failure-order slice only. Broad P18-V01
+source/API/settings/input/error/control-flow/reverse-export reconciliation
+remains open. Native Windows runtime, current-revision remote Ubuntu CI, and
+Phase 19 Broker/Docker evidence remain pending. No push or remote CI was run;
+the four existing Phase 19 worktree paths remain untouched and unstaged.

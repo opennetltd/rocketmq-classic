@@ -1,0 +1,78 @@
+# Phase 18 P18-V01 inherited RemotingSerializable body adapters
+
+Date: 2026-10-16
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md (unchanged)
+Branch: phase/19-phase-18-compatibility-release-gate
+Starting revision: c13051e0
+Code commit: 96756a8e
+
+## Source and finding
+
+- Java oracle checkout: `/Users/bruce.tsai/Projects/3rd/rocketmq`
+- Pinned Java source commit: `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- `QueueTimeSpan.java` SHA-256: `75ddfeecbcd5343c293db5293695dacae0c7dbd2d150473d06481aec84b79979`
+- The body adapters for most DTOs were present, but `GetConsumerStatusBody` and `ResetOffsetBody` still lacked the inherited serialization surface. Their MessageQueue-keyed maps need the dedicated Fastjson-compatible codecs already used by their body APIs.
+- `QueueTimeSpan` exposed three Java timestamp-string getters that were absent from Rust. Java `Date` formats the entire signed-millisecond range and uses GregorianCalendar's Julian-to-Gregorian cutover.
+
+## Changes
+
+- Added inherited JSON/byte encode and decode, list decode, `fromJson`, and nullable utility adapters for `GetConsumerStatusBody` and `ResetOffsetBody`; compact and pretty serialization retain their special MessageQueue-key representation.
+- Extended the invoked Java fixture to record the inherited methods, populated/default values, and null utilities for both bodies.
+- Added `QueueTimeSpan` timestamp-string getters and derived JSON fields. The formatter now handles signed-millisecond extremes, Java's calendar cutover, and the fixture's UTC/Asia-Taipei timezone cases.
+- Added a Core `QUERY_CONSUME_TIME_SPAN` regression for the derived timestamp strings and documented this adapter slice in the Phase 6 API map and release checklist.
+- Runtime lookup fixture SHA-256: `468bcf8a39cfb5f8c9706a474501897f370c42dd8f747b414c3a1d1d91a2402e`.
+- `RuntimeLookupFixtures.java` SHA-256: `64cee1243e86aa8cd50fc64ae0f26700a917685452b3ca8fa95dd0d9a9dc9fe9`.
+
+## Validation
+
+- `TZ=UTC cargo test -p rocketmq-classic-protocol --all-features --locked` passed (120 unit tests, all integration targets, 42 doctests).
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features --locked -- -D warnings` passed.
+- The focused protocol serializer regression passed under UTC and Asia/Taipei.
+- The Core `query_consume_time_span_matches_java_invoked_fixture` regression passed under UTC and Asia/Taipei.
+- `TZ=Asia/Taipei mvn -o -q -f compat/java-reference/pom.xml verify` passed (37 scenarios and fixture checks).
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+
+## Status
+
+- This closes the no-feature inherited serializer adapter slice for the mapped DTOs and the `QueueTimeSpan` timestamp-string slice.
+- Empty `JSONWriter.Feature[]` is pinned. Non-empty writer-feature behavior remains open for P18-V01.
+- Broad Java/Rust source/API/settings/input/error/flow/reverse-export reconciliation, full-workspace P18-V02 on the final revision, current-revision platform CI evidence, and Phase 19 local Docker/Broker automation remain open.
+- No plan edits, Docker/Broker execution, push, tag, publication, or release action occurred.
+
+## P18-V01 inherited RemotingSerializable writer-feature inventory
+
+Timestamp: 2026-10-16 21:20 UTC
+Pinned Java source commit: `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+### Findings and changes
+
+- Extended the invoked runtime fixture to enumerate all 48
+  `JSONWriter.Feature` values and record each non-empty feature's output for
+  representative default, null, and populated body values. The fixture has 32
+  feature-probe cases across 15 body DTO types. QueryConsumeTimeSpan records
+  also include UTC and Asia/Taipei projections of the same feature outputs. Twenty-two features changed
+  at least one sampled output; the other 26 did not change these samples, which
+  does not establish that they are inert for all valid inputs.
+- The probe passes `new JSONWriter.Feature[] {feature}` to select the inherited
+  instance varargs overload. It records JSON output or the Java exception type.
+- Fixture SHA-256:
+  `5a10759a1b73504c0476b0d08c0f922ab74c5aa04f41b9203e6bfd8a8a7d2d6c`.
+- `RuntimeLookupFixtures.java` SHA-256:
+  `b5bdc4a43c7f28d05ef6b91b546c62e3b48124b683e8440176d419689b3962e7`.
+- Updated the API crosswalk and release checklist to identify this as probe
+  evidence; no Rust feature-aware encoder was added.
+
+### Validation
+
+- `TZ=UTC mvn -o -q -f compat/java-reference/pom.xml verify` passed all 37
+  scenarios and fixture checks. The run emitted JDK Unsafe deprecation and
+  reflective final-field mutation warnings.
+- `git diff --check` passed after the fixture and documentation updates.
+
+### Status
+
+- Non-empty inherited writer-feature behavior remains an implementation and
+  differential gap under P18-V01. The 26 sampled no-change features require
+  broader input analysis before disposition.
+- Broad P18-V01, final-revision P18-V02, current-revision platform CI evidence,
+  and Phase 19 Docker/Broker automation remain open.

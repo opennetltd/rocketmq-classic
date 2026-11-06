@@ -1,0 +1,120 @@
+Phase 13 Lite Pull and POP — 2026-10-12 08:13 UTC
+
+Objective: implement plan `plan/2026/09/14-phase-13-lite-assignment-pop.md` on a phase-specific branch, preserving all public Java 5.5.1 API/configuration behavior and consumer flow semantics. Java reference tag: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Branch and starting state:
+
+- Created `phase/14-phase-13-lite-assignment-pop` from Phase 12 HEAD `f4a72f72`.
+- Preserved the pre-existing Phase 0–11 audit work in separate commit `eb9d725e` before starting Phase 13.
+- Java checkout `/Users/bruce.tsai/Projects/3rd/rocketmq` is at 5.3.3 HEAD `2238256d`; use `git show efa1be59d6fc747ad220f036c86030f05f0419f9:<path>` for source and the Maven-pinned 5.5.1 artifact for invoked fixtures. No files in the Java checkout were changed.
+
+Initial source audit:
+
+- Lite public API includes `buildSubscriptionsForHeartbeat(Map)` in the pinned 5.5.1 artifact/source; it clears and rebuilds the retained heartbeat subscription set. The 5.3.3 checkout lacks that interface method, so all remaining source checks use the pinned commit.
+- Existing Rust core already has QUERY_ASSIGNMENT/SET_MESSAGE_REQUEST_MODE and POP/ACK/batch-ACK/change-invisibility RPCs. Push rebalance currently detects POP assignments but skips activating them; the consumer crate has no Lite polling facade or receipt abstraction.
+- Phase 13 Java fixture invokes Lite defaults/setters/heartbeat subscription construction, Push POP settings, `PopResult`, and `ExtraInfoUtil` receipt parsing. Fixture contents are in `fixtures/consumer/lite-pop.json`.
+
+Oracle fixture generation attempts:
+
+- Initial compile used a guessed MessageModel package and failed; corrected to `org.apache.rocketmq.remoting.protocol.heartbeat.MessageModel` from pinned source.
+- Initial fixture called delegated `PullAPIWrapper` settings before start; the Java implementation dereferences an uninitialized wrapper in that lifecycle state. Removed those pre-start calls; the method signatures remain captured in the API inventory.
+- The constructor's consume timestamp is time-dependent; fixture records whether it is within one second of the 30-minute default instead of storing the changing timestamp.
+
+Current Phase 13 acceptance is not yet met. Continue with failing Rust cases before implementing Lite state, POP assignment/queue workers, and receipt operations. Keep local unit/fixture checks distinct from Phase 19 live Broker evidence.
+
+P13-01 Java oracle baseline — 2026-10-12:
+
+- Added `LitePopFixtures`, executed against Maven-pinned `rocketmq-client:5.5.1`. It records the full Lite interface and `DefaultLitePullConsumer` declared public method signatures, defaults, representative config mutations, invalid mode/config outcomes, heartbeat selector construction, Push POP settings, `PopResult` defaults/statuses, and valid/malformed `ExtraInfoUtil` receipt fields. Runtime-derived constructor timestamp is normalized to a bounded boolean so the fixture remains deterministic.
+- Added `fixtures/consumer/lite-pop.json`, Maven verify drift checking, a consumer integration test for pinned fixture invariants, and the initial Phase 13 method/config/flow matrix. The matrix remains explicitly `In progress` because Rust Lite and Push POP behavior are not implemented yet.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS (exit 0), including 32 differential scenarios, Java fixture drift checks, registry/route/runtime oracles, and Java decoding of 46 Rust typed headers plus 14 Rust typed bodies.
+- `cargo test -p rocketmq-classic-consumer --test lite_pop --locked` — PASS (2 tests).
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+- No live Broker, Docker cluster or changes to the Java checkout were made.
+
+Phase 13 continuation — 2026-10-12 08:33 UTC:
+
+- Added `consumer::PopReceipt` using the pinned Java `ExtraInfoUtil` field order. It keeps the raw token, validates long/int fields with checked Rust parsing, resolves normal/retry topic names, and creates ACK/change-invisibility request headers from the exact receipt queue and offset.
+- Added focused unit cases for the pinned valid fixture value, extra trailing fields, missing fields, numeric overflow, retry-v2 topic mapping, and receipt preservation in both request headers.
+- `cargo test -p rocketmq-classic-consumer --lib pop::tests --locked` — PASS (3 tests); `cargo fmt --all` applied after the check identified formatting changes.
+- Updated the Phase 13 matrix to Partial for receipt parsing/header construction. Broker dispatch, source-used batch ACK, and replacement lifecycle are still unimplemented; phase remains In progress.
+
+Phase 13 continuation — 2026-10-12 10:53 UTC:
+
+- Completed the current Lite Pull facade and Push POP code path from the existing Phase 13 working tree. Push broker assignments now partition into PULL and POP queues, POP queue workers are created and removed with rebalance generations, and retry-topic transitions use the pinned Java v1 topic key. Receipt handling preserves the token, maps mixed-queue response metadata, dispatches ACK/change-invisibility, and constructs the pinned batch-ACK grouping/bitset body.
+- Added assignment partition tests for mixed PULL/POP, Java's missing-mode-as-PULL behavior, null assignment rejection, and POP-to-PULL retry-topic removal. Hardened batch-ACK bit-index arithmetic against signed overflow and treated empty optional POP metadata as Java's absent metadata.
+- `cargo test -p rocketmq-classic-consumer --lib --locked` — PASS (123 tests).
+- `cargo test -p rocketmq-classic-consumer --test lite_pop --locked` — PASS (8 tests). An earlier run caught a test-only `Vec` to `BTreeSet` conversion compile error; the test now collects into the set.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — PASS after fixing lock-across-await scopes, redundant closures/borrows, one unnecessary boolean comparison, and the POP consume context argument grouping. The first run reported these findings; none were suppressed.
+- `cargo test --workspace --locked` — PASS (all workspace unit, integration, and doc tests).
+- Updated `docs/compatibility/PHASE_13_LITE_POP_MATRIX.md` with implemented paths and current evidence. Phase 13 remains In progress: P13-V01's per-method Lite success/error differential sequence, P13-U01's controlled expiry/redelivery/receipt-replacement cases, P13-V03's complete API/config inventory, and a scripted successful Broker-assignment-to-POP-worker lifecycle case are not yet covered. Phase 19 Broker/Docker scenarios remain pending and were not run.
+
+Phase 13 continuation — 2026-10-12 11:00 UTC:
+
+- Added the Java 5.5.1 `ConsumeRequest.isPopTimeout` guard to `consume_pop_batch` before listener dispatch. Missing/malformed receipt data and nonpositive pop/invisibility times are treated as expired; valid receipts expire when elapsed time reaches invisibility. Expired batches release their found-message count.
+- Added controlled boundary tests (1049 ms is live; 1050 ms is expired for receipt `10 1000 50 2 0 broker-a 0 10`), missing/malformed/nonpositive receipt cases, and a consume-path test proving the listener is skipped and the found-message count is released.
+- `cargo test -p rocketmq-classic-consumer --lib --locked` — PASS (125 tests); `cargo test -p rocketmq-classic-consumer --test lite_pop --locked` — PASS (8 tests).
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — PASS; `cargo test --workspace --locked` — PASS (unit, integration, and doc tests).
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+- Updated the compatibility matrix with the receipt-expiry evidence. Phase 13 remains In progress: controlled redelivery/receipt replacement, complete Lite API/config differential coverage, Lite trace dispatch lifecycle, and scripted Broker-assignment-to-POP-worker activation/removal remain open. Phase 19 Broker/Docker validation was not run. No plan file was modified.
+
+Phase 13 continuation — 2026-10-12 11:13 UTC:
+
+- Implemented Lite consume tracing from the pinned Java 5.5.1 `DefaultLitePullConsumer` call graph: trace dispatcher creation/getter, poll-time SubBefore/SubAfter contexts, namespace and TRACE_ON filtering, Local/Cloud topic selection, Java control-character row encoding, bounded context queue, batch cap, periodic/explicit flush and shutdown. The trace producer inherits consumer TLS/namespace/client settings, disables VIP routing and producer tracing, and uses Java's 5-second send timeout and 128000-byte message cap.
+- Added consumer-to-producer workspace dependency and lockfile entry. Added source-derived wire-layout/filter/topic tests, full configured Lite settings assertions, and a lifecycle test that starts/shuts down an enabled dispatcher. Updated the matrix; Phase 13 remains In progress for method-level Lite differential sequences, complete API/config audit, POP redelivery/receipt replacement and scripted Broker-assignment worker lifecycle.
+- `cargo test -p rocketmq-classic-consumer --lib lite::trace::tests --locked` — PASS (3 tests); `cargo test -p rocketmq-classic-consumer --test lite_pop --locked` — PASS (10 tests, including trace lifecycle).
+- `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings` — PASS; `cargo fmt --all -- --check` and `git diff --check` — PASS. Workspace-wide checks are reserved for final Phase 13 audit.
+
+Phase 13 continuation — Lite API audit — 2026-10-12:
+
+- Pinned Java 5.5.1 source confirms its no-argument `DefaultLitePullConsumer` uses `DEFAULT_CONSUMER` and `setConsumeFromWhere` accepts only FIRST, LAST, and TIMESTAMP. Rust now provides `LitePullConsumerConfig::new_default`, rejects Java-unsupported origin values, and preserves caller-provided queue keys from explicit `assign` in `assignment()` while using normalized internal keys for namespaced RPCs.
+- Extended the pinned Java Lite/POP oracle for invalid consume-origin configuration and added Rust tests for default-group startup rejection, rejected enum values, and explicit namespace assignment behavior.
+- `cargo test -p rocketmq-classic-consumer --test lite_pop --locked` — PASS (12 tests); `cargo test -p rocketmq-classic-consumer --lib --locked` — PASS (128 tests); `cargo fmt --all -- --check` and `git diff --check` — PASS.
+- Full `mvn -o -q -f compat/java-reference/pom.xml verify` is still running; record its final result before committing this API-audit change. Compatibility matrix updated; the Phase 13 plan remains untouched.
+- Follow-up: `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS (32 differential scenarios, Java fixture drift checks, runtime/consumer oracles, and Java decoding of Rust typed fixtures).
+- API audit change committed as `NEXT_COMMIT` after local review.
+
+Phase 13 continuation — scripted Lite and POP lifecycle checks — 2026-10-12:
+
+- Correction to the prior `NEXT_COMMIT` placeholder: Lite API/config audit changes were committed as `511d3978` (`fix(consumer): align Lite assignment and config surface`). Earlier log entries were retained unchanged.
+- Added a scripted Lite flow covering failed/successful seek bounds, invalidation of a late pull result, delivered versus fetched offsets, pause/resume, explicit commits, persisted offset state and restart delivery position.
+- Added a scripted Push POP consume lifecycle covering listener success ACK, retry invisibility extension, a second receipt extension, generated replacement receipt fields and the final ACK. The test models Java's response-header-derived receipt generation.
+- `cargo test -p rocketmq-classic-consumer --lib pop_consume_dispatches_ack_redelivery_and_replacement_receipt --locked -- --nocapture` — PASS (1 test). Initial runs found and fixed a moved-`Arc` test compile error and an incorrect expectation that the Broker sends the replacement `extraInfo` field.
+- `cargo test -p rocketmq-classic-consumer --lib --test lite_pop --locked` — PASS (129 unit tests, 13 integration tests).
+- Updated `docs/compatibility/PHASE_13_LITE_POP_MATRIX.md` with the new evidence. Phase 13 remains in progress for the full API/config audit, per-method Lite RPC success/error evidence, and scripted successful Broker assignment worker activation/removal. Phase 19 Broker/Docker work remains pending.
+
+Phase 13 continuation — scripted Broker POP assignment lifecycle — 2026-10-12:
+
+- Added `push::consumer::tests::broker_assignment_activates_and_removes_pop_worker`: a scripted name server route and Broker return a POP assignment, observe the worker issue `POP_MESSAGE`, then return an empty assignment; the test verifies generation drop, worker removal and no further POP requests.
+- `cargo test -p rocketmq-classic-consumer --lib broker_assignment_activates_and_removes_pop_worker --locked -- --nocapture` — PASS (1 test); `cargo fmt --all` applied before the run.
+- Updated the compatibility matrix. The successful Broker assignment activation/removal case is now covered; assignment error/mode-transition differentials and the Lite API/config audit remain open.
+
+Phase 13 continuation — Lite API audit and final local verification — 2026-10-12 12:17 UTC:
+
+- Completed the pinned Java 5.5.1 Lite API crosswalk for `LitePullConsumer`, all five `DefaultLitePullConsumer` constructors, its declared settings, and inherited `ClientConfig` configuration. Kept the implementation plan unchanged. Updated the compatibility matrix with method mappings and evidence.
+- Regenerated the Java fixture to include all five public constructor signatures and the constructor default `enableStreamRequestType=true`; Rust Lite config now sets that inherited default. Added `LitePullConsumer::new_with_rpc_hook` and forwarded the hook through `PullConsumer` into the shared runtime. A scripted test verifies hook invocation, namespaced topic/group requests, and offset persistence.
+- Matched Java `commitAll` error handling: manual all-queue and deadline-triggered commits attempt each queue independently and suppress per-queue failures. Empty, unset, and unassigned non-persisting commits are no-ops before startup.
+- Added scripted Lite coverage for assignment selector forwarding; timestamp lookup success and RPC failure; seek-to-begin/end bounds; set/map and deprecated sync commit paths; committed Broker offset success/error; queue discovery after a name-server update; subscription callbacks; metadata changes without an initial false callback; and unsubscribe success/no-op. The matrix records the Java-to-Rust method crosswalk.
+- Extended the scripted Push POP assignment lifecycle so a Broker assignment error must preserve the active worker; a later successful empty assignment removes it.
+- `cargo test -p rocketmq-classic-consumer --lib --test lite_pop --locked` — PASS (134 unit tests, 18 integration tests).
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS; 32 differential scenarios, Java fixture drift checks, runtime and consumer oracles, and typed header/body fixture decoding completed. Maven emitted existing JDK reflective-access warnings.
+- `cargo fmt --all -- --check`, `git diff --check`, and `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — PASS.
+- `cargo test --workspace --locked` — one unrelated producer test failed under parallel execution (`unique_id::tests::generated_id_uses_the_java_client_id_layout_and_advancing_counter`, expected counter 7, observed 1). The isolated test passed. `cargo test --workspace --locked -- --test-threads=1` — PASS across all workspace unit, integration, and doc tests; serialized execution avoids the producer test's shared global-counter race.
+- Phase 13 local Lite/POP checks are complete. Broker/Docker scenarios remain pending for Phase 19; no Broker or Docker test was run here. Final plan review confirmed every local Phase 13 deliverable is mapped to implementation and evidence; no plan file was changed.
+
+Phase 13 audit commit — 2026-10-12 12:18 UTC:
+
+- Committed the final Lite API/config and POP assignment audit as `815bcaf9` (`fix(consumer): complete Lite API compatibility audit`) on `phase/14-phase-13-lite-assignment-pop`.
+- The commit includes implementation, scripted/unit evidence, pinned fixture updates, compatibility crosswalk, and execution results. Phase 19 Broker/Docker execution remains pending; Phase 14 was not started.
+
+Phase 13 final Lite settings audit and validation — 2026-10-12 12:41 UTC:
+
+- Completed the post-construction Java 5.5.1 Lite settings audit. Consumer-level getters/setters now feed values used during polling, flow control, auto-commit and worker startup; Lite `unitMode`, message-trace enablement and trace topic share their inherited `ClientConfig` fields. Removed the Lite broker-suspend setter because the pinned Java API exposes only its fixed 20000 ms getter. The compatibility matrix records the source-derived behavior and evidence.
+- Added a scripted post-construction test proving changed pull batch size reaches the next request and changed default poll timeout is used. Added a full inherited `ClientConfig` copy assertion and pinned Java surface checks for the broker-suspend getter/setter distinction.
+- One unordered consumer test run transiently failed `lite_trace_dispatcher_uses_java_topic_defaults_and_lifecycle`; the isolated case and serialized consumer suite passed. The final serialized workspace run below also passed. An earlier parallel workspace failure in the producer global-counter test and its serialized pass remain recorded above.
+- `cargo test --workspace --locked -- --test-threads=1` — PASS across all workspace unit, integration and doc tests; consumer suite included 136 unit tests and 19 `lite_pop` integration tests.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — PASS.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS (exit 0), including 32 differential scenarios, pinned Java 5.5.1 fixture drift checks, runtime/consumer oracles and Java decoding of Rust typed header/body fixtures. Maven emitted existing JDK reflective-access and Unsafe warnings.
+- Implementation, scripted tests and matrix were committed as `633d8106` (`fix(consumer): align Lite live settings with Java`) on `phase/14-phase-13-lite-assignment-pop`. The Phase 13 English and Traditional Chinese plan files were not modified. Java source provenance remains pinned to `efa1be59d6fc747ad220f036c86030f05f0419f9`; the Java checkout was not modified and its pre-existing untracked `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java` remains untouched.
+- Local P13-V01, P13-V03 and P13-U01 evidence is covered. P13-V02 remains pending for Phase 19 live Broker/Docker execution; no live Broker or Docker gate was run. Phase 14 was not started.

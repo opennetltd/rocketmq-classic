@@ -1,0 +1,49 @@
+# Phase 18 client statistics scheduler queue parity
+
+- Recorded: 2026-10-23 20:29:16 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Starting revision: `ca8aec9f`
+- Implemented revision: `644fff21`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: client executor's constructor-time `ConsumerStatsManager` jobs and
+  `ScheduledExecutorService.shutdownNow()` returned-list contents
+
+## Finding and change
+
+The pinned `ConsumerStatsManager` constructs five `StatsItemSet`s. Each set
+registers six jobs on the shared client executor: fixed-rate samplers at 10
+seconds, 10 minutes, and one hour, plus print jobs at the next local minute,
+hour, and midnight. The Java pre-start fixture returns 30 such queued entries
+along with two submitted delayed futures.
+
+Rust now seeds those 30 real recurring jobs in `OwnedTasks` when the client
+control owner is created. Sampling jobs advance metric windows; log jobs retain
+their cadence and queue identity, but their callbacks currently emit no stats
+log lines. Runtime startup schedules remain separate. A Rust pre-start test
+reads `fixtures/runtime/scheduled-executor-shutdown.json`, confirms the same 32
+returned handles, and checks the two submitted futures remain pending and
+uncancelled after shutdown. The started client scheduler also includes the
+stats entries alongside its normal runtime schedules.
+
+## Verification
+
+- Focused pre-start scheduler test: passed against the Java fixture's queued
+  task count and future states.
+- `cargo test --workspace`: passed.
+- `cargo test --workspace --all-features`: passed.
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`:
+  passed.
+- Windows GNU all-target/all-feature workspace check and strict Clippy: passed.
+- `mvn -o -q -f compat/java-reference/pom.xml verify`: passed; 37 scenarios,
+  including both Java scheduler shutdown cases and Java/Rust cross-decodes.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+
+## Acceptance boundary
+
+This closes the pre-start client scheduler queue-count delta. Java's statistics
+print jobs are represented in Rust's scheduler queue but their log output is
+not implemented. Broad P18-V01 source/API/settings/input/error/control-flow and
+reverse-export reconciliation remains partial. Native Windows runtime,
+current-revision remote CI, and Phase 19 Broker/Docker validation were not run.
+No plan was edited, no push or remote CI was run, and the four user-owned Phase
+19 worktree paths remain untouched and unstaged.

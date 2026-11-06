@@ -1,0 +1,26 @@
+# Phase 18 P18-V01 inbound Remoting failure-flow closure
+
+- Date: 2026-10-23 UTC
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Java baseline: RocketMQ client 5.5.1, source commit `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Source reviewed: `NettyRemotingAbstract.processRequestCommand`; source SHA-256 `b21a504b5310f8096cca443ee64ff733a6feaaea7fbd22ddd214821fa561275d`
+- Goal: resolve the known-differences note that still described inbound hook, pipeline, and processor response categories/control flow as unresolved.
+
+## Changes
+
+- Invoked the pinned Java `NettyRemotingAbstract.processRequestCommand` using `EmbeddedChannel`, a direct executor, and real `RPCHook`, `RequestPipeline`, and `NettyRequestProcessor` implementations.
+- Recorded eight cases: ordinary before-hook, pipeline, processor, and after-hook failures; `AbortProcessException` at the before, pipeline, and after stages; and one-way processor failure.
+- Added fixture-backed Rust loopback coverage for response presence/code/opaque and hook/pipeline/processor order.
+- Reconciled `KNOWN_DIFFERENCES.md`, the Phase 3 Remoting inventory, Phase 6 map/audit, Java compatibility evidence, and release checklist. Java stack-frame remark text remains a diagnostic difference; response-flow behavior is covered.
+- Fixture SHA-256: `b1d92bab58838debc816ccce321a48876aaf72fb6addfe9aa6b6168620eedc5b`.
+- Java fixture source SHA-256: `522e20cdf8bd69ea43a82683fc4a85fb843639d077f33fbfc9dd59dc6d48fd76`.
+
+## Verification
+
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target CARGO_NET_OFFLINE=true cargo test --offline --locked -p rocketmq-classic-remoting --test transport p18_inbound_hook_pipeline_and_processor_failures_match_java_flow_fixture` — passed, all eight cases.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target CARGO_NET_OFFLINE=true cargo clippy --offline --locked -p rocketmq-classic-remoting --all-targets --all-features -- -D warnings` — passed.
+- `cargo fmt --all -- --check` — passed.
+- `git diff --check` — passed.
+- `mvn -o -f compat/java-reference/pom.xml verify` — passed on the final fixture/source; validated 37 scenarios, 11 message fixtures, 106 typed headers, 19 typed bodies, and Rust/Java cross-decodes.
+
+This closes the inbound Remoting failure-flow concern only. Broad P18-V01 bidirectional API/settings/source/input/error/control-flow and reverse-export reconciliation remains partial. Native Windows runtime and current-revision remote CI were not run. No remote CI or push was run. The four pre-existing Phase 19 worktree paths remain untouched and unstaged.

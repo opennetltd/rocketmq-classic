@@ -1,0 +1,42 @@
+# Phase 18 stats schedule single source and current-tree gates
+
+- Recorded: 2026-10-23 21:29:53 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Starting revision: `16beee65`
+- Implemented revision: `2598c76f`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: shared ConsumerStatsManager schedule specifications and deterministic protocol defaults fixture
+
+## Changes
+
+The 30 sampling and print schedule specifications now live in
+`stats_schedule_specs()`. Both the runtime-owned scheduler queue and public
+`ConsumerStatsManager::with_scheduler` use that definition, including schedule
+order, periods, and local-boundary delays. Runtime task kinds retain the owning
+stats set and print window. Commit `4d32bc97` contains the shared-spec refactor.
+
+The all-features workspace run exposed a race in the protocol API fixture: one
+test changed process-wide `TopicConfig` defaults while parallel tests read
+them. The three tests that read or mutate those defaults now share a test-only
+mutex. Commit `2598c76f` contains the synchronization fix.
+
+## Verification
+
+- `cargo test -p rocketmq-classic-core --lib stats_ -- --nocapture` — passed (8 tests).
+- `cargo test --workspace --locked` — passed, including doctests, on the scheduler-spec source before the test-only mutex was added.
+- `cargo test -p rocketmq-classic-protocol --test topic_config_public_api --all-features --locked` — passed (5 tests).
+- `cargo test --workspace --all-features --locked` — passed on the current tree, including doctests.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — passed.
+- Windows GNU all-target/all-feature workspace check and strict Clippy — passed.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — passed; 37 scenarios, 11 message fixtures, 106 typed headers, 19 typed bodies, and Java/Rust cross-decodes.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+## Acceptance boundary
+
+Both Rust scheduler registration paths use the same 30 schedule definitions,
+and the pre-start client shutdown regression covers the 32 returned entries
+(two submitted futures plus 30 recurring stats jobs). Broad P18-V01
+bidirectional source/API/settings/input/error/control-flow and reverse-export
+reconciliation remains PARTIAL. Native Windows runtime and current-revision
+remote CI remain open. No plan was edited, no push or remote CI was run, and
+the four user-owned Phase 19 paths remain untouched and unstaged.

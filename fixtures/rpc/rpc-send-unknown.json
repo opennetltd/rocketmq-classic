@@ -1,0 +1,1 @@
+{"java_client_version":"5.5.1","server_baseline_not_contacted":"5.3.4","scenario_id":"P5-RPC-SEND-UNKNOWN","request_code":10,"response_code":987,"response":true,"ext_fields":{},"body_hex":"","frame_sha256":"f6722810eb7f2056a178767af39692f9cf0370ee1e3113f3b7bbf634cc218491","java_outcome":"BROKER_ERROR"}

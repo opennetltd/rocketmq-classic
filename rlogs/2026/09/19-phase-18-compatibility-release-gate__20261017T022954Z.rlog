@@ -1,0 +1,72 @@
+# Phase 18 `WriteNullBooleanAsFalse` continuation — 2026-10-17T02:29:54Z
+
+- Resumed on `phase/19-phase-18-compatibility-release-gate` at `a5a0179d` with
+  an existing uncommitted writer-feature change. The Java checkout at
+  `/Users/bruce.tsai/Projects/3rd/rocketmq` was inspected read-only.
+- Pinned Java fixtures invoke `WriteNullBooleanAsFalse` across 41 body, 8 route,
+  and 3 heartbeat cases; none has a feature-specific output override. Scoped the
+  Rust no-op claim to these currently mapped adapters. Source inspection found
+  `BrokerReplicasInfo.ReplicaIdentity.alive: Boolean`, but neither this DTO nor
+  the `getInSyncStateData` client API is mapped in Rust. This remains a concrete
+  P18-V01 parity gap and is not covered by the writer-feature result.
+- Added the flag to the implemented writer-feature gate and body/route/heartbeat
+  fixture comparisons. No Java source or fixture was changed.
+- `cargo test -p rocketmq-classic-protocol --all-features --locked`: passed,
+  including 126 unit tests, all Protocol integration targets, and 42 doctests.
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features
+  --locked -- -D warnings`: passed. `cargo fmt --all -- --check` and
+  `git diff --check`: passed.
+- `mvn -q -f compat/java-reference/pom.xml verify`: passed all 37 scenarios,
+  fixture-drift checks, and Java/Rust cross-decodes.
+- Code/test commit: `bd3e7ced feat(protocol): map WriteNullBooleanAsFalse writer flag`.
+  The mapping inventory is 36/48; 12 writer features remain unmapped.
+- Updated `docs/release-checklist.md` separately. Broad P18-V01 remains open,
+  including the `BrokerReplicasInfo` DTO/API; final full-workspace P18-V02,
+  current-revision Ubuntu/Windows CI and P18-V04, Phase 19 local Docker/Broker
+  automation, and release version/registry resolution also remain outstanding.
+- Correction after tracing the exact pinned source commit with `git grep`:
+  `MQClientAPIImpl.getInSyncStateData` is called and exposed through the
+  `rocketmq-tools` `MQAdminExt` extension, which Phase 17 explicitly excludes.
+  It is not a confirmed missing Rust client-facade API. `BrokerReplicasInfo`
+  remains outside the current client DTO adapters; the writer-feature claim is
+  scoped accordingly. The first correction patch used stale log context and
+  changed no files; this appended note preserves the correction history.
+- 2026-10-17T02:38:20Z: Mapped Fastjson2 `MapSortField` and
+  `SortMapEntriesByKeys`. Pinned Fastjson2 2.0.63 source says both sort map
+  entries by key (and sorted maps need no extra sorting); the Rust adapters
+  serialize through key-ordered `serde_json::Value` maps. The Java oracle has
+  no output overrides across 41 body, 8 route, and 3 heartbeat cases, including
+  populated route maps. Added adapter comparisons without changing Java
+  fixtures.
+- `cargo test -p rocketmq-classic-protocol --all-features --locked`: passed
+  (126 unit tests, all integration targets, 42 doctests).
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features
+  --locked -- -D warnings`, `cargo fmt --all -- --check`, and
+  `git diff --check`: passed.
+- `mvn -q -f compat/java-reference/pom.xml verify`: passed all 37 scenarios,
+  fixture-drift checks, and Java/Rust cross-decodes.
+- Code/test commit: `b1a071fd feat(protocol): map sorted map writer flags`.
+  Writer-feature inventory is 38/48; 10 features remain unmapped. Broad
+  P18-V01, final full-workspace P18-V02, current-revision Ubuntu/Windows CI and
+  P18-V04, and Phase 19 Docker/Broker automation remain open.
+- 2026-10-17T02:43:42Z: Mapped Fastjson2 `LargeObject`. Pinned 2.0.63 source
+  sets the writer's maximum array capacity to 64 MiB by default and 1 GiB with
+  this feature. Rust's growable output string has no corresponding fixed cap;
+  accepting the flag preserves output and keeps Rust's default capacity policy
+  more permissive. The Java oracle records no overrides across 41 body, 8 route,
+  and 3 heartbeat cases. Added the feature to all current adapter comparisons.
+- `cargo test -p rocketmq-classic-protocol --all-features --locked`: passed
+  (126 unit tests, all integration targets, 42 doctests).
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features
+  --locked -- -D warnings`, formatting, and diff checks passed.
+- `mvn -q -f compat/java-reference/pom.xml verify`: passed all 37 scenarios,
+  fixture-drift checks, and Java/Rust cross-decodes.
+- Code/test commit: `fc4d2e30 feat(protocol): map LargeObject writer flag`.
+  Writer-feature inventory is 39/48; 9 features remain unmapped. The final
+  workspace P18-V02 rerun, broad P18-V01, current-revision CI/P18-V04, and
+  Phase 19 automation remain outstanding.
+- A Python fixture-diff probe initially rejected Fastjson output containing
+  unquoted field names; a guarded rerun captured the affected fields and did
+  not change any source or fixture files. One earlier multi-file patch also
+  used stale context and made no file changes before the exact patch was
+  applied.

@@ -1,0 +1,53 @@
+# Phase 18 P18-V01 `MqClientAdmin.deleteKvConfig` — 2026-10-18T03:33:33Z
+
+## Scope and implementation
+
+- Continued on `phase/19-phase-18-compatibility-release-gate`. The pinned Java
+  oracle at `/Users/bruce.tsai/Projects/3rd/rocketmq` remained read-only; the
+  Phase 18 plan was not changed.
+- Reconciled Java 5.5.1 `MqClientAdminImpl.deleteKvConfig`: request code 102,
+  supplied address, `DeleteKVConfigRequestHeader`, no body, null result on
+  `SUCCESS`, and `MQClientException` with response code/remark otherwise.
+  Java's no-op `checkFields()` leaves the annotated namespace and key nullable.
+- Added public Rust `DeleteKvConfigRequestHeader`, typed-header cross-decode and
+  validation inventory, `MQClientApi::delete_kv_config`, scripted success/error
+  Core tests, and invoked Java fixture cases. The shared admin fixture SHA-256
+  is `ceafece5e4c70efab31e34760b8485b631a5691a46000c8d6bff32448fedbb0c`.
+- Code commit `7cb6fb49` (`feat(admin): add delete KV config RPC`). Updated the
+  Phase 17 admin matrix and release checklist separately. The source-backed
+  `MqClientAdmin` method count is 9/19. Preserved the pre-existing Phase 19
+  README, differential runner, local runner and execution log; none were staged.
+
+## Validation
+
+- `cargo test --locked -p rocketmq-classic-protocol --all-features` — passed:
+  132 unit tests, all integration targets, and 49 doctests.
+- `cargo test --locked -p rocketmq-classic-core --test admin_rpc` — passed all
+  36 tests, including the new success and NameServer-error comparisons.
+- `cargo clippy --locked -p rocketmq-classic-protocol -p rocketmq-classic-remoting
+  -p rocketmq-classic-core --all-targets --all-features -- -D warnings` — passed.
+- `mvn -q -f compat/java-reference/pom.xml verify` — passed 37 scenarios,
+  fixture checks, 63 typed-header cross-decodes and 14 typed-body cross-decodes.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+## Corrections during execution
+
+- The first Core test run used a Java admin fixture generated before compiling
+  the modified Java source, so the new fixture fields were absent. Recompiled
+  the Java reference, regenerated both fixture sets, and reran Core tests; all
+  passed.
+- The first Maven verify rerun found the tracked
+  `fixtures/remoting/rust-generated` directory missing after cleanup of the
+  temporary typed-header output. Restored its two tracked baseline fixtures
+  from HEAD, kept generated typed-header output under `target`, and reran
+  Maven verify successfully.
+
+## Remaining work
+
+- Ten `MqClientAdmin` methods and the broad P18-V01 Java/Rust public API,
+  configuration, input, error/control-flow and reverse-export reconciliation
+  remain open.
+- Full-workspace P18-V02, current-revision Ubuntu/native Windows P18-V04,
+  final P18-V03 package/provenance checks, and Phase 19 local Docker/Broker
+  scenarios, profiles and complete `run-local.sh --all` reconciliation remain
+  open. Owner-only production validation is still the separate manual handoff.

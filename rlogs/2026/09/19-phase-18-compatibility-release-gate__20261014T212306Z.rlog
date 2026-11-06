@@ -1,0 +1,41 @@
+# Phase 18 execution session — 2026-10-14T21:23:06Z
+
+Branch: `phase/19-phase-18-compatibility-release-gate`
+Starting revision: `e7909189`
+Java oracle: `/Users/bruce.tsai/Projects/3rd/rocketmq`, pinned source commit `efa1be59d6fc747ad220f036c86030f05f0419f9` (read-only).
+Plan files left unchanged.
+
+## Pull statistics group snapshot
+
+- Java `DefaultMQPushConsumerImpl.pullMessage` records Pull RT/TPS with `pullRequest.getConsumerGroup()`. Rust had read the mutable facade configuration after the reply. Rust now records these statistics with the request's retained group.
+- Extended the invoked Java Push implementation fixture to mutate the facade group after constructing a PullRequest and record both values. Rust regression verifies the stats manager records under the retained request group after facade mutation.
+- Code commit: `b05dff72 fix(consumer): use pull request group for pull stats`.
+- Fixture SHA-256: `f1385a7061449c1e713050ed8658516678f17ba44f8fbf6630a7489b4eea0a7f`.
+- Toolchain: Rust/Cargo 1.85.0; Apache Maven 3.10.0.
+
+## Validation
+
+- PASS: `cargo test -p rocketmq-classic-consumer --all-features --locked` (210 unit tests, all Consumer integration targets, and doctests).
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, fixture drift checks, and Java/Rust cross-decodes).
+- PASS: `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- Fixture regeneration command initially failed because `exec:java` ran `compat.Main` with an incomplete argument list. Corrected with `mvn -q -f compat/java-reference/pom.xml -Dexec.args='push-implementation-accessor-fixture /Users/bruce.tsai/Projects/trio/rocketmq-classic/fixtures/consumer/push-implementation-accessor.json' exec:java`; the Java fixture then completed successfully.
+
+## Remaining
+
+- P18-V01 remains open. This closes the Pull statistics key path only; concurrent/orderly/POP consume-stat group snapshots and other post-start group call paths still need pinned-source comparison and regression evidence.
+- Full workspace P18-V02 gates have not been rerun on this revision. Current-revision GitHub Ubuntu CI and Phase 19 local Broker/Docker work remain outstanding. No push, publication, or tag action was taken.
+
+## Append-only correction: consume-service statistics group snapshots
+
+Session continuation: 2026-10-14T21:35:33Z. The earlier Remaining entry said concurrent/orderly/POP consume-stat group snapshots still needed review; this slice closes those statistics-key paths only.
+
+- Pinned Java concurrent, orderly, and POP-concurrent services capture `consumerGroup` in their constructors and use the captured value for consume statistics. POP-orderly has no consume-stat updates in its service flow. RunningInfo still looks up the current facade group.
+- Rust snapshots the namespaced group when Push services are created. Concurrent/orderly metrics and POP-concurrent consume-batch metrics use that snapshot. POP-orderly no longer receives concurrent-service metrics. The Java fixture invokes all four service constructors, mutates the facade group, and records the retained values. Rust tests exercise concurrent/orderly callbacks, POP-concurrent consume statistics after facade mutation, and POP-orderly's absence of consume metrics.
+- Code commit: `edef3bd3 fix(consumer): snapshot consume stats group at start`.
+- Fixture SHA-256: `36ebc7042edecae30f6f6f025583ecec234f141e7049fd98eb9964d1cd3cfc97`.
+- PASS: `cargo test -p rocketmq-classic-consumer --all-features --locked` (213 unit tests, all Consumer integration targets, and doctests).
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, fixture drift checks, and Java/Rust cross-decodes).
+- PASS: `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- A fixture-generation run that omitted `compile` executed the previously built Java fixture class. The following Rust test and Maven fixture-drift check failed because the new fields were absent. Regenerated with `mvn -q -f compat/java-reference/pom.xml -Dexec.args='push-implementation-accessor-fixture /Users/bruce.tsai/Projects/trio/rocketmq-classic/fixtures/consumer/push-implementation-accessor.json' compile exec:java`; the regenerated fixture contains all four retained groups, and the complete checks above pass.
+- P18-V01 remains open for the broader source/API/settings/flow/reverse-export audit. The final full-workspace P18-V02 rerun and current-revision GitHub Ubuntu result remain pending; Phase 19 Docker/Broker automation and owner validation remain outstanding. No push, publication, or tag action was taken.

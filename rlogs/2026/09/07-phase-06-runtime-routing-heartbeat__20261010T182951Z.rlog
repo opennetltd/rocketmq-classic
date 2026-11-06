@@ -1,0 +1,6 @@
+# Phase 6 API compatibility session — 2026-10-10T18:29Z
+
+- Pinned Java 5.5.1 probes cover `removeAll` and `retainAll` with null-only and null-plus-matching `ArrayList` inputs across factory, producer, and consumer key/value/entry views. Key `removeAll` throws at null while preserving prior ordered removals; values and entry removal ignore null; null is a nonmatch for retention.
+- Code/fixture commit: `35c73c00` (`Match null elements in live table view collections`). Rust element-aware view adapters preserve partial key-removal results and map Java null-key failures to typed `InvalidRoute`. `NullableTableEntry<T>` supports nullable entry keys/values. Fixture SHA-256: `08c47a329a57317a88d2dc84e6fe781cea4a1a0cf38bff4caeece60958219f51`.
+- Validation passed: manager-table 13/13, registry-table 15/15, locked workspace/all-target tests with local socket access, strict workspace/all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture drift, and Java cross-decodes), comparator self-test/manifest22, formatting, and diff checks.
+- API map and requirement audit updated. Broader Phase 6 source/API/input/reverse-export reconciliation remains in progress; P6-V04 is a Phase 19 handoff.

@@ -1,0 +1,9 @@
+Session: 2026-10-10T01:32:02Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Inactive producer inbound capability continuation: added `registered_producer_without_transaction_or_reply_capability_returns_phase_errors`. A registered producer with default None handlers now has direct coverage for transaction-state unsupported (Phase 14), missing reply correlation (Phase 15), and unknown correlation (Phase 15). Test commit `c89adaba`; matrix/audit commit `b17efdd1`.
+
+Verification passed: `cargo test -p rocketmq-classic-core --lib runtime::inbound::tests --locked` (7 passed); `cargo clippy -p rocketmq-classic-core --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`. The first format check found only rustfmt layout in the new test; `cargo fmt --all` applied it before the final format check. No production behavior changed.
+
+Other feature-specific inbound handling remains assigned to the named owner phases; whole Phase 6 source/input/API reconciliation remains open and P6-V04 stays assigned to Phase 19.

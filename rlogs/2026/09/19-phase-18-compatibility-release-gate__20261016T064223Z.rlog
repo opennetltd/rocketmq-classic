@@ -1,0 +1,25 @@
+# Phase 18 final server-free gates — 2026-10-16 06:42 UTC
+
+- Verified current revision `3b0af61d` on macOS ARM64 after the public
+  request/reply `Message` type correction (`c6d852df`).
+- Passed `cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked`.
+- Passed strict all-target/all-feature workspace Clippy,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+- Passed pinned Java 5.5.1 `mvn -q -f compat/java-reference/pom.xml verify`;
+  all 37 scenarios, fixture drift checks, and Java/Rust cross-decodes passed.
+- Passed `python3 tests/differential/compare.py --self-test` and
+  `--validate-manifest` (37 scenarios).
+- Passed `bash tests/stress/run-offline-smoke.sh` (16 race/leak cases × 3) and
+  `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`
+  (105 frame seeds, 11 message seeds, 1,856 bounded mutations).
+- Passed release example compilation,
+  `cargo bench -p rocketmq-classic --bench offline --locked --no-run`, locked
+  Cargo metadata, `scripts/check-workspace-metadata.py`, seven locked package
+  listings with LICENSE/NOTICE, and the four `unique_id::tests` under
+  `TZ=Asia/Taipei`.
+- P18-V02 server-free gates pass on this revision. Broad P18-V01 and a current
+  GitHub Ubuntu/P18-V04 result remain open. Phase 19 local Docker/Broker
+  automation/scenarios, owner-validation instructions, and release
+  version/registry preflight also remain open. No Docker, Broker, deployment,
+  publication, or push was run.

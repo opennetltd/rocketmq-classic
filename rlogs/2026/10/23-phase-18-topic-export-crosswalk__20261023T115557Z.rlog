@@ -1,0 +1,40 @@
+# Phase 18 Common topic and Producer topic-list export crosswalk
+
+- Recorded: 2026-10-23 11:55:57 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Starting revision: `f354d684`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: Resolve Common/Producer Rustdoc identifiers absent from exact tokens in compatibility docs
+
+## Finding
+
+A token-based scan flagged five Common names and Producer's `with_read`.
+Direct review of the pinned Java source found matching `TopicAttributes` and
+`TopicMessageType` APIs for the Common names. Pinned `DefaultMQProducer`
+retains the supplied `List<String>` in `setTopics` and returns it from
+`getTopics`; Rust's `ProducerTopicList` and lock-scoped `with_read` / `with_mut`
+adapt that live list to a synchronized shared handle. `snapshot` is the owned
+point-in-time form. This pass found no missing Java operation or Rust-only
+Producer operation in these names.
+
+## Changes
+
+- Expanded the exact Rust identifiers in the TopicConfig/TopicMessageType
+  crosswalk.
+- Added an explicit `ProducerTopicList` alias/access crosswalk.
+- Recorded the scoped reverse-name disposition and its limits in the
+  requirement audit.
+
+## Verification
+
+- Read-only review of the Java source at the pinned commit — completed.
+- `git diff --check` — passed.
+- No tests run; this change only updates compatibility documentation and the
+  append-only execution record.
+
+## Acceptance boundary
+
+This resolves only the Common/Producer names from this bounded scan. The
+token scan is not a semantic proof of the full public API. Broad P18-V01
+reconciliation remains PARTIAL. No Phase 19 files were edited or staged; no
+push, remote CI, Broker, or Docker validation was performed.

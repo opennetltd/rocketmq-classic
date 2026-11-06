@@ -1,0 +1,117 @@
+# Phase 18 server-free gate rerun — 2026-10-16T08:30Z
+
+- Revision: `ac26a5ae498231269c5c7f65e2976ca0cc1c4af0`; branch
+  `phase/19-phase-18-compatibility-release-gate`; worktree was clean before
+  this documentation update.
+- Re-ran the current-revision P18-V02 server-free gate after the request/reply
+  completion API correction. `cargo fmt --check` and
+  `cargo fmt --all -- --check` passed. Sequential `cargo test --workspace
+  --locked` and `cargo test --workspace --all-features --locked` passed, as
+  did `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`.
+- Pinned Maven `verify` passed all 37 scenarios, fixture-drift checks, Java
+  reference probes, and Java/Rust cross-decodes. The differential comparator
+  self-test and 37-scenario manifest validation passed.
+- Deterministic offline race/leak smoke passed 16 cases × 3 repetitions.
+  Bounded fuzz smoke passed with 105 frame seeds, 11 message seeds, and 1,856
+  mutations. Release examples and the offline benchmark compiled.
+- `scripts/check-workspace-metadata.py` passed. Locked Cargo metadata resolved
+  7 workspace packages and 208 registry packages (215 total); workspace
+  versions are all `0.1.0`. All seven `cargo package --list --locked` checks
+  passed and included `LICENSE` and `NOTICE`. The Asia/Taipei Unique ID fixture
+  passed.
+- One metadata-summary one-liner initially assumed all package `source`
+  values were strings; local path packages use `null`. Corrected the query to
+  handle `null`; metadata resolution itself was successful and reported the
+  counts above. No project failure occurred.
+- Updated `docs/compatibility/PHASE_6_REQUIREMENT_AUDIT.md` and
+  `docs/release-checklist.md` with the current P18-V02 evidence. This closes
+  P18-V02 on `ac26a5ae`; it does not close the broad P18-V01 API/source/input/
+  control-flow/reverse-export audit, current-revision GitHub Ubuntu/P18-V04,
+  Phase 19 Docker/Broker automation and owner-validation handoff, or release
+  registry/legal preflight. Deployment, production Broker, organization CA,
+  credential, and topology checks remain owner validation.
+- No plan files changed. No Docker, live Broker, push, tag, publication,
+  deployment, or compatibility claim was made.
+
+# Phase 18 Common MessageUtils parity follow-up — 2026-10-16T08:50Z
+
+- Baseline revision: `12db9def`; pinned Java 5.5.1 source commit:
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- P18-V01 source review found the four public Common `MessageUtils` methods
+  missing from Rust: the Murmur3-32 sharding index helper, message and
+  collection adapters, and encoded-property deletion. Added the Rust mappings,
+  a pure Guava-compatible Murmur3-32 implementation, Java invoked fixture
+  generation/verification, a Rust differential test, and Phase 8 / P18 audit
+  documentation. Fixture SHA-256:
+  `e01bed78a2a2290a82991fd68d308d77c283475e82b32d32d3939d045099f5f8`.
+- `cargo test -p rocketmq-classic-common --locked` passed, including the new
+  fixture differential. Full `cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked` passed. Strict
+  `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`, `cargo fmt --all -- --check`, and `git diff --check` passed.
+- `mvn -f compat/java-reference/pom.xml verify` passed all 37 scenarios,
+  fixture checks, Java probes and cross-decodes; the new MessageUtils fixture
+  was verified. Differential self-test and 37-scenario manifest validation
+  passed.
+- `bash tests/stress/run-offline-smoke.sh` passed 16 cases × 3 repetitions.
+  The bounded fuzz smoke passed with 105 frame seeds, 11 message seeds and
+  1,856 mutations. Release examples and the offline benchmark compiled. The
+  Asia/Taipei Unique ID fixture passed.
+- Workspace metadata/license/dependency checks passed. All seven
+  `cargo package --list --locked --allow-dirty` listings contained `LICENSE`
+  and `NOTICE`; `--allow-dirty` was needed because the new Common sources were
+  not committed yet.
+- During setup, direct Maven main-class override selected the configured
+  `compat.Main`; the fixture was then generated through its new
+  `message-utils-fixture` dispatch and Maven verification passed. The first
+  Common integration build used the wrong public path for
+  `PROPERTY_SHARDING_KEY`; corrected it to `message::constants` and the scoped
+  plus workspace tests passed. Neither issue was a product failure.
+- This closes only the surfaced `MessageUtils` declaration and behavior slice.
+  The broad bidirectional P18-V01 audit remains open. Current-revision GitHub
+  Ubuntu/P18-V04 evidence is still absent; Phase 19 Docker/Broker execution,
+  owner deployment validation, and release preflight remain later work.
+- No plan files changed. No Docker, Broker, push, tag, publication,
+  deployment, or compatibility claim was made.
+
+P18-V01 Common CorrelationIdUtil API slice (2026-10-16)
+
+- Pinned Java client 5.5.1 source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9` declares public static
+  `CorrelationIdUtil.createCorrelationId()` returning
+  `UUID.randomUUID().toString()`. Common now exposes
+  `rocketmq_classic_common::utils::create_correlation_id`; Producer request
+  preparation uses that function, and the duplicate Producer-only
+  implementation/direct `rand` dependency are removed. Common now owns the
+  existing `rand` dependency.
+- `RequestReplyFixtures` inventories the Java method signature in
+  `fixtures/producer/request-reply.json`; Rust checks the inventory and UUID v4
+  lowercase 8-4-4-4-12 format. Fixture SHA-256:
+  `295307a1f559b7afa30179b48a83b0ac008716a8a1b421872b440c6ff097153c`.
+- The new Rust API test first failed because Common had no public `utils`
+  module, then passed after implementation. One initial Maven fixture-generation
+  invocation ran from the workspace root and wrote its relative output outside
+  the repo; that generated file was removed, and fixture generation was rerun
+  successfully from `compat/java-reference`. No unintended external artifact
+  remains.
+- `cargo test -p rocketmq-classic-common --locked` passed (23 unit tests, all
+  integration and doc tests). `cargo test -p rocketmq-classic-producer --locked`
+  passed (142 unit tests and all integration/doc targets). Strict all-target,
+  all-feature Clippy passed for Common and Producer. `mvn -f
+  compat/java-reference/pom.xml verify` passed, including the 37-scenario
+  manifest, fixture drift checks and Java/Rust cross-decodes. Workspace format
+  and diff checks passed.
+- Updated the Phase 8/15 crosswalks, Phase 6 API map/audit, release checklist,
+  and this append-only log. No plan changed. This closes only this Common API
+  slice; broad bidirectional P18-V01 remains open. Full workspace P18-V02 must
+  be rerun after the remaining code audit. No Docker/Broker, push, tag,
+  publication, deployment or compatibility claim was made.
+
+P18-V01 Common NameServerAddressUtils API slice (2026-10-16)
+
+- Verified the pinned `rocketmq-all-5.5.1` tag (`efa1be59d6fc747ad220f036c86030f05f0419f9`): `NameServerAddressUtils` declares five public values and four public static methods. Common now exposes the pattern/value constants and Rust-native matching, address extraction, instance validation/parsing, and property/environment lookup APIs under `utils::name_server_address`. Null and invalid substring bounds use typed Rust results. Core ClientConfig endpoint and namespace operations now reuse the Common matcher/extractors instead of carrying duplicate private logic.
+- `RuntimeConfigFixtures` now reflects all public fields and methods and invokes direct cases for null, empty, malformed, Unicode, path, line-terminator, and property-precedence behavior. Rust compares those results and runs the property lookup under child processes with controlled environment values. Fixture SHA-256: `39b4944cf67a65dc9c86e203826ceb8e43b3650d72e4ad5cb19af9234f17e19c`.
+- Common tests passed (23 unit tests, all integration tests and 22 doctests); Core library tests passed (168), and all 21 Core config integration tests passed. Strict all-target/all-feature Clippy passed for Common and Core. Pinned `mvn -f compat/java-reference/pom.xml verify` passed the 37-scenario manifest, fixture drift checks and Java/Rust cross-decodes. `cargo fmt --all -- --check` and `git diff --check` passed.
+- The first implementation attempt used let-chain syntax unavailable in the pinned Rust 1.85 toolchain; it was replaced with stable nested conditionals. Initial fixture assertions also exposed the reflected method sort order and the fixture's root-level placement; both test expectations were corrected before the passing runs. No product mismatch remained in the final fixture differential.
+- Updated Phase 6 API/config/runtime audits, Phase 8 mapping, release checklist and this append-only log. No plan changed. This closes only this utility slice; broad bidirectional P18-V01 remains open. Full-workspace P18-V02 must be rerun after the remaining code audit. No live Broker/Docker, push, tag, publication, deployment or compatibility claim was made.

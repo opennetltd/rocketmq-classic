@@ -1,0 +1,7 @@
+## OffsetOption equals/hash contract — 2026-10-09T18:36:50Z
+
+- Pinned RocketMQ 5.5.1 `javap` confirms `OffsetOption.equals(Object)` and `hashCode()`. Bytecode shows equality checks enum reference identity and primitive value; the numeric hash includes the enum's process-local Object identity hash.
+- Added Rust `OffsetOption::java_equals(Option<&dyn Any>)` and direct Java oracle fields for equal/different values and types, null/wrong-type values, same-object hash stability, equal-object hash consistency, and Set deduplication. The exact JVM hash integer is deliberately not compared across processes; portable equality and collection behavior match.
+- Implementation/oracle commit `e7fb09f6`; lookup fixture SHA-256 `72e92cb461d8b4842622850296c01e0fd604b4d49250990bc3beea2cfcefc544`.
+- Focused `lite_subscription_related_dto_apis_match_invoked_java` and protocol all-target tests pass (108 unit tests plus integrations). Full `cargo test --workspace --all-targets --locked`, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture drift, Java cross-decodes), `cargo fmt --all -- --check`, and `git diff --check` pass.
+- Added ADR-0059 and updated Phase 6 API/config, requirement, Java compatibility, and runtime inventory records. Phase 6 remains PARTIAL; alias differences and broader source/API/input reconciliation remain open. P6-V04 stays `PENDING_PHASE_19`.

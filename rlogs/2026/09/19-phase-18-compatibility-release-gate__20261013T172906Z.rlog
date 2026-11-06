@@ -1,0 +1,15 @@
+# Phase 18 current-revision release gates — 2026-10-13T17:29:06Z
+
+- Revision: `93473a3e` (`fix(consumer): serialize running-info stack captures`), branch `phase/19-phase-18-compatibility-release-gate`.
+- Environment: macOS ARM64, Apple M5 Max, rustc 1.85.0.
+- PASS: `cargo test --workspace --locked` and `cargo test --workspace --all-features --locked`; the latter includes the concurrent jstack capture regression.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check` before this log was added.
+- PASS: `mvn -f compat/java-reference/pom.xml verify`; 37 differential scenarios, Java fixture drift checks, and Java/Rust cross-decodes.
+- PASS: `python3 tests/differential/compare.py --self-test`; `--validate-manifest` (37 scenarios).
+- PASS: `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` — 104 frame seeds, 10 message seeds, 1,824 bounded mutations, 144 frame decodes, 107 message decodes.
+- PASS: `bash tests/stress/run-offline-smoke.sh` — all 16 deterministic race/leak cases passed 3 repetitions each.
+- PASS: `cargo build -p rocketmq-classic --examples --release --locked`.
+- PASS: `python3 scripts/check-workspace-metadata.py`; `cargo metadata --format-version 1 --no-deps --locked`.
+- PASS: `cargo bench -p rocketmq-classic --bench offline --locked` on Apple M5 Max. Fixed-input observations: Remoting encode/decode 427 B, 20,000 iterations, 1,884.9 ns/op, 39 allocation calls and 4,612 B/op; Zstd message decode 146 B, 10,000 iterations, 1,229.2 ns/op, 20 calls and 197,407 B/op; send construction 512 B, 20,000 iterations, 986.2 ns/op, 43 calls and 3,247 B/op; route lookup with 128 entries, 100,000 iterations, 14.8 ns/op, zero allocations; local-TCP pending completion 128 B, 500 iterations, 68,545.6 ns/op, 77 calls and 9,234 B/op. One run is an observation, not a threshold or stable comparison.
+- Outstanding non-Phase-19 closure items: P18-V01 / the broad Phase 6 Java source/API/input and Rust reverse-export behavior audit remains `PARTIAL`, including behavior evidence for overload inputs/defaults/validation/errors/live configuration branches and Fastjson malformed-input scope. A current GitHub Ubuntu CI result is not available. Windows IP Helper and non-macOS BSD runtime enumeration, plus a real IPv6-only host, still lack runtime evidence. Release versions and registry-resolvable dependency requirements remain undecided pending release preparation.
+- Phase 19 Broker/Docker scenarios remain pending in the scenario manifest; no Docker or live Broker was used in this run.

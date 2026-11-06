@@ -1,0 +1,31 @@
+# Phase 18 ProcessQueue null removal-element parity — 2026-10-23T01:33:56Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `463db95a` (`fix(consumer): preserve ProcessQueue removal prefix`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Compatibility result
+
+Pinned Java catches a null-element failure in `ProcessQueue.removeMessage` after
+removing valid prefix messages from the ready tree and decrementing body bytes.
+It skips the aggregate count update and returns the previously computed
+`queueOffsetMax + 1`. Rust's `remove_message_items_nullable` preserves that
+partial state. The invoked Java fixture and Rust facade test compare return
+offset, timestamp, tree, count, size, and the next insertion's dispatch result.
+
+`fixtures/consumer/facade-api.json` SHA-256:
+`29cc00f7cf9b8194f08007a12c5e75f0499a5601c140a78855b14cb244bef771`.
+
+## Validation
+
+- Focused Rust ProcessQueue facade comparison passed.
+- Targeted pinned Java facade fixture verification passed.
+- All 260 Consumer library tests and 69 Consumer integration tests passed
+  with all features.
+- Strict all-target/all-feature Consumer Clippy passed.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+
+The null-element removal branch is closed. Broad P18-V01 source/API/settings/
+input/error/control-flow and reverse-export reconciliation remains PARTIAL;
+current-revision remote Ubuntu CI, native Windows runtime execution, and
+Phase 19 Broker/Docker evidence remain open.

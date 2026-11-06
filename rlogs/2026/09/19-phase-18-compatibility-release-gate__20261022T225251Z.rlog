@@ -1,0 +1,24 @@
+## P18-V01 POP accepted-message consume guard — 2026-10-22
+
+Extended the in-flight FOUND callback regression to include a filtered message
+and an accepted `blue` message. After assignment removal, the Java-mapped
+callback ACKs the filtered message and submits the accepted message; the
+consume request exits on the dropped `PopProcessQueue` before listener
+dispatch. The test verifies exactly one Broker ACK and zero listener calls.
+This checks both filtered and accepted paths after the same queue removal.
+
+No Java fixture changed. `fixtures/runtime/consumer-operations.json`
+SHA-256 remains `b414477a4a64b2c252d704704a70c7b1a89f2b6a5b1014531ca0200690edda36`.
+
+Verification:
+
+- Focused `removed_pop_queue_finishes_inflight_found_callback_before_retiring` — PASS.
+- Consumer library suite — PASS, 257 tests.
+- Strict workspace all-target/all-feature Clippy — PASS.
+- Windows GNU Consumer all-feature test executables link — PASS.
+- Strict Windows GNU Consumer Clippy — PASS.
+- Formatting and `git diff --check` — PASS.
+
+This closes only the dropped-queue accepted-message guard for this POP
+assignment-removal path. Broad P18-V01 reconciliation, remote Ubuntu CI, native
+Windows execution, and Phase 19 Broker/Docker evidence remain open.

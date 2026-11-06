@@ -1,0 +1,1 @@
+{"java_client_version":"5.5.1","server_baseline_not_contacted":"5.3.4","scenario_id":"P5-RPC-OFFSET-SUCCESS","request_code":14,"response_code":0,"response":true,"ext_fields":{"offset":"9"},"body_hex":"","frame_sha256":"2b2fb3da3972bcfb76f0aca5080336c294c9ce0b19699897fbfad8a39015bb33","java_outcome":"OFFSET"}

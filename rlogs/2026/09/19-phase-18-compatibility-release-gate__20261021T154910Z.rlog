@@ -1,0 +1,31 @@
+# Phase 18 P18-V01 pinned MessageExt subtype inventory — 2026-10-21T15:49:10Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision audited: `659ec260` (`fix(consumer): map push implementation factory setter`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Source review
+
+- Read the pinned `MessageDecoder.decode` client branch and
+  `MessageDecoder.decodeMessage(MessageExt, List)`. Client decode with
+  `isClient=true` creates `MessageClientExt`; batch decoding creates one
+  `MessageClientExt` per inner message. Pinned client
+  `PullAPIWrapper.processPullResult` calls that batch decoder.
+- Searched pinned Java source for classes extending `MessageExt` and for
+  client construction sites. The built-in hierarchy consists of
+  `MessageClientExt`, broker-side `MessageExtBrokerInner`, and
+  `MessageExtBatch` (which extends `MessageExtBrokerInner`). Client source
+  does not construct the broker-side types.
+- Rust's retained `MessageClientExt` marker covers the standard client decode,
+  pull-result, admin-decode and direct-consume paths. Existing direct-consume
+  Java/Rust comparison checks listener class, effective/offset IDs and offset
+  isolation.
+- Arbitrary application-defined Java subclasses can still pass through
+  methods typed as `MessageExt`. Rust has no dynamic subclass method/field
+  dispatch for those extensions; this remains an explicit P18-V01 adaptation
+  boundary.
+
+Updated `PHASE_18_RUNTIME_CONSUMER_OPERATIONS.md` and the appended release
+checklist record with the narrowed source disposition. This documentation-only
+review passed `git diff --check`; no tests were run for this source inventory.
+Broad P18-V01 and P18-V04 remain open.

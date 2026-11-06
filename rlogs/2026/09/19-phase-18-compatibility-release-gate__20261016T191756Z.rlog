@@ -1,0 +1,33 @@
+Phase 18 Remoting TransportError public-surface correction — 2026-10-16
+
+Context
+- Plan: `plan/2026/09/19-phase-18-compatibility-release-gate.md`; no plan edits.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Java client source commit: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Actions
+- Made `TransportError::{timeout,timeout_with_cause,connect_source,tls_source}`
+  crate-internal and removed the redundant `send_source` factory. Public typed
+  variants remain available to callers.
+- Added five compile-fail doctests for the external helper boundary.
+- Inspected Java `RemotingException`, `RemotingConnectException`,
+  `RemotingSendRequestException`, and `RemotingTimeoutException`: their public
+  message/cause constructors map to Rust's public variants and `ErrorSource`.
+- Updated the Phase 3 error inventory and known-difference disposition for
+  `ErrorSource` cause-chain/type inspection and Rust value equality.
+
+Validation
+- `cargo test -p rocketmq-classic-remoting --all-features --locked` passed:
+  108 unit, 8 codec, 1 fuzz regression, 7 security, 107 transport, and 15 doc
+  tests.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings` passed.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+
+Commit / scope status
+- Code committed as `c3e669d6` (`fix(remoting): keep transport error factories
+  internal`). Compatibility documentation, release checklist, and this log are
+  a separate documentation change.
+- This closes only the Remoting error-factory visibility slice. Broad P18-V01,
+  final-revision workspace P18-V02, current-revision GitHub CI evidence, and
+  Phase 19 Broker/Docker execution remain open.

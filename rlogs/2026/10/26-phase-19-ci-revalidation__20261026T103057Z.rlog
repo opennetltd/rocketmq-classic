@@ -1,0 +1,43 @@
+# Execution log: Phase 19 CI revalidation after stack-capture correction
+
+- Session date: 2026-10-26 UTC
+- Source revision: `fadc19d9a8934362fca20e8e9ecfce2be46ce4af`
+- GitHub Actions run: `40308005851`
+- Run URL: https://github.com/triotous/rocketmq-classic/actions/runs/40308005851
+- Scope: validate Linux and Windows stack-capture corrections and resume all
+  Phase 19 CI gates. No plan files were edited.
+
+## Remote CI results
+
+- Windows stack-runtime job `121521824412` passed in 3m55s.
+- General test job `121521824911` passed formatting, strict Clippy, both
+  workspace suites, the targeted timezone test, differential checks, fuzz and
+  race/leak smoke, and Maven verify. GitHub canceled the job at its 60-minute
+  limit during the release examples build; benchmark and metadata checks were
+  skipped.
+- Docker matrix job `121521824841` passed the default and all-feature workspace
+  suites plus every server-free gate. This included workspace check and Clippy,
+  Java verify, release examples, benchmark build and run, package content,
+  workspace metadata, UTC and Taipei unique-ID tests, differential
+  live-coverage validation, and Docker toolchain validation.
+- The matrix began `live-scenarios` at `2026-10-26T11:37:16Z`. GitHub canceled
+  the aggregate step at `2026-10-26T13:32:06Z` when the matrix reached its
+  180-minute job limit. The log has no scenario assertion failure; the live
+  scenario runner and final evidence reconciliation did not finish.
+- Raw job logs and run details are archived in
+  `docs/compatibility/evidence/phase-19/CI-DOCKER-RETRY-003/20261026T103057Z/`.
+
+## Timeout adjustment
+
+- Raise the general test job from 60 to 90 minutes to give the release examples
+  build more time after the workspace suites and earlier gates passed.
+- Raise the Docker matrix from 180 to GitHub's 360-minute job maximum because
+  its full server-free gates passed and the live scenario stage exceeded the
+  three-hour limit. A fresh push-triggered workflow is required to validate
+  these changes and complete all live scenarios.
+
+## Constraints
+
+- MAN-01 through MAN-04 remain owner-input blocked as recorded in the release
+  checklist. No plan files were modified; no tag or package was created or
+  published.

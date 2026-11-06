@@ -1,0 +1,53 @@
+# Phase 18 P18-V01 `MqClientAdmin.invokeBrokerToResetOffset` — 2026-10-18T03:49:52Z
+
+## Scope and implementation
+
+- Continued on `phase/19-phase-18-compatibility-release-gate`. The pinned Java
+  oracle at `/Users/bruce.tsai/Projects/3rd/rocketmq` remained read-only; the
+  Phase 18 plan was not changed.
+- Reconciled Java 5.5.1 `MqClientAdminImpl.invokeBrokerToResetOffset`: request
+  code 222, supplied Broker address, `ResetOffsetRequestHeader`, `ResetOffsetBody`
+  decoding only when `SUCCESS` has a body, and `MQClientException` with response
+  code/remark otherwise. A success response without a body raises
+  `MQClientException` with response code 0. The returned offset table can be
+  null and uses Java object-form `MessageQueue` keys.
+- Added `MQClientApi::invoke_broker_to_reset_offset`, using the existing Java
+  ResetOffsetBody parser to preserve its non-standard map-key wire form and
+  exposing the nullable shared queue/offset entries. Added invoked Java
+  success, Broker-error and success-without-body fixtures plus three scripted
+  Core tests. Shared admin fixture SHA-256:
+  `dc98c4a44b5994bb30bdf55b72abae40727e852e6b7dafdd4e7b4b8e8747b9c0`.
+- Code commit `859c152a` (`feat(admin): add broker reset offset RPC`). Updated
+  the Phase 17 admin matrix and release checklist separately. The
+  source-backed `MqClientAdmin` method count is 11/19. Preserved pre-existing
+  Phase 19 README, differential runner, local runner and execution log; none
+  were staged.
+
+## Validation
+
+- `cargo test --locked -p rocketmq-classic-core --test admin_rpc` — passed all
+  41 tests, including request-field comparison, Java offset-table decoding,
+  Broker error mapping, and success-without-body response-code-0 behavior.
+- `cargo clippy --locked -p rocketmq-classic-protocol -p rocketmq-classic-remoting
+  -p rocketmq-classic-core --all-targets --all-features -- -D warnings` — passed.
+- `mvn -q -f compat/java-reference/pom.xml verify` — passed 37 scenarios,
+  fixture checks, 64 typed-header cross-decodes and 14 typed-body cross-decodes.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+## Correction during execution
+
+- The first scripted success response exposed that Java emits `MessageQueue`
+  map keys as object-form keys (`{"offsetTable":{{...}:9}}`), which generic
+  `serde_json` cannot parse. Switched this RPC to the existing
+  `ResetOffsetBody::decode_java_json` compatibility parser; the success case
+  and complete focused `admin_rpc` suite then passed.
+
+## Remaining work
+
+- Eight `MqClientAdmin` methods and the broad P18-V01 Java/Rust public API,
+  configuration, input, error/control-flow and reverse-export reconciliation
+  remain open.
+- Full-workspace P18-V02, current-revision Ubuntu/native Windows P18-V04,
+  final P18-V03 package/provenance checks, and Phase 19 local Docker/Broker
+  scenarios, profiles and complete `run-local.sh --all` reconciliation remain
+  open. Owner-only production validation is still the separate manual handoff.

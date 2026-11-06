@@ -1,0 +1,65 @@
+# P18-V01 offset-boundary decode and current-revision release gates — 2026-10-17T20:51:44Z
+
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Code revision: `9513e4da fix(protocol): match offset boundary header reflection`.
+- Java oracle: RocketMQ client 5.5.1, source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`, inspected read-only.
+
+## Parity change
+
+- Java's `SearchOffsetResponseHeader`, `GetMaxOffsetResponseHeader`,
+  `GetMinOffsetResponseHeader`, and `GetEarliestMsgStoretimeResponseHeader`
+  use generic reflection even when the fast-encode hint is set. A missing or
+  malformed boxed `Long` conversion is caught per field and leaves that value
+  null. Each Java RPC owner later fails while unboxing the required value.
+- Rust now preserves these fields as `Option<i64>` in direct mode-aware header
+  decoding and validates them at the corresponding RPC owner boundary.
+- The invoked Java fixture covers absent fields, malformed numeric input,
+  valid values, both mode hints, and owner behavior. Fixture SHA-256:
+  `c4891f046639eb0f9a82e221b1605d296aed1314fb70e37c22ea514d240a9e95`.
+- This closes only the four offset-boundary header/owner slices. Broad P18-V01
+  source/API/settings/input/error/flow and reverse-export reconciliation stays
+  open.
+
+## P18-V02 server-free verification
+
+The complete gate passed on code revision `9513e4da` in a serialized Linux
+ARM64 `rust:1.85.0-bookworm` Docker environment:
+
+- Default and all-feature workspace tests passed. All-target/all-feature
+  workspace check and strict Clippy passed.
+- Maven `verify` passed all 37 scenarios, fixture-drift checks, and Java/Rust
+  cross-decodes.
+- Differential comparator self-test and 37-row manifest validation passed.
+- Offline race/leak smoke passed 16 cases × 3 repetitions. Fuzz smoke passed
+  105 frame seeds, 11 message seeds, 1,856 mutations, 146 frame decodes, and
+  113 message decodes.
+- Release examples and workspace benchmark targets compiled. The offline
+  benchmark ran on Linux ARM64 with Rust 1.85.0; measured per-iteration
+  observations were 1,192.9 ns for frame encode/decode, 704.3 ns for Zstd
+  message decode, 782.5 ns for Producer request construction, 11.9 ns for
+  128-entry route lookup, and 5,372.8 ns for pending request completion. These
+  are observations, not thresholds.
+- Locked Cargo metadata/package listings, workspace metadata/license/dependency
+  checks, and seven package listings containing `LICENSE` and `NOTICE` passed.
+  Four Core Unique ID tests passed under both UTC and Asia/Taipei. Formatting
+  and diff checks passed.
+- An initial parallel workspace run had one Consumer stack-capture test fail
+  because the environment exposed no unblocked signal. The serialized default
+  and all-feature reruns passed.
+
+## Still open
+
+- Broad bidirectional P18-V01 Java source/API/settings/overload input/error/
+  flow reconciliation and Rust reverse-export audit.
+- Current-revision GitHub Ubuntu and native Windows P18-V04 evidence.
+- 30 Phase 19 local Docker/Broker scenarios and required multi-Broker, TLS,
+  ACL, and feature profiles.
+- Pre-publication release-version intent and registry dependency-resolution
+  checks.
+- Owner-only production connectivity, credentials/CA, approved HA/fault
+  injection, and capacity/soak validation remain separate final manual work.
+
+No plan, Java oracle, remote branch, tag, publication, Broker operation, or
+deployment was changed.

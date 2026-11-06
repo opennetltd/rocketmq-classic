@@ -1,0 +1,57 @@
+# Phase 18 internal producer retry-topic fallback
+
+- Recorded: 2026-10-23 21:46:49 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Starting revision: `49c8a921`
+- Implemented revision: `b45bf5df`
+- Pinned Java source: `rocketmq-all-5.5.1` tag, `2ed890cd27b047cc124638aa3c80e391dde942b8`
+- Scope: retry-topic publication through `MQClientInstance`'s internal `DefaultMQProducer`
+
+## Finding and change
+
+Pinned Java `MQClientInstance` constructs `DefaultMQProducer` with group
+`CLIENT_INNER_PRODUCER` and starts its implementation with the client factory.
+The producer defaults are `sendMsgTimeout=3000`,
+`retryTimesWhenSendFailed=2`, and
+`retryAnotherBrokerWhenNotStoreOK=false`. Its default retry-response codes are
+`TOPIC_NOT_EXIST`, `SERVICE_NOT_AVAILABLE`, `SYSTEM_ERROR`, `SYSTEM_BUSY`,
+`NO_PERMISSION`, `NO_BUYER_ID`, `NOT_IN_CURRENT_UNIT`, and `GO_AWAY`.
+`sendDefaultImpl` spends the send timeout across route lookup and up to three
+synchronous sends, avoids the previous Broker when another route is available,
+retries transport/client failures and only the listed Broker responses.
+
+Rust retry-topic fallback now uses this default timeout, attempt count, previous
+Broker avoidance, and response-code retry rule. The behavior covered here is
+the default `sendLatencyEnable=false` selector; Java's optional latency-fault
+selector when that setting is enabled remains part of the broader P18-V01
+audit.
+
+Pinned source SHA-256 values:
+
+- `DefaultMQProducer.java`:
+  `b2e5714e5aad6fef1a6a1529e272a1524535a7152e7793257dc851843b37215d`
+- `DefaultMQProducerImpl.java`:
+  `ee88990657fbb61568fda0756b8b104c168540cb0d0f21be33492a4a5426056e`
+- `MQFaultStrategy.java`:
+  `a60fe418a886b408fe8edd1c66e8755501ffd2b8e179b0c78e34f1bfe25ec8ee`
+
+## Verification
+
+- `cargo test -p rocketmq-classic-consumer`: passed; 266 library tests, all Consumer integration suites, and 13 doctests.
+- `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features -- -D warnings`: passed.
+- `cargo fmt --all` and `cargo fmt --all -- --check`: passed.
+- `git diff --check`: passed.
+- Regression coverage checks the Java retry-response set, previous-Broker selection and single-Broker fallback, and a scripted send that succeeds on the third attempt.
+- Java source and fixtures were unchanged; Maven verification was not rerun.
+- The first compile caught a missing explicit selector return lifetime; this was corrected before the passing Consumer test and Clippy runs.
+
+## Acceptance boundary
+
+This closes the default internal-producer sync retry behavior for retry-topic
+fallback. The optional `sendLatencyEnable=true` fault-selector behavior and
+broader P18-V01 source/API/settings/input/error/control-flow and reverse-export
+reconciliation remain open. Native Windows runtime and current-revision remote
+CI are separate gates. Phase 19 Broker/Docker work remains outside scope. The
+four user-owned Phase 19 workspace paths and the reference checkout's existing
+untracked `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java` were left
+untouched. No push or remote CI was run.

@@ -1,0 +1,19 @@
+Phase 0–11 complete local gate rerun — 2026-10-12 03:31–03:33 UTC
+
+Scope: rerun the offline gates after the Heartbeat DTO Fastjson corpus grew from 249 to 276 cases. No live Broker, Docker cluster, TLS server, mixed Java/Rust consumer, Windows host, non-macOS BSD host, or IPv6-only host was exercised.
+
+Host: macOS 26.6.1 arm64.
+
+Commands and results:
+
+- `cargo fmt --all -- --check` — PASS.
+- `cargo test --workspace --locked` — PASS; workspace unit tests, integration tests, and protocol doctests passed, including the 276-case Heartbeat DTO differential.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — PASS after merging a nested conditional in `crates/rocketmq-classic-common/src/serde_fastjson.rs`; the first run caught `clippy::collapsible_if`.
+- `cargo build -p rocketmq-classic --examples --locked` — PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS; pinned Java fixture verification and Rust-generated Java cross-decodes completed.
+- `python3 tests/differential/compare.py --self-test` — PASS.
+- `python3 tests/differential/compare.py --validate-manifest` — PASS; 22 scenarios validated.
+- `git diff --check` — PASS.
+- Heartbeat fixture SHA-256 — `67b844d3a61ee31ac12c340cf09f30d81083435635d6f17bebc44206b65d37cc`.
+
+This closes the latest local gate rerun for the current offline fixture/code state on this host. It does not close Phase 6's broad source/API/input reconciliation, Windows IP Helper runtime enumeration, non-macOS BSD runtime enumeration, actual IPv6-only host evidence, or Phase 19 live Broker/TLS/cross-language scenarios. Orderly queue locking remains intentionally owned by Phase 12.

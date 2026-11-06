@@ -1,0 +1,49 @@
+# Phase 18 Lithuanian ACL context and UTF-16 segment-width gate
+
+- Recorded: 2026-10-22 18:23:18 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Implementation commit: `e6b31e972c92763d795c6a2b234b761412f1ae5e`
+- ACL fixture SHA-256: `3364a617fc25de94be5ef2bae8342de404b48f9c7eb1548d20fcf13e6dc5412`
+
+## Finding and change
+
+The first expanded Lithuanian oracle run exposed two adjacent parity details:
+
+1. Java removes U+0307 after any `Soft_Dotted` character when the
+   `After_Soft_Dotted` context is not blocked by canonical combining class 0
+   or 230. Rust previously removed only a dot immediately after lowercase
+   `i`/`j`. `AclUtils.expandIP` now uses ICU4X's `Soft_Dotted` and canonical
+   combining-class properties to reproduce the context.
+2. Java segment padding measures `String.length()` in UTF-16 code units.
+   Rust previously used UTF-8 byte length for the threshold. It now counts
+   UTF-16 units and pads by the resulting difference.
+
+The invoked Java fixture now includes below/above marks, CGJ, repeated dots,
+precomposed Latin `į`, Cyrillic `і`, retained-dot controls, and a supplementary
+character. It sets `lt-LT` and restores the original locale in `finally`.
+Focused Rust tests compare every generated case.
+
+## Verification
+
+- `mvn -o -q -f compat/java-reference/pom.xml compile exec:java -Dexec.args='acl-fixture /Users/bruce.tsai/Projects/trio/rocketmq-classic/fixtures/security/acl-signatures.json'` — passed; fixture regenerated from the pinned Java dependency.
+- `cargo test --offline -p rocketmq-classic-core --lib acl_expand_ip_matches_ -- --nocapture` — passed; Turkish and Lithuanian child-process locale cases.
+- `cargo test --workspace --locked` — passed.
+- `cargo test --workspace --all-features --locked` — passed.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — passed.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — passed; 37 differential scenarios, 36 route/VIP cases, 106 typed-header cross-decodes, and 19 typed-body cross-decodes.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+The first fixture-generation attempt used an ineffective `-Dexec.mainClass`
+override and reached `compat.Main` usage output; the supported `acl-fixture`
+command above regenerated it successfully. An initial run against the expanded
+marks also caught the UTF-16 padding discrepancy before the correction.
+
+## Scope and remaining evidence
+
+This closes the Lithuanian uppercase context and UTF-16 segment-width slices
+for the invoked direct helper inputs. It does not close broad P18-V01
+reconciliation. Current-revision remote Ubuntu CI, native Windows runtime, and
+Phase 19 Broker/Docker scenarios remain open. No external CI or Broker was
+used. The four pre-existing protected Phase 19 worktree paths remain
+unstaged and untouched.

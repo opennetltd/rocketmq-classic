@@ -1,0 +1,39 @@
+Phase 18 current-tree local gate — 2026-10-22 16:16 UTC
+
+Code revision: `1eb5b6ba` (trace identity and ACL custom-header signing code).
+Documentation HEAD at gate start: `704b6660`. Environment: macOS AArch64,
+Apple M5 Max, 18 logical CPUs, Rust 1.85.0; pinned RocketMQ Java client 5.5.1.
+
+PASS:
+- `cargo test --workspace --locked`
+- `cargo test --workspace --all-features --locked`
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+- `cargo fmt --all -- --check`; `git diff --check`
+- `mvn -f compat/java-reference/pom.xml verify`: 37 scenarios, 36 runtime
+  route/VIP cases, Java decoding of 106 typed headers and 19 typed bodies
+- `python3 tests/differential/compare.py --self-test`
+- `python3 tests/differential/compare.py --validate-manifest`: 37 scenarios
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`:
+  163 frame seeds, 11 message seeds, 2,784 bounded mutations, 245 frame
+  decodes, 112 message decodes
+- `bash tests/stress/run-offline-smoke.sh`: 16 deterministic race/leak cases
+  x 3 repetitions
+- `cargo build -p rocketmq-classic --examples --release --locked`
+- `cargo bench -p rocketmq-classic --bench offline --locked`
+- `cargo clippy -p rocketmq-classic --bench offline --all-features --locked -- -D warnings`
+- `python3 scripts/check-workspace-metadata.py`
+- `cargo package --list --locked --allow-dirty` checks for all seven product
+  crates; each includes `LICENSE` and `NOTICE`
+- `cargo test -p rocketmq-classic-core --lib unique_id::tests --locked` and
+  the same command under `TZ=Asia/Taipei`: four tests pass in each zone
+- `cargo check -p rocketmq-classic-core --all-targets --target
+  x86_64-pc-windows-gnu --locked`
+- `cargo test --target x86_64-pc-windows-gnu -p rocketmq-classic-consumer
+  --lib stack::tests::jstack_includes_current_and_other_named_threads
+  --no-run --locked`
+
+Benchmark observation is recorded in
+`docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`. No push or
+external CI was run. Current-revision Ubuntu CI and native Windows execution,
+broad P18-V01 reconciliation, and Phase 19 Broker/Docker validation remain
+open. Protected Phase 19 worktree files were not staged or modified.

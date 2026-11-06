@@ -1,0 +1,9 @@
+Session: 2026-10-10T00:25:35Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Strengthened `runtime_metadata::explicit_offset_namespace_conversion_matches_invoked_java` to assert the distinct `InvalidOffsetTable("null offset table")` and `InvalidOffsetTable("null queue key with namespace")` outcomes for the seven nullable Java cases. Test-only commit `04d22610`; no runtime behavior changed.
+
+Focused differential passes with ten ordinary and seven nullable fixture cases. `cargo fmt --all --check` and `git diff --check` pass. The full workspace and Maven gates for the implementation and fixture passed immediately before this assertion-only change.
+
+Phase 6 remains partial. Continue the broader source/API/input/reverse-export audit; P6-V04 stays `PENDING_PHASE_19`.

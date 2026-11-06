@@ -1,0 +1,22 @@
+# Phase 18 Producer nullable queue-filter mapping — 2026-10-14T03:27:00Z
+
+- Continued `phase/19-phase-18-compatibility-release-gate`; pinned RocketMQ Java client remains `5.5.1` at `efa1be59d6fc747ad220f036c86030f05f0419f9`, and its checkout remains read-only.
+- Added invoked Java 5.5.1 `TopicPublishInfo.selectOneMessageQueue(QueueFilter...)` cases for null and empty filter arrays, null elements with nonempty/empty/null queue lists, and filter evaluation order when the first filter returns false. Java returns no queue in the last case but still evaluates the next filter because `filterResult &= ...` is non-short-circuiting.
+- Added `TopicPublishInfo::select_one_message_queue_with_nullable_filters`, a nullable filter callback type, and `NullPublishInfoQueueFilter`; the existing closure-slice method now delegates to the nullable implementation. Added a Rust differential test and updated the Phase 7 Producer matrix and release checklist.
+- Code/test/fixture commit: `96f7c8d1` (`feat(producer): map nullable queue filters`). Fixture SHA-256: `d8e0fb04555fa9e730277d2230f37b48eb0ae159f9f49610d96eff3c369de051`.
+
+## Verification
+
+- PASS: `cargo test -p rocketmq-classic-producer --locked` (119 unit tests, 46 integration tests, doc tests).
+- PASS: `cargo clippy -p rocketmq-classic-producer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml -Dproducer.core.fixture.verify=false verify` (fixture generation and 37 scenarios).
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (fixture drift checks, Java/Rust cross-decodes, and 37 scenarios).
+- PASS: `cargo fmt --all -- --check`, `git diff --check`, comparator self-test, and 37-scenario manifest validation.
+- The complete workspace P18-V02 gate was not rerun for this Producer-scoped slice. No Broker or Phase 19 Docker scenario was run.
+
+## Remaining work
+
+- P18-V01 remains PARTIAL: returned client-factory surface, nested `MQFaultStrategy` helpers, per-overload input/branch crosswalks, Java reverse-export, inherited/trait API, and broad source/input reconciliation remain open.
+- Re-run the full workspace P18-V02 gate after the remaining audit/implementation slices.
+- A current GitHub Ubuntu workflow result for the Linux-specific Java address profile, Phase 19 Docker/Broker scenarios, and confirmation of the `0.1.0` version plus registry dependency resolution remain open; packages stay unpublished.
+- Final owner-run platform checks remain separate: Windows IP Helper runtime enumeration, non-macOS BSD runtime enumeration, and an IPv6-only host.

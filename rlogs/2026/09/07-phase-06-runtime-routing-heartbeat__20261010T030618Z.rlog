@@ -1,0 +1,11 @@
+Session: 2026-10-10T03:06:18Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+MessageQueueAssignment nested alias correction (`aa4803df`): pinned RocketMQ 5.5.1 Java method cases verify that `setMessageQueue` and `setAttachments` retain the supplied mutable objects, the corresponding getters return those same objects, and caller-held/getter-held mutations are visible in both directions. Rust now stores the nested fields as `Option<SharedAssignmentMessageQueue>` and `Option<SharedAssignmentAttachments>`, wraps decoded values in `SharedValue`, clones handles from getters, and accepts shared handles in setters. Wire JSON and attachment null-entry omission remain unchanged. Rust all-fields Eq/Hash snapshots nested values to remain lawful; mutation after HashSet insertion retains Java's mutable-key hazard. The response Set's contained assignment-object identity remains a separate open alias layer.
+
+The Java fixture source was updated and regenerated from the pinned Maven artifacts because the alternate checkout `/Users/nanashi07/Projects/3rd/rocketmq` is absent. `fixtures/runtime/lookup.json` SHA-256 is `cf03a6b58e3f312d8f1a4bc95a0384bc004338bc2d529141694bbf1810b63a71`.
+
+Code verification passed: `cargo test --workspace --all-targets --locked` with authorized local socket access; `cargo check --workspace --all-targets --locked`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; protocol suite and 14 doctests; pinned offline Maven `verify` (22 scenarios, runtime fixture checks, and Java cross-decodes) using `/private/tmp/p6-maven-home` and `/private/tmp/p6-maven-repository`; comparator self-test; manifest validation (22 scenarios); `cargo fmt --all -- --check`; and `git diff --check`. Maven required authorized local interface enumeration. Source checkout unavailable; artifact SHA-256 remains `1c39c94a28e59b292e29d699872d693cdc2ce30bd54c4e0f95a4c377fd9dff84`.
+
+The separate documentation commit updates ADR-0020, ADR-0054/0055, adds ADR-0066, and reconciles the Phase 6 API map, runtime inventory, requirement audit, and this execution record. Full Phase 6 source/API/input/reverse-export reconciliation and platform evidence remain open. Keep P6-V04 `PENDING_PHASE_19`.

@@ -1,0 +1,7 @@
+# Phase 3 TLS trust-root disposition — 20260928T022300Z
+
+- User explicitly accepted Rust platform-native trust roots for verified TLS when no explicit CA/trustCertPath is configured, instead of Java 5.5.1's JDK/JSSE default trust store.
+- Updated `docs/compatibility/PHASE_3_REMOTING_INVENTORY.md`, `docs/architecture/ADR-0001-remoting-transport.md`, and `docs/compatibility/JAVA_5_5_1_COMPATIBILITY.md` to record this narrowly scoped Rust-native difference. Wording explicitly states the stores/anchor sets are not asserted equivalent and that the acceptance does not waive other Phase 3 blockers.
+- Preserved append-only logging: added this new rlog; did not alter the historical untracked `20260927T085045Z.rlog` or prior rlogs.
+- Validation after documentation updates: `cargo fmt --all --check`, `git diff --check`, `python3 scripts/check-workspace-metadata.py`, and `python3 tests/differential/compare.py --self-test` PASS. No code changes in this disposition, so test suite not rerun.
+- Phase 3 is not declared accepted: remaining PARTIAL rows, complete bilingual criteria/diff review, and final gate remain outstanding. P3-V04 remains pending Phase 19. No Phase 4 work started; working changes remain uncommitted.

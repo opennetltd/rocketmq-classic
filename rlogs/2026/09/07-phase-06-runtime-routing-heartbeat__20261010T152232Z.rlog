@@ -1,0 +1,9 @@
+# Phase 6 execution session — 2026-10-10T15:22Z
+
+- Continued on `07-phase-06-runtime-routing-heartbeat`; the implementation commit was `c29c5690` after Java oracle/fixture commit `93339604`. The Phase 6 plan remains unchanged. Source and documentation use separate commits.
+- Pinned Java 5.5.1 `MQClientInstance.queryAssignment(topic, null, null, null, 3000)` forwards null consumer group, strategy, and message model to its API. The actual `MQClientAPIImpl` invocation emits request code 301 with a body containing only topic and clientId; a successful empty assignment response decodes to an empty Set.
+- Rust `ClientRuntime::query_assignment_nullable` now carries each of those nullable inputs into `QueryAssignmentRequestBody`. The fixture-backed `null_assignment_fields_match_java_request_body` regression checks the direct Java runtime/API observations and loopback request body/decoded empty Set.
+- Latest `fixtures/runtime/lookup.json` SHA-256: `6d9092f000f4c463e9d5c851f93d0c8d17509ad2b2af1bf80cb48116de41ff7a`.
+- Validation passed: `cargo test --workspace --all-targets --locked` with local socket access; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; pinned offline Maven verify (22 scenarios, runtime fixture verification and Java cross-decodes); comparator self-test and manifest validation (22 scenarios); `cargo fmt --all -- --check`; `git diff --check`.
+- Updated `PHASE_6_API_CONFIG_MAP.md` and `PHASE_6_REQUIREMENT_AUDIT.md` with the nullable assignment fields, omitted-body-field behavior, fixture digest, and validation evidence. Full Phase 6 method/input/platform reconciliation remains open; P6-V04 stays `PENDING_PHASE_19`.
+- Documentation/log commit: pending.

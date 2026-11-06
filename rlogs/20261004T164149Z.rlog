@@ -1,0 +1,2 @@
+2026-10-04 Phase5 extension invocation: pinned Java 5.5.1 MQClientAPIExt.syncLiteSubscriptionAsync; mock invoke future and persist success/system error/unknown response cases. Rust loopback compares request code/headers/JSON wire body, transport request-response, and outcome. No server contacted.
+Validation: targeted Maven CLI verify with absolute fixture path passed; Rust targeted cargo test passed; targeted clippy passed. Workspace fmt check currently flags concurrent consumer fixture (not owned).

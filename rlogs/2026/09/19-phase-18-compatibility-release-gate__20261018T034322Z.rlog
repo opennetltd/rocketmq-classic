@@ -1,0 +1,55 @@
+# Phase 18 P18-V01 `MqClientAdmin.deleteSubscriptionGroup` — 2026-10-18T03:43:22Z
+
+## Scope and implementation
+
+- Continued on `phase/19-phase-18-compatibility-release-gate`. The pinned Java
+  oracle at `/Users/bruce.tsai/Projects/3rd/rocketmq` remained read-only; the
+  Phase 18 plan was not changed.
+- Reconciled Java 5.5.1 `MqClientAdminImpl.deleteSubscriptionGroup`: request
+  code 207, supplied Broker address, `DeleteSubscriptionGroupRequestHeader`,
+  no body, null result on `SUCCESS`, and `MQClientException` with response
+  code/remark otherwise. Java's no-op `checkFields()` leaves the annotated
+  group name nullable. Primitive `cleanOffset` defaults to and encodes `false`;
+  the inherited namespace fields remain nullable.
+- Added the public Rust typed header, base-field equality/hash behavior,
+  request-header identity fixture, typed-header cross-decode and validation
+  coverage, `MQClientApi::delete_subscription_group`, scripted success/error
+  Core tests, and invoked Java fixtures. Shared admin fixture SHA-256:
+  `d2da8387de557de716a1a8eb87c4aabde190d6409ef677ddacc735c5467cac8c`.
+- Code commit `ec8b7c41` (`feat(admin): add delete subscription group RPC`).
+  Updated the Phase 17 admin matrix and release checklist separately. The
+  source-backed `MqClientAdmin` method count is 10/19. Preserved pre-existing
+  Phase 19 README, differential runner, local runner and execution log; none
+  were staged.
+
+## Validation
+
+- `cargo test --locked -p rocketmq-classic-protocol --all-features` — passed:
+  132 unit tests, all integration targets, and 49 doctests.
+- `cargo test --locked -p rocketmq-classic-core --test admin_rpc` — passed all
+  38 tests, including the new success and Broker-error comparisons.
+- `cargo clippy --locked -p rocketmq-classic-protocol -p rocketmq-classic-remoting
+  -p rocketmq-classic-core --all-targets --all-features -- -D warnings` — passed.
+- `mvn -q -f compat/java-reference/pom.xml verify` — passed 37 scenarios,
+  fixture checks, 64 typed-header cross-decodes and 14 typed-body cross-decodes.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+## Corrections during execution
+
+- The first full Protocol run found that the validation row treated inherited
+  boxed `nsd`/`oway` fields as primitive booleans. Updated the row to preserve
+  Java's absent-versus-false distinction; the focused header test and full
+  Protocol suite then passed.
+- Added the new header to the invoked request-header identity inventory after
+  confirming Java inherits equality/hash from `RpcRequestHeader`; regenerated
+  the identity and typed-header fixtures before the final passing gates.
+
+## Remaining work
+
+- Nine `MqClientAdmin` methods and the broad P18-V01 Java/Rust public API,
+  configuration, input, error/control-flow and reverse-export reconciliation
+  remain open.
+- Full-workspace P18-V02, current-revision Ubuntu/native Windows P18-V04,
+  final P18-V03 package/provenance checks, and Phase 19 local Docker/Broker
+  scenarios, profiles and complete `run-local.sh --all` reconciliation remain
+  open. Owner-only production validation is still the separate manual handoff.

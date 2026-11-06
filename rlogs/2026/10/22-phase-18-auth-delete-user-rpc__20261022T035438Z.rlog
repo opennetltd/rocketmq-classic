@@ -1,0 +1,45 @@
+# Phase 18 compatibility release gate — 2026-10-22 03:54:38 UTC
+
+Base revision: `b900fc9f`. This entry records the request 3003 `deleteUser`
+Broker RPC slice. Pinned Java source is
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Compatibility changes
+
+- Added nullable `DeleteUserRequestHeader` with Java's no-op `checkFields()`
+  behavior and included it in the typed-header inventory and Java/Rust frame
+  cross-decode.
+- Added `MQClientApi::delete_user` for request 3003 with no body, nullable
+  username, caller timeout, Broker error mapping, and the supplied Broker
+  address unchanged when VIP channels are enabled.
+- Added invoked Java/Rust cases for populated/null/empty usernames, success,
+  Broker rejection, absent body, timeout, and VIP-enabled unchanged-address
+  behavior.
+- Updated request-code and Phase 6 API/reverse-audit documentation. The
+  direct-operation reverse audit now has 5 open rows; wider Phase 18 work
+  remains open.
+
+## Local verification
+
+- `cargo test -p rocketmq-classic-protocol --locked`: 155 unit tests, 57
+  integration tests, and 157 doctests passed.
+- `cargo test -p rocketmq-classic-core --test admin_rpc --locked`: 106 passed.
+- `cargo test -p rocketmq-classic-core --lib --locked`: 203 passed.
+- `cargo clippy -p rocketmq-classic-protocol -p rocketmq-classic-core -p rocketmq-classic-remoting --all-targets --all-features --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- `mvn -o -f compat/java-reference/pom.xml verify`: BUILD SUCCESS; Java
+  decoded 99 Rust typed-header fixtures and 19 Rust typed-body fixtures.
+- SHA-256 `fixtures/producer/core.json`:
+  `67d106db94016959eb8ff2e6e8c57baeeba9dc50c1b07a19e496f351a6af33e4`.
+- SHA-256 `fixtures/remoting/header-delete-user-request.json`:
+  `bb5b180d3f9dfdeada580fc966ee921c11a4c7960fc441885c2b0e22888203c9`.
+- SHA-256 `fixtures/remoting/header-delete-user-request.bin`:
+  `f02f85e8df7f5f4016d6b45c47dec947f4fb4cc1d89c1981c3dfd24140443a6c`.
+
+## Remaining work
+
+Request 3003 is closed. The direct-operation reverse audit still has 5 open
+rows, and broader Phase 18 settings, input, error, control-flow, reverse-export,
+and platform reconciliation remains open. No Broker, Docker, or remote CI was
+used. Pre-existing Phase 19 worktree paths remain unstaged and outside this
+slice.

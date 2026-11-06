@@ -1,0 +1,59 @@
+# Phase 18 RemotingCommand helper continuation — 2026-10-17T07:51:37Z
+
+- Continued on `phase/19-phase-18-compatibility-release-gate` after the pinned
+  Java 5.5.1 `RemotingCommand` public API inventory. Read the Phase 18 plan,
+  repository coding/Rust guidance, and the Java implementation at pinned commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`. The plan and Java checkout remain
+  unmodified.
+- Implemented Java-parity request-ID generation, protocol type marking/lookup,
+  header-length extraction, and serialization-type configuration in Rust.
+  Invoked Java fixture cases cover signed/header boundaries, known and unknown
+  protocol bytes, request-ID delta, property-over-environment precedence,
+  environment fallback, blank values, and invalid configuration. Added
+  isolated-process Rust checks for serialization configuration. Fixture drift
+  and Java/Rust cross-decodes remain covered by Maven verification.
+- Validation passed before commit: `cargo test -p
+  rocketmq-classic-remoting --all-features --locked`; strict Remoting
+  all-target/all-feature Clippy; `cargo fmt --all -- --check`;
+  `git diff --check`; focused Java fixture comparison; and
+  `mvn -o -f compat/java-reference/pom.xml verify` (37 scenarios, fixture
+  drift, and Java/Rust cross-decodes).
+- Code/test commit: `1d0d50b7 feat(remoting): map Java command protocol helpers`.
+  The API crosswalk and release checklist were updated separately; their commit
+  is recorded after this entry is finalized.
+- This closes the method-level protocol-helper slice only. Java command
+  factories and default opaque initialization, attached custom-header methods,
+  process timer/callback-list, `toString`, and long-poll RPC metric emission
+  remain open in P18-V01. The broad source/API/settings/input/error/control-flow
+  and reverse-export audit remains unfinished. Full-workspace P18-V02 gates
+  must be rerun after this revision; current-revision Ubuntu/Windows CI and
+  P18-V04 evidence remain outstanding. Phase 19 local Broker/Docker automation
+  is separate from final owner-manual checks.
+
+RemotingCommand `toString()` continuation — 2026-10-17T07:57:47Z
+
+- Implemented `Display` for `RemotingCommand` using the pinned Java field labels,
+  null text, binary flag representation, and ext-field key/value rendering.
+  Invoked Java cases cover nulls, populated fields, one ext-field, and a
+  negative 32-bit flag. The method is recorded PARTIAL because Java
+  `HashMap` iteration and Rust `BTreeMap` ordering can differ for multiple
+  ext-fields.
+- First validation exposed a missing Java `HashMap` import and a Rust fixture
+  lookup at the wrong JSON level; the initial Java compile and focused test
+  failed. Added the import, generated the fixture through Maven's compile phase,
+  and changed the Rust test to read `commandToString` under
+  `remotingEnumMethodCases`. The corrected focused test and full suites pass.
+- `cargo fmt --all -- --check` passed. Focused Java/Rust command display
+  comparison passed. `cargo test -p rocketmq-classic-remoting --all-features
+  --locked` passed: 110 unit, 8 codec, 1 fuzz regression, 7 security, 107
+  transport, and 15 doctests. Strict Remoting Clippy passed.
+  `mvn -o -f compat/java-reference/pom.xml verify` passed all 37 scenarios,
+  fixture-drift checks, and Java/Rust cross-decodes. `git diff --check` passed.
+- Code/test commit: `dfcfc890 feat(remoting): match Java command display string`.
+  API crosswalk, release checklist, and this append-only log are updated in a
+  separate documentation commit.
+- `RemotingCommand` timer/callback-list methods, request/response/error
+  factories and default opaque behavior, attached custom-header API, long-poll
+  metric emission, and the broad P18-V01 audit remain open. The full workspace
+  P18-V02 gate must be rerun after these code revisions; current-revision
+  platform CI and Phase 19 live scenarios remain outstanding.

@@ -1,0 +1,49 @@
+# Phase 18 factory nullable scheduler parity
+
+- Recorded: 2026-10-23 12:33:06 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Starting revision: `d0ea8344`
+- Implemented revision: `8fd5822e`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: `MQClientAPIFactory` null `ScheduledExecutorService` input
+
+## Finding and change
+
+Both pinned Java factory constructors accept a nullable
+`ScheduledExecutorService`. Static-address startup never uses the scheduler
+and succeeds when it is null. Domain startup constructs the API client,
+registers its callback, performs the initial address lookup, and then throws
+`NullPointerException` while scheduling refresh. The current client is not
+started or assigned into the factory array.
+
+Rust now models default Tokio scheduling, a caller-owned scheduler, and an
+explicit Java-null scheduler separately. `with_optional_refresh_scheduler`
+represents the nullable Java input. Static mode skips scheduling and succeeds;
+domain mode returns `NullRefreshScheduler` after initial discovery and before
+client start or slot assignment. The invoked Java fixture records both modes
+and the null domain slot. Fixture SHA-256:
+`747b7af85d91eab83ac1764e2521754dbbe0f2eec183582af0c324a012404af2`.
+
+## Verification
+
+- Focused Core factory tests: 10 passed.
+- `cargo test --offline --workspace --locked`: passed, including doctests.
+- `cargo test --offline --workspace --all-features --locked`: passed, including doctests.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings`: passed.
+- `mvn -q -o -f compat/java-reference/pom.xml verify`: passed; 37 differential scenarios and all invoked fixtures, including the factory fixture.
+- Direct `RuntimeApiFactoryFixtures --verify`: passed.
+- Differential comparator self-test and 37-scenario manifest validation: passed.
+- Workspace metadata/dependency/license checks and all seven product package listings: passed.
+- Offline deterministic race/leak smoke: 17 cases × 3.
+- Fuzz smoke: 163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes, 192 message decodes.
+- Release examples, fixed-input offline benchmark, Core all-target/all-feature Windows GNU cross-check, and workspace Rustdoc JSON: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+
+## Acceptance boundary
+
+This closes only the factory null-scheduler input branch. Broad P18-V01
+source/API/settings/input/error/control-flow/reverse-export reconciliation
+remains PARTIAL. Current-revision remote Ubuntu CI and native Windows runtime
+evidence remain pending. Phase 19 Broker/Docker validation was not run. No
+push or remote CI was performed. The four user-owned Phase 19 worktree paths
+remain untouched and unstaged.

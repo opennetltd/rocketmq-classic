@@ -1,0 +1,16 @@
+Phase 6 IPv6-only Linux container address check — 2026-10-12 03:53 UTC
+
+Scope: exercise the production `ClientConfig::new_auto()` resolver with no IPv4 address on its Docker network interface. No Broker, NameServer, TLS server, or mixed-client scenario was used.
+
+Reference: pinned RocketMQ Java client 5.5.1 `NetworkUtil.getLocalAddress()` returns `normalizeHostAddress(getLocalInetAddress())`; `normalizeHostAddress` wraps every `Inet6Address.getHostAddress()` in `[...]`. `denormalizeHostAddress` removes those brackets. The Rust resolver's bracketed output matches this contract.
+
+Environment: Linux ARM64 Docker server; `rocketmq-p6-ipv6-only`, subnet `fd42:6::/64`, `EnableIPv4=false`; Rust 1.85.0. The test container was attached only to that IPv6-enabled network.
+
+Test-only correction: `automatic_client_ip_constructor_supports_ipv6_only_interfaces` previously passed the bracketed Java-compatible value directly to Rust `IpAddr::parse`, which rejects brackets. The test now strips Java's brackets and then the `%interface` scope before parsing, while asserting that the returned value is bracketed, IPv6, and non-loopback.
+
+Commands and results:
+
+- Linux test build: `docker run --rm --mount type=volume,source=rocketmq-p6-linux-target,destination=/target -e CARGO_TARGET_DIR=/target -v /Users/bruce.tsai/Projects/trio/rocketmq-classic:/workspace -w /workspace rust:1.85-bookworm cargo test -p rocketmq-classic-core --lib --locked --no-run` — PASS; generated `rocketmq_classic_core-b0ba7099459e892c`.
+- IPv6-only execution: `docker run --rm --network rocketmq-p6-ipv6-only --mount type=volume,source=rocketmq-p6-linux-target,destination=/target --entrypoint /target/debug/deps/rocketmq_classic_core-b0ba7099459e892c rust:1.85-bookworm automatic_client_ip_constructor_supports_ipv6_only_interfaces --ignored --nocapture` — PASS; 1 passed, 0 failed.
+
+This closes the Linux IPv6-only-container execution gap for the automatic address constructor. It does not prove behavior on a real IPv6-only host or a same-interface Java/Rust candidate-order comparison. Windows IP Helper runtime enumeration, non-macOS BSD runtime enumeration, and the broader Phase 6 source/API/input audit remain open. Phase 6 remains PARTIAL; P6-V04 remains PENDING_PHASE_19.

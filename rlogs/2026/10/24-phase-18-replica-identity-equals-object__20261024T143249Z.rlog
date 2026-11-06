@@ -1,0 +1,43 @@
+# Phase 18 ReplicaIdentity.equals(Object) input parity
+
+- Recorded: 2026-10-24 14:32:49 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Code revision: `b5cbf46b`
+- Host: macOS AArch64, Rust 1.85.0
+- Java reference: pinned offline Maven build
+
+## Change
+
+- `ReplicaIdentity::java_equals` accepts Java-object-shaped input, returns false
+  for an unrelated object type, and retains the existing null and matching-type
+  field semantics.
+- `ProducerCoreFixtures` records `BrokerReplicasInfo.ReplicaIdentity.equals` on
+  a string argument. `fixtures/producer/core.json` adds the observed `false`
+  result, and `controller_api.rs` compares the Rust branch with that fixture.
+- Source commit: `b5cbf46b fix(core): match replica equals object input semantics`.
+
+## Verification
+
+- Focused `controller_api` integration tests: 9 passed.
+- `cargo test --offline --locked --workspace --all-features`: passed, including
+  all workspace test binaries and doctests.
+- `cargo test --offline --locked --workspace`: passed, including all workspace
+  test binaries and doctests.
+- `cargo clippy --offline --locked --workspace --all-targets --all-features -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- Offline Maven `verify` with the fixture regeneration property: passed; the
+  regenerated controller DTO entry adds only `replicaEqualsWrongType: false`.
+- Windows GNU all-target/all-feature `cargo check`: passed.
+- Windows GNU all-target/all-feature strict Clippy: passed.
+- Windows GNU all-feature `cargo test --no-run`: passed and linked workspace
+  test executables. This is compile/link-only evidence.
+
+## Remaining gates
+
+- Broad P18-V01 behavior and reverse-export reconciliation remains partial.
+- The Java `MessageQueueAssignment` equal-hash fixture depends on a process-local
+  enum identity hash, so its hash-set collision outcome is not portable across
+  processes and remains an explicit boundary.
+- Native Windows runtime and current-revision remote Ubuntu CI remain unverified.
+  No push or remote CI was run.
+- Phase 19 user-owned files were left unstaged and unchanged.

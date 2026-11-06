@@ -1,0 +1,17 @@
+# Phase 18 Windows GNU workspace cross-target checks
+
+- Recorded: 2026-10-23 14:51:58 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source revision: `77587adc`
+- Host: macOS AArch64, Rust 1.85.0
+- Target: `x86_64-pc-windows-gnu`
+
+## Verification
+
+- `cargo check --offline --locked --workspace --all-targets --all-features --target x86_64-pc-windows-gnu` — passed for all six workspace crates, including integration targets.
+- `cargo clippy --offline --locked --workspace --all-targets --all-features --target x86_64-pc-windows-gnu -- -D warnings` — passed for all workspace crates.
+- No push or remote CI was run; existing Phase 19 user-owned paths were not edited or staged.
+
+This is compile-only cross-target evidence. Native Windows execution and
+current-revision remote Ubuntu CI remain open; Phase 19 Broker/Docker work
+remains outside scope.

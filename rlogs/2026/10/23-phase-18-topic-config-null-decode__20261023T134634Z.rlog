@@ -1,0 +1,28 @@
+# Phase 18 TopicConfig nullable decoder input
+
+- Recorded: 2026-10-23 13:46:34 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source revision: `19b674ab` (`test: cover nullable TopicConfig decoder input`)
+- Pinned Java source: RocketMQ 5.5.1,
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Change
+
+- The invoked Java fixture now calls `TopicConfig.decode(null)` and captures
+  its `NullPointerException`.
+- The Protocol regression confirms that Rust's
+  `TopicConfig::decode_nullable(None)` returns `TopicConfigError::NullInput`.
+- `fixtures/producer/core.json` SHA-256:
+  `f1a221f9c6c572de934a7c84e7e31ed4015f326ac3e78bdeb7f79cf27cffa10a`.
+
+## Verification
+
+- `cargo test --offline --locked -p rocketmq-classic-protocol --test topic_config_public_api` — passed.
+- `cargo test --offline --locked -p rocketmq-classic-protocol --all-features` — passed, including 166 doctests.
+- `cargo clippy --offline --locked -p rocketmq-classic-protocol --all-targets --all-features -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- Offline Maven verification passed for all fixture families.
+- No push or remote CI was run; Phase 19 user-owned paths were not staged.
+
+This closes this null-input branch only. Broad P18-V01 source/API/settings/
+input/error/control-flow reconciliation remains open.

@@ -1,0 +1,36 @@
+# Phase 3 execution log — continuation 2026-09-26T073000Z
+
+## Goal and scope
+
+- Continued Phase 3 Java 5.5.1 behavior parity review. Netty type/API imitation is not required; observable remoting logic remains the goal. Phase 4 remains blocked.
+- Re-read both English and Traditional Chinese Phase 3 plans; did not modify either plan.
+
+## Source finding and implementation
+
+- Compared `NettyRemotingClient.invokeOneway` and `NettyRemotingAbstract.invokeOnewayImpl`: Java calls outbound before-hooks before `invokeOnewayImpl` marks ONEWAY, then sets ONEWAY before attempting semaphore admission.
+- Rust marked the command before spawning its owned task, so the hook observed a command that Java hooks would see before the transport flag was set. Moved `mark_oneway()` to after all outbound hooks and before semaphore admission.
+- Extended `p3_outbound_rpc_hook_runs_before_oneway_admission_wait` with a hook recorder asserting both calls see `is_oneway() == false`; the scripted peer still verifies both transmitted frames have ONEWAY set.
+- Updated `docs/compatibility/PHASE_3_REMOTING_INVENTORY.md` and `docs/compatibility/JAVA_5_5_1_COMPATIBILITY.md` to document this correspondence.
+
+## Validation
+
+- Targeted: `cargo test -p rocketmq-classic-remoting --test transport p3_outbound_rpc_hook_runs_before_oneway_admission_wait --locked --offline` — passed.
+- `cargo fmt --all --check` — passed.
+- `cargo test --workspace --locked --offline` — passed (89 unit/integration tests; doc tests passed).
+- `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings` — passed.
+- `python3 scripts/check-workspace-metadata.py` — passed.
+- `python3 tests/differential/compare.py --self-test` — passed.
+- `git diff --check` — passed.
+
+## Commits and status
+
+- Implementation/test: `6d6ed1a fix(remoting): align oneway hook flag ordering`.
+- Compatibility docs: `3b1c574 docs(remoting): document oneway hook ordering`.
+- Phase 3 remains NOT ACCEPTED. No acceptance boxes were checked. P3-V04 remains deferred to Phase 19; Phase 4 has not started.
+- Remaining parity investigations include hook exception/equality behavior, Java error/cause taxonomy and timeout races, oneway post-return error visibility, reconnect/duplicate GO_AWAY and NameServer scan behavior, executor/event overload and lifecycle, and TLS property reload/encrypted private-key handling. Netty-only mechanics remain non-mappable and must not be represented as equivalent.
+- No Maven, live Broker, Docker, TLS/auth cluster, or cross-language validation was run.
+
+## Final verification
+
+- Re-read both Phase 3 plans and checked status remains unchanged; implementation/docs address only the source-proven oneway hook-visible flag ordering gap.
+- Remaining manual/live handoff is P3-V04 in Phase 19, not a Phase 3 pass condition.

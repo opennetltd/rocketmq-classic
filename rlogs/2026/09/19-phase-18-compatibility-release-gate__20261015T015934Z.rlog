@@ -1,0 +1,97 @@
+# Phase 18 MessageId public API parity — 20261015T015934Z
+
+- Audited the pinned Java 5.5.1 `MessageDecoder.createMessageId` overloads, `decodeMessageId`, and mutable `MessageId` constructor/getter/setter surface against the Common crate. Rust previously generated record IDs only inside the decoder and had no public decoder or `MessageId` type.
+- Added public `create_message_id`, `create_message_id_from_host_bytes`, `decode_message_id`, `MessageId`, and typed input errors. Record decoding now shares the public uppercase-hex encoder. Rust preserves Java's IPv4 length selection, signed offset, ignored trailing bytes, invalid-hex nibble conversion, and out-of-range port rejection.
+- Expanded the invoked Java 5.5.1 fixture and Rust regression for IPv4/IPv6, both create overload shapes, negative offsets, nullable/mutable fields, invalid hex, trailing bytes, short input, invalid port, unresolved address, and invalid host-byte length. Updated Phase 8 mapping and the current fixture digest: `a79a06ff99f4889c283e749939820e184f6c0f3ab9179d0a8e92af4b4414b53b`.
+- PASS: `cargo test -p rocketmq-classic-common --all-features --locked` (21 unit, 8 message decode, 1 topic validator, 11 doctests); strict Common Clippy; pinned offline Maven `verify` (37 scenarios, fixture drift and Java/Rust cross-decodes); `cargo fmt --all -- --check`; `git diff --check`; fixture SHA-256 verification.
+- This closes the MessageId API slice only. Broad P18-V01 source/API/input/error/flow and reverse-export reconciliation remains open. The complete P18-V02 matrix still needs a final-revision rerun after all fixes; current-revision GitHub Ubuntu evidence and Phase 19 Docker/Broker scenarios remain outstanding. No plan changed; no push, release, or tag action taken.
+
+## CRC property helper — 2026-10-15
+
+- Pinned Java `MessageDecoder.createCrc32(ByteBuffer, int)` and `createCrc32(ByteBuf, int)` append the `__CRC32#` property key, separator, ten least-significant-first decimal digits (zeroes for nonpositive inputs), and property terminator. Added public Rust `append_crc32_property` and an invoked Java fixture that compares both buffer overloads for zero, positive, maximum and negative signed inputs.
+- Updated the Phase 8 method map and current message fixture SHA-256: `70fa17767b0ec98b9e6b6885572e7dfc61ff43609dfb377e7cfca34c6e9348f5`.
+- PASS: Common all-feature tests (21 unit, 9 message decode, 1 topic validator, 11 doctests); strict Common Clippy; pinned offline Maven `verify` (37 scenarios, fixture drift and cross-decodes); formatting, diff and checksum checks.
+- This closes the CRC helper slice only; P18-V01 remains open, and current-revision full P18-V02 gates, Ubuntu evidence and Phase 19 local Broker/Docker scenarios remain outstanding.
+
+## Record property extraction — 2026-10-15
+
+- Pinned Java exposes `MessageDecoder.decodeProperties(ByteBuffer)` separately from full record decode. Added public `decode_record_properties`, which reads the record without materializing the body and returns `None` for the Java null result when no property entries exist.
+- Extended each of the ten Java-generated message fixtures with a direct call to `decodeProperties`; the Rust message decode regression compares the standalone result for every V1/V2, host and compression case. Fixture SHA-256: `b5f5f89b6e0df7c2e706fd121a91860ea3a4a8f0e923893c9d6c8170704b7744`.
+- PASS: Common all-feature tests (21 unit, 9 message decode, 1 topic validator, 11 doctests); strict Common Clippy; pinned offline Maven `verify` (37 scenarios, fixture drift and Java/Rust cross-decodes); format, diff and checksum checks.
+- This closes the record-property extraction slice only. P18-V01 still has additional public decoder/encoder methods and the wider bidirectional API audit open; final-revision P18-V02, GitHub Ubuntu evidence and Phase 19 Docker/Broker scenarios also remain outstanding.
+
+## Compact message and inner-batch API — 2026-10-15
+
+- Added the Common compact codec surface for Java `encodeMessage`, `decodeMessage`, plural encode/decode, `decodeMessage(MessageExt, List<MessageExt>)`, and `countInnerMsgNum`. Inner expansion copies the outer topic, queue, host, timestamp, system flag and commit-log offset and applies the outer wait-store property.
+- The invoked Java `messageCompactApi` fixture checks byte-identical single/batch encoding, decoded messages, expanded metadata, counts and malformed body/count branches. Fixture SHA-256: `f58a8b10bf498cf00e3914a9fbc2a83016fb6b3bcbb8db9933403d834c1c121a`.
+- PASS: Common all-feature tests (21 unit, 10 message decode, 1 topic validator, 11 doctests); strict Common Clippy; pinned offline Maven `verify` (37 scenarios, fixture drift and cross-decodes); format, diff and checksum checks.
+- This closes the compact API slice only. Full `MessageExt` stored-record encode/unique encode, remaining overloads and complete bidirectional P18-V01 audit remain open, as do final-revision P18-V02, Ubuntu evidence and Phase 19 local Broker/Docker validation.
+
+## MessageExt stored-record encoder — 2026-10-15
+
+- Added public Rust `encode_message_ext` and `encode_message_ext_uniquely` for Java `MessageDecoder.encode(MessageExt, needCompress)` and `encodeUniquely`, including IPv4/IPv6 host layouts, Java store-size padding/overflow behavior, and standard ZLIB/LZ4/ZSTD body compression.
+- Added invoked Java 5.5.1 fixture coverage and Rust byte-for-byte regressions for standard/unique records, IPv4/IPv6, padded and undersized configured store sizes, and decoded compressed bodies. Updated the Phase 8 method matrix and release checklist. Fixture SHA-256: `c7bf73f5baa095242502d97e06953e2ef2a2c4ea774ed69923aeef586fde940a`.
+- PASS: `cargo test -p rocketmq-classic-common --all-features --locked` (21 unit, 11 message decode, 1 topic validator, 11 doctests); strict Common Clippy; pinned offline Maven `verify` (37 scenarios, fixture drift and cross-decodes); `cargo fmt --all -- --check`; `git diff --check`; fixture SHA-256 verification.
+- This closes the two stored-record encoder methods only. Remaining `MessageDecoder` overloads and the broad P18-V01 audit, final-revision full P18-V02 gates, current-revision GitHub Ubuntu evidence, and Phase 19 local Docker/Broker scenarios remain open. No plan changed; no push, release, or tag action taken.
+
+## Client decoder overloads and public constants — 2026-10-15
+
+- Added Rust client single-record and batch decode entrypoints matching Java `clientDecode`, `decodes`, and `decode(..., isClient=true)`. They retain the physical ID as `offset_message_id` and prefer `UNIQ_KEY` for the client `message_id`, matching `MessageClientExt`. Also exported the pinned `MessageDecoder` UTF-8 name, magic values, record positions, and property separator constants.
+- The invoked fixture now checks every public decoder constant. Rust regressions compare per-record `msgId`/`offsetMsgId`, custom decode options, client batch decoding, and no-body mode. Updated the Phase 8 source map and release checklist. Fixture SHA-256: `756381ff5802566bf8236bae22c9e8ea1b1d008a27a728436ed6bb8e384a1746`.
+- PASS: Common all-feature tests (21 unit, 13 message decode, 1 topic validator, 11 doctests); strict all-target/all-feature Common Clippy; pinned offline Maven `verify` (37 scenarios, fixture drift and cross-decodes); formatting and diff checks.
+- This closes the audited decoder overload and constant slices only. Broad P18-V01 source/API/input/error/flow and reverse-export audit, full latest-revision P18-V02 gates, current-revision GitHub Ubuntu evidence, and Phase 19 local Docker/Broker scenarios remain open. No plan changed; no push, release, or tag action taken.
+
+## Nullable message property codec inputs — 2026-10-15
+
+- Added Rust adapters for Java `MessageDecoder.messageProperties2String` with a null map and null key/value entries, and for `string2messageProperties` with null input. Java omits null values, turns a null key into the literal `null`, and returns an empty map for a null string. The invoked fixture covers those inputs plus empty and malformed/duplicate records; Phase 8 mapping and release checklist are updated. Fixture SHA-256: `b4ae563511220dbf008a4ef0bc30d82f2c325005e36eb52b15a5ee87bff59d40`.
+- PASS: `cargo test -p rocketmq-classic-common --all-features --locked` (21 unit, 14 message decode, 1 topic validator, 11 doctests); strict all-target/all-feature Common Clippy; pinned offline Maven `verify` (37 scenarios, fixture drift and cross-decodes); formatting, diff and checksum checks.
+- This closes the nullable property codec slice only. Broad P18-V01 source/API/input/error/flow and reverse-export audit, full latest-revision P18-V02 gates, current-revision GitHub Ubuntu evidence, and Phase 19 local Docker/Broker scenarios remain open. No plan changed; no push, release, or tag action taken.
+
+## MessageExt broker-name accessor regression — 2026-10-15
+
+- Extended the invoked Java `messageExtHostApi` fixture and Rust Common regression to compare `MessageExt.getBrokerName`/`setBrokerName` for default null, assigned value, and cleared value. Updated the Phase 8 method matrix and current fixture digest: `bb5fd8ba6d671739bb352e7780f29661e759c53dce7fe3887e1726149660ad1e`.
+- PASS: `cargo test -p rocketmq-classic-common --all-features --locked` (21 unit, 14 message decode, 1 topic validator, 11 doctests); strict all-target/all-feature Common Clippy; pinned offline Maven `verify` (37 scenarios, fixture drift and cross-decodes); formatting and diff checks.
+- This closes that accessor evidence slice only. Broad P18-V01, final-revision full P18-V02 gates, current-revision GitHub Ubuntu evidence, and Phase 19 local Docker/Broker scenarios remain open. No plan changed; no push, release, or tag action taken.
+
+## MessageVersion enum API — 2026-10-15
+
+- Audited Java 5.5.1 `MessageVersion` enum metadata and topic-length methods against the Rust Common crate. Added public `MessageVersion`/`MessageVersionError` exports for enum names/order/ordinal/comparison, magic-code conversion, V1/V2 signed topic-length reads, absolute indexed reads, and Java-narrowed writes.
+- The invoked Java fixture pins enum values, cursor movement, read/write bytes, narrowing across signed 8/16-bit boundaries, and Java error classes for invalid names/magic and truncated reads. Rust regressions compare the direct API outputs and errors. The Phase 8 method matrix and release checklist are updated; fixture SHA-256: `a0a65db7c922eb9ac3825e235001dff30eaab8af41ac3e080ccd6e3540f138e0`.
+- PASS: `cargo test -p rocketmq-classic-common --all-features --locked` (21 unit, 15 message decode, 1 topic validator, 11 doctests); strict all-target/all-feature Common Clippy; offline Maven `verify` (37 scenarios, fixture drift and Java/Rust cross-decodes); formatting, diff, and fixture checksum checks.
+- This closes the `MessageVersion` API slice only. Broad P18-V01 source/API/input/error/flow and reverse-export reconciliation remains open; the complete final-revision workspace P18-V02 rerun, current-revision GitHub Ubuntu evidence, and Phase 19 local Docker/Broker scenarios remain outstanding. No plan changed; no push, release, or tag action taken.
+
+## MessageConst public constants — 2026-10-15
+
+- Audited the Common crate's public message constants against Java 5.5.1 at the pinned source commit, not the separate Java checkout's current revision. The Rust inventory has an exact name match for the 76 public `MessageConst` string fields and the two reply constants from `MixAll`.
+- Added fixture reflection for all 76 values, both `MixAll` values, and the sorted initial `MessageConst.STRING_HASH_SET`. `message_constants_match_java_551` checks every value and reserved name. Updated the Phase 8 mapping, release checklist and fixture checksum: `3d867fbd1ace33d2c95561ec12d7ac2f9f709fddc742c754459c7f75e08d563d`.
+- PASS: Common all-feature tests (21 unit, 16 message decode, 1 topic validator, 11 doctests); strict all-target/all-feature Common Clippy; offline Maven `verify` (37 scenarios, fixture drift and Java/Rust cross-decodes); formatting, diff, and fixture checksum checks.
+- This closes the message-constant mapping/value slice only. Broad P18-V01 source/API/input/error/flow and reverse-export reconciliation remains open, as do final-revision workspace P18-V02 gates, current-revision GitHub Ubuntu evidence, and Phase 19 local Docker/Broker scenarios. No plan changed; no push, release, or tag action taken.
+
+## MessageSysFlag public surface — 2026-10-15
+
+- Reverse-audited the Common flag helpers against pinned Java 5.5.1 `MessageSysFlag`. Java already exposes `check(flag, expectedFlag)` for arbitrary masks; the Rust-only public `has_compressed_flag` convenience alias was redundant.
+- Removed that public helper, routed Producer compression predicates through `check(flag, COMPRESSED_FLAG)`, and added a compile-fail rustdoc guard. Updated the Phase 8 mapping and release checklist.
+- PASS: Common all-feature tests (21 unit, 16 message decode, 1 topic validator, 12 doctests); Producer all-feature tests (140 unit, 10 admin, 27 producer, 3 request/reply, 17 scripted send, 7 transaction, 6 doctests); strict all-target/all-feature Clippy for Common and Producer; formatting and diff checks.
+- This closes the extra flag-helper export only. Broad P18-V01 reconciliation remains open, along with final-revision workspace P18-V02 gates, current-revision GitHub Ubuntu evidence, and Phase 19 local Docker/Broker scenarios. No plan changed; no push, release, or tag action taken.
+
+## PullSysFlag public surface — 2026-10-15
+
+- Reverse-audited the five `PullSysFlag` masks against pinned Java 5.5.1; Java declares these masks private. Made the Rust constants private, updated Consumer/Core call sites to use the mapped flag-building helpers, and added a compile-fail rustdoc guard.
+- Updated the Phase 8 mapping and release checklist.
+- PASS: `cargo test -p rocketmq-classic-common -p rocketmq-classic-core -p rocketmq-classic-consumer --all-features --locked`; strict all-target/all-feature Clippy for Common, Core and Consumer; `cargo fmt --all -- --check`; `git diff --check`.
+- This closes the audited mask-visibility slice only. Broad P18-V01 reconciliation, full final-revision P18-V02 gates, current-revision GitHub Ubuntu address-profile evidence, and Phase 19 Docker/Broker automation and scenarios remain open. No plan changed; no push, release, or tag action taken.
+
+## MessageExt inherited-message surface — 2026-10-15
+
+- Removed the unused Rust-only `MessageExt::set_message` public method. Java `MessageExt` inherits its `Message` state in place, and Rust already exposes inherited setters through `DerefMut`.
+- Added a compile-fail rustdoc guard and updated the Phase 8 method matrix and release checklist.
+- PASS: Common all-feature tests and doctests; strict all-target/all-feature Common Clippy; formatting and diff checks.
+- This closes that reverse-export method only. Broad P18-V01, full final-revision P18-V02, current-revision GitHub Ubuntu address-profile evidence, and Phase 19 Docker/Broker automation and scenarios remain open. No plan changed; no push, release, or tag action taken.
+
+## MessageAccessor.setProperties surface — 2026-10-15
+
+- Pinned Java `MessageAccessor.setProperties` is public and replaces the full property map, including restoring a null-map state. Added Rust `Message::set_properties(Option<MessageProperties>)` with ownership semantics.
+- Extended the invoked Java message fixture and Rust differential to cover non-empty replacement, removed old keys, empty-map presence, and null-map restoration. Updated the Phase 8 crosswalk and release checklist.
+- PASS: Java fixture regeneration; Common all-feature tests and doctests; formatting and diff checks. The full offline Maven fixture-verification pass remains pending for this slice.
+- The Java shallow body/property alias behavior in `MessageAccessor.cloneMessage` and null property keys remain open P18-V01 audit items. Full P18-V01/P18-V02, current-revision GitHub Ubuntu evidence, and Phase 19 local Docker/Broker automation remain open. No plan changed; no push, release, or tag action taken.
+- Follow-up verification: strict all-target/all-feature Common Clippy passes; pinned offline Maven `verify` passes all 37 scenarios, including message fixture drift and Java/Rust cross-decodes. Fixture SHA-256: `770e9ca99f5eeb330bd95fbacdefc1af28d2aec1944fee883339cb5491ce92ae`.

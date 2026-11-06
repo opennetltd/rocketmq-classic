@@ -65,9 +65,9 @@ Phase 5 PullResultExt 完成 status mapping 後才處理。FOUND 解碼 message�
 
 先寫對應失敗測試／Oracle fixture，再依序實作；以下 case 必須成為可執行檢查，而非人工勾選。以下檢查不依賴 Docker 或 live Broker，使用 Java fixture、可控時鐘及 scripted peer；共通命令與證據規則見執行索引。
 
-- [ ] **P8-V01** — single/multiple record、全部支援的 magic/host/compression 與 body-option 組合，Java decoded JSON 與 Rust 相等。
-- [ ] **P8-V02** — 在每個 byte 截斷 valid record；變造 size/magic/property 並測超量 decompression output：不得 panic、overread 或無界配置。
-- [ ] **P8-V03** — FOUND/empty-filter/no-new/no-match/illegal-offset 保留 Java next-offset 與 suggested-broker 語意。
+- [x] **P8-V01** — single/multiple record、全部支援的 magic/host/compression 與 body-option 組合，Java decoded JSON 與 Rust 相等。
+- [x] **P8-V02** — 在每個 byte 截斷 valid record；變造 size/magic/property 並測超量 decompression output：不得 panic、overread 或無界配置。
+- [x] **P8-V03** — FOUND/empty-filter/no-new/no-match/illegal-offset 保留 Java next-offset 與 suggested-broker 語意。
 
 ### 5.1 實作完成後的本機命令
 

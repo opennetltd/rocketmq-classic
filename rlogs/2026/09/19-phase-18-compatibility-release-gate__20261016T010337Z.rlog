@@ -1,0 +1,12 @@
+Session: 2026-10-16T01:03:37Z
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Branch: phase/19-phase-18-compatibility-release-gate
+Base code revision: 388888ed
+
+P18-V01 request/reply helper method inventory:
+- Extended the invoked Java 5.5.1 request/reply fixture to record declared public methods for `RequestCallback`, `RequestFutureHolder`, and `RequestResponseFuture`: 2, 4, and 18 signatures. Updated the checked-in fixture and added Rust assertions for the callback signatures and helper counts.
+- Documented the runtime-owned operational crosswalk and kept mutable helper state/live table access visible as unresolved P18-V01 review scope.
+- The first Maven fixture invocation used stale compiled Java classes; `mvn -f compat/java-reference/pom.xml -q compile exec:java -Dexec.args='request-reply-fixture <fixture-path>'` recompiled the source and regenerated the fixture. The full `mvn -f compat/java-reference/pom.xml verify` then passed, including the 37-scenario manifest and all invoked fixture drift checks.
+- `cargo test -p rocketmq-classic --test request_reply_public_api --locked` — passed (2 tests).
+- `cargo clippy -p rocketmq-classic --all-targets --all-features --locked -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.

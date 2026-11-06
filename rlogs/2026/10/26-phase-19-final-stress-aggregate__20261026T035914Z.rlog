@@ -1,0 +1,66 @@
+# Execution log: Phase 19 final bounded-stress aggregate
+
+- Session date: 2026-10-26 UTC
+- Starting code revision: `5764ec8488c3319768246bb9218616c339d433f6`
+- Stress implementation: `5e1c80b1716936a04f319832adc9d382adc2b500`
+- P7-V04 and compatibility evidence commit: `d7d6cde0`
+- CI JDK version guard correction: `5764ec84`
+- Pinned Java oracle: Apache RocketMQ 5.5.1 source
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; Java checkout remained read-only.
+- Scope: complete the clean-source bounded producer stress case, rerun the
+  current-tree aggregate, reconcile the evidence manifest, and prepare the
+  final candidate for GitHub Actions. No plan files were edited.
+
+## Aggregate result
+
+- `ROCKETMQ_CLASSIC_TEST_ENV=local-disposable bash
+  integration-tests/run-local.sh --all` passed at source revision
+  `5764ec8488c3319768246bb9218616c339d433f6`.
+- All 23 recorded gates passed, including formatting, diff hygiene, default and
+  all-feature workspace tests, check, strict Clippy, Java verification,
+  differential self-test and manifest validation, race/leak and fuzz smoke,
+  examples, benchmark build/run, metadata and package checks, UTC/Taipei ID
+  checks, Docker toolchain, live scenarios, and evidence reconciliation.
+- The aggregate executed all 37 Phase 19 scenario IDs. Reconciliation passed
+  all 37 manifest rows against PASS evidence. Aggregate evidence is
+  `docs/compatibility/evidence/phase-19/run-local/20261026T021806Z/`.
+- The aggregate manifest now points each scenario to its latest passing run.
+  `tests/differential/compare.py --validate-manifest`,
+  `tests/differential/run.sh --check-all`, shell syntax validation, and
+  `git diff --check` passed after reconciliation.
+
+## P7-V04 stress result and diagnostics
+
+- P7-V04 passed during the aggregate at clean source revision
+  `5764ec8488c3319768246bb9218616c339d433f6`; run evidence is
+  `docs/compatibility/evidence/phase-19/P7-V04/20261026T032917Z/`.
+- Java and Rust each sent 8,192 fixed-seed variable-size messages with no more
+  than 32 in flight and a 120-second deadline. Each sent 6,292,961 bytes with
+  checksum `f47e95bbe41fd746`. Java offsets were 0–8,191 and Rust offsets
+  8,192–16,383. Three more 20-send start/shutdown cycles per client each
+  returned pending requests, connections, and owned task groups to zero. The
+  run records clean source, exit status 0, and 112 seconds total duration.
+- The first aggregate attempt at
+  `docs/compatibility/evidence/phase-19/run-local/20261026T010231Z/` stopped
+  during the Rust P6-V04 probe's 15-second event wait after preceding gates and
+  scenarios had passed. Focused P6-V04 evidence at
+  `docs/compatibility/evidence/phase-19/P6-V04/20261026T021437Z/` passed; P6-V04
+  also passed in the final aggregate at
+  `docs/compatibility/evidence/phase-19/P6-V04/20261026T032432Z/`.
+- Exact-project Docker checks found no remaining Phase 19 containers, volumes,
+  or networks. Generated synthetic TLS private-key copies were removed from
+  archived run directories; key and private-key marker scans returned no
+  remaining evidence files.
+
+## CI and owner handoff
+
+- Earlier GitHub Actions run `40249722222` targeted commit `1e4152b9` and
+  failed its Docker matrix because the Java guard expected the exact string
+  `27` while CI reported `27.0.1.0.2`. Commit `5764ec84` now parses the major
+  version and accepts patched JDK 27 builds. A workflow for the final pushed
+  candidate remains pending.
+- MAN-05 remains N/A after the source-backed feature audit and complete local
+  scenario matrix. MAN-01 through MAN-04 remain owner-input blocked on network
+  paths, security material and policy, authorized HA topology, and
+  representative workload/SLO inputs. No owner or production environment was
+  accessed. No tag or package was created or published.

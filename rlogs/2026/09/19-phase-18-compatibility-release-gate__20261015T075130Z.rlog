@@ -1,0 +1,10 @@
+# Phase 18 cloneMessage alias oracle — 20261015T075130Z
+
+- Rechecked pinned RocketMQ Java 5.5.1 `MessageAccessor.cloneMessage`: the helper passes the same body array and property map to a distinct `Message`; mutations through either alias are visible through the other. `setBody` and `setProperties` replace only the receiver's field and detach it from the other message.
+- Extended `MessageDecodeFixtures.messagePublicApi` with object identity, bidirectional mutation, and field-detachment probes. Regenerated and verified all ten Java message fixtures. `fixtures/messages/records.json` SHA-256: `b9f6f527720c425b17af57367a524f65e1f16da20acfc369502d64fa37b821e7`.
+- Updated the Phase 8 method matrix and release checklist. The Rust direct `Message::clone_message` implementation still deep-owns body/property values, so these newly pinned direct alias outcomes remain open P18-V01 parity work. The Producer selector callback path remains covered for readable values because Rust passes `&Message`.
+- PASS: pinned Java message fixture regeneration and `verify-java-message-decode-fixtures` execution; JSON comparison confirms no existing fixture cases/fields changed and only the nine alias observations were added.
+- No plan changed; the external RocketMQ Java checkout remains untouched.
+
+- Reverified the pinned Java fixture with `mvn -q -f compat/java-reference/pom.xml exec:java@verify-java-message-decode-fixtures`; all 10 fixtures pass. Updated the current message fixture checksum index and the current hash reference in the Phase 6 API map. `git diff --check` passes.
+- Oracle fixture/docs commit prepared independently from the Rust implementation commit; no Phase 18 plan files changed.

@@ -1,0 +1,11 @@
+# Phase 18 execution session — 2026-10-13T11:05:14Z
+
+- Continued P18-V01's Pull implementation accessor audit. Compared Java 5.5.1 `DefaultMQPullConsumerImpl.updateTopicSubscribeInfo` and `isSubscribeTopicNeedUpdate` with the Rust `PullConsumerRegistration` callbacks.
+- Fixed the Rust callbacks to use the shared implementation subscription map (including automatic subscriptions), to report an update only when subscribed route info is absent, and to ignore route-info callbacks for topics absent from that map. This avoids repeatedly requesting owner updates for a topic whose route info is already cached.
+- Extended the invoked Java 5.5.1 accessor fixture and Rust unit coverage for unsubscribed topics, registered and automatically subscribed topics before route data, cached route data, and ignored updates for unsubscribed topics. Updated the Phase 9 matrix; direct `doRebalance`/`tryRebalance` entrypoint mapping remains open.
+- PASS: focused `pull_subscription_info_callbacks_follow_java_subscription_and_route_tables` test.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (171 unit tests, 43 integration tests, doc tests).
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and accessor fixture verification).
+- PASS: `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. The callbacks are now mapped; direct rebalance methods, direct hook invocations, raw offset entrypoint equivalence, direct running-info access, and mutable implementation-state accessors remain in the Phase 9 raw accessor audit. P18-V01 remains open.
+- Code, Java fixture, fixture JSON, Phase 9 matrix, and this execution log are included in one independent callback-mapping commit.

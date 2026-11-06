@@ -1,0 +1,6 @@
+# Phase 6 API compatibility session — 2026-10-10T18:55Z
+
+- Pinned Java 5.5.1 probes confirm `ConcurrentHashMap.replaceAll` throws `NullPointerException` when the remapping callback returns null. Updates completed earlier in traversal persist; the entry returning null remains unchanged. Java records `a`, then `b` for this fixture's observed traversal.
+- Code/fixture commit: `2cf01322` (`Match nullable replaceAll row failures`). Rust adds `replace_all_with_nullable_results` for factory, producer, and consumer tables, preserving prior writes and returning typed `InvalidRoute` at the null-result entry. Fixture SHA-256: `268b67ceae2e2cb5026a5a91f5af939efca78be5d9f58a89394707549f554d19`.
+- Validation passed: manager-table 15/15, registry-table 18/18, full locked workspace/all-target tests, strict workspace/all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture drift, and Java cross-decodes), comparator self-test/manifest22, formatting, and diff checks. One early targeted assertion incorrectly required Rust and Java to use the same map traversal order; it was corrected to verify the Java-allowed partial-write behavior relative to each observed visit order.
+- API map and requirement audit updated. Broader Phase 6 source/API/input/reverse-export reconciliation remains open; P6-V04 is a Phase 19 handoff.

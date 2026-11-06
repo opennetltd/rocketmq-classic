@@ -1,0 +1,38 @@
+[package]
+name = "rocketmq-classic-consumer"
+version.workspace = true
+description = "Consumer APIs for the RocketMQ Classic Rust client."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+libc.workspace = true
+md-5.workspace = true
+rand.workspace = true
+rocketmq-classic-common.workspace = true
+rocketmq-classic-core.workspace = true
+rocketmq-classic-protocol.workspace = true
+rocketmq-classic-producer.workspace = true
+rocketmq-classic-remoting.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+mach2.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc.workspace = true
+
+[dev-dependencies]
+base64.workspace = true
+bytes.workspace = true
+rocketmq-classic-remoting.workspace = true
+tokio = { workspace = true, features = ["test-util"] }

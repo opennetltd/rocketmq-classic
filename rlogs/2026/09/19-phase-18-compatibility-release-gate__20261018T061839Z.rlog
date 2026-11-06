@@ -1,0 +1,28 @@
+# Phase 18 `getConsumerRunningInfo` parity — 2026-10-18T06:18:39Z
+
+- Continued on `phase/19-phase-18-compatibility-release-gate-resume`; Phase 19
+  runner/readme edits remain uncommitted and were not staged with this work.
+- Verified the pinned Java 5.5.1 `MqClientAdminImpl` path at source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`: request code 307, async
+  `GetConsumerRunningInfoRequestHeader`, null-body success returns null, and
+  non-success completes with `MQClientException` carrying code and remark.
+- Added `MqClientAdmin::get_consumer_running_info` and typed response decoding
+  for Java Fastjson's object-valued `MessageQueue` keys. The response snapshot
+  includes properties, subscriptions, normal/POP queue tables, status, user
+  info and jstack. Added invoked Java success/null/error fixture coverage and
+  Core request/result/error/malformed-response tests. Code commit:
+  `f05833a7 feat(admin): add consumer running info RPC`.
+- Updated the Phase 17 admin matrix to show all 19 direct `MqClientAdmin` RPC
+  slices present, while keeping the broader P18-V01 DTO/API/settings/input/error/
+  flow/reverse-export audit open. Added the Phase 18 checklist record.
+- Verification passed: `cargo test -p rocketmq-classic-protocol --all-features
+  --locked` (141 unit tests, integration targets, 51 doctests); Core
+  `admin_rpc` (50 tests); strict all-target/all-feature Clippy for Protocol,
+  Remoting and Core; pinned Maven `verify` (37 scenarios, 66 typed-header
+  cross-decodes, 15 typed-body cross-decodes); `cargo fmt --all -- --check`;
+  and `git diff --check`. Fixture SHA-256:
+  `ae970b21d7822f9d213477bf47a227125b5d6242634a18c490001837b5828851`.
+- No Broker or Docker was used. Current-revision full-workspace P18-V02,
+  P18-V03 package/provenance review, P18-V04 Ubuntu/Windows evidence and Phase
+  19 local Docker/Broker scenarios remain open. The owner-only manual handoff
+  remains separate.

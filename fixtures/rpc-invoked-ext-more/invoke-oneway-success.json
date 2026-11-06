@@ -1,0 +1,1 @@
+{"case":"invoke-oneway-success","mode":"ONEWAY","outcome":"ok","provenance":{"client":"org.apache.rocketmq:rocketmq-client:5.5.1","entrypoint":"MQClientAPIExt.invokeOneway","serverBaselineContacted":false,"transport":"mock RemotingClient"},"request":{"bodyBase64":"AwIB","code":987,"ext":{},"version":515}}

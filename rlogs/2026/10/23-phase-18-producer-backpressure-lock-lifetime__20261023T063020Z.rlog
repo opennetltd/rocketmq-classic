@@ -1,0 +1,30 @@
+# Phase 18 compatibility release gate — 2026-10-23 06:30:20 UTC
+
+Base revision: `be58bf98` (`fix(producer): preserve backpressure resize lock lifetime`). Pinned Java source revision: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Compatibility change
+
+Pinned `DefaultMQProducerImpl.sendMessageAsync` holds the async-send count or size read lock across the timed semaphore acquisition. Runtime limit setters take the matching write lock. Rust's adjustable semaphore previously released its read lock after checking permit state, allowing a live resize to wake a pending acquisition sooner than Java would.
+
+`AdjustableSemaphore::acquire` now retains an internal `Send` read-lock lease through the complete pending wait. Cancellation removes the FIFO waiter before releasing the lease; the public `BackpressureReadGuard` remains thread-bound. Regression `runtime_resize_waits_for_a_pending_acquisition_like_java` verifies that a live resize waits for the pending acquisition to time out before applying.
+
+The Core ACL timeout-only scripted test now cancels and awaits its peer before client shutdown. Its short deadline can expire before the peer reads a complete frame during parallel all-feature execution, leaving the old peer waiting for socket idle timeout. The timeout assertion is unchanged.
+
+## Local verification
+
+- `cargo test --offline -p rocketmq-classic-producer --locked`: passed (155 library tests, 66 integration tests, 7 doctests).
+- `cargo test --offline --workspace --locked`: passed.
+- `cargo test --offline --workspace --all-features --locked --quiet`: passed. An earlier run stalled at the timeout-only Core ACL test because its scripted peer awaited a frame after timeout; after peer cancellation cleanup, the complete rerun passed.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed before evidence-only documentation edits; rerun after those edits.
+- `mvn -q -f compat/java-reference/pom.xml verify`: passed 37 scenarios; Java cross-decoded 106 typed headers and 19 typed bodies. Existing JDK Unsafe/final-field reflection warnings were printed.
+- `python3 tests/differential/compare.py --self-test` and `--validate-manifest`: passed; 37 scenarios validated.
+- `cargo run --offline -p rocketmq-classic-remoting --example fuzz_smoke --locked`: passed (163 frame seeds, 11 message seeds, 2,784 bounded mutations; 245 frame decodes and 192 message decodes).
+- `bash tests/stress/run-offline-smoke.sh`: passed 17 cases × 3 repetitions.
+- Windows GNU all-target/all-feature workspace cross-check passed for `x86_64-pc-windows-gnu` using `/opt/homebrew/bin/x86_64-w64-mingw32-gcc`.
+- `cargo build --offline -p rocketmq-classic --examples --release --locked` and `python3 scripts/check-workspace-metadata.py`: passed.
+- `cargo bench --offline -p rocketmq-classic --bench offline --locked`: completed; the machine-specific sample is recorded at the end of `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md` and does not isolate this lock change.
+
+## Remaining work
+
+This closes the pending-acquisition resize slice only. Broad P18-V01 Java source/API/settings/input/error/control-flow and Rust reverse-export reconciliation remains PARTIAL. Current-revision remote Ubuntu CI, native Windows runtime execution, and Phase 19 Broker/Docker validation remain open. Existing Phase 19 paths `integration-tests/README.md`, `tests/differential/run.sh`, `integration-tests/run-local.sh`, and `rlogs/2026/09/20-phase-19-docker-local-validation__20261017T224455Z.rlog` remain user-owned and unstaged.

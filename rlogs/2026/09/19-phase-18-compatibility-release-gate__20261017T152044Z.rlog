@@ -1,0 +1,69 @@
+# P18-V01 ProcessTimer clone identity and current-revision gate — 2026-10-17T15:20:44Z
+
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Java oracle: RocketMQ client 5.5.1 commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; inspected read-only.
+- Source review found Rust cloned `ProcessTimer` by value in command/hook
+  snapshots and in the asynchronous response-write metric path. Java stores a
+  Guava `Stopwatch` reference on `RemotingCommand`; processor and write
+  callbacks continue to read that same mutable object. Rust now stores timer
+  state behind `Arc<Mutex<_>>`, so cloned timer handles share start/stop/reset
+  mutations. Public `&mut` method receivers and structural identity behavior
+  remain intact.
+- Added `cloned_process_timer_shares_java_stopwatch_state` to verify visible
+  start/stop/reset behavior across clones. Code commit:
+  `56ca072f fix(remoting): share process timer state across clones`.
+- Documentation updates record the clone identity contract in
+  `docs/compatibility/PHASE_6_API_CONFIG_MAP.md` and the current gate in
+  `docs/release-checklist.md`.
+
+## Verification
+
+- Focused ProcessTimer clone regression: PASS.
+- `cargo test --locked -p rocketmq-classic-remoting --all-features`: PASS
+  (125 unit, 8 codec, 1 fuzz regression, 7 security, 107 transport, 18 doctests).
+- `cargo clippy --locked -p rocketmq-classic-remoting --all-targets
+  --all-features -- -D warnings`: PASS; formatting and `git diff --check`: PASS.
+- Current-code-revision `cargo test --workspace --locked -- --test-threads=1`
+  and `cargo test --workspace --all-features --locked -- --test-threads=1`:
+  PASS in Linux ARM64 `rust:1.85.0-bookworm` with `--init`.
+- `cargo check --workspace --all-targets --all-features --locked --quiet` and
+  `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`: PASS in the same container.
+- `mvn -q -f compat/java-reference/pom.xml verify`: PASS; 37 scenarios,
+  fixture-drift checks and Java/Rust cross-decodes. The host JDK printed
+  existing `Unsafe` and reflective-final-field warnings.
+- `python3 tests/differential/compare.py --self-test` and
+  `--validate-manifest`: PASS; 37 scenarios.
+- `bash tests/stress/run-offline-smoke.sh`: PASS; 16 deterministic race/leak
+  cases × 3 repetitions.
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`:
+  PASS; 105 frame seeds, 11 message seeds, 1,856 mutations, 146 frame decodes,
+  and 113 message decodes.
+- Release examples and offline benchmark: PASS. Linux AArch64 observations:
+  frame encode/decode 1,211.2 ns/iteration and 4,676 bytes/iteration;
+  Zstandard message decode 712.5 ns and 197,493 bytes; Producer send request
+  construction 794.2 ns and 3,665 bytes; 128-entry route lookup 13.3 ns and
+  zero bytes; pending completion 5,382.6 ns and 9,530 bytes. Measurements are
+  observations, not acceptance thresholds.
+- Locked Cargo metadata, workspace metadata/license/dependency check, seven
+  package-content listings, and four UTC plus four Asia/Taipei Unique ID tests:
+  PASS.
+- The first combined Docker remainder command used a login shell that reset
+  `PATH` and returned `cargo: not found` before running the gate. Re-running in
+  a non-login shell completed all listed checks successfully; no source or
+  manifest changes resulted from the failed wrapper.
+
+## Remaining work
+
+- Broad bidirectional P18-V01 Java source/API/settings/overload input/error/flow
+  reconciliation and Rust reverse-export audit remain open.
+- Current-revision GitHub Ubuntu/native Windows evidence for P18-V04 remains
+  open.
+- Phase 19 local Docker/Broker automation and the remaining 30 scenarios,
+  including multi-Broker/TLS/ACL profiles, remain automatic work.
+- Release version intent and registry dependency-resolution checks remain open.
+- Owner-only deployment/live Broker checks remain the separate final manual
+  handoff. No plan, Java oracle, remote branch, tag, publication, Broker
+  operation, or deployment was changed.

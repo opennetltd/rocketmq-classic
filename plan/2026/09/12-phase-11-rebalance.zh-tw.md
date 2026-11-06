@@ -70,18 +70,23 @@ broadcasting 分配全部 subscribed queue，使用 local offset。clustering �
 
 管理單一 periodic service，支援 immediate startup、subscription-change 與 NOTIFY_CONSUMER_IDS_CHANGED wakeup。採 source 確認的 timing，以及 bounded/coalesced signal。shutdown 開始後拒絕新工作。以 barrier 測 remove-versus-pull、remove-versus-listener、concurrent-trigger 與 rapid join/leave；完成真正 public Push example 與 facade export。
 
+### 4.7 P11-10 — 補齊 Pull consumer rebalance owner
+
+移植 Java Pull consumer 的 allocation strategy 與 `enableRebalance` 預設值、queue-listener 註冊、topic/subscription 註冊，以及執行中的 in-balance 查詢。接入 runtime 管理的序列化 rebalance service：broadcasting 指派所有已訂閱 queue；clustering 使用 Broker membership，membership 無法取得時保留目前 assignment。於 subscription 與 query 邊界一致處理 namespace。移除 queue 前先 persist 安全 offset；移除失敗時保留狀態以供 retry；assignment 改變後通知 listener，shutdown 時拒絕舊 callback。此 Pull facade 範圍列為 P11-U02，並記入 Phase 11 compatibility matrix。
+
 ## 5. 驗證
 
 先寫對應失敗測試／Oracle fixture，再依序實作；以下 case 必須成為可執行檢查，而非人工勾選。以下檢查不依賴 Docker 或 live Broker，使用 Java fixture、可控時鐘及 scripted peer；共通命令與證據規則見執行索引。
 
-- [ ] **P11-V01** — Java/Rust allocation 在 0/1/N queue、1/N client、10q/3c、missing client、Unicode order 與全部 Java strategy 相同。
-- [ ] **P11-V02** — initial-offset policy 符合 Java；query/persist failure 不得重設為零或移除 live replacement。
+- [x] **P11-V01** — Java/Rust allocation 在 0/1/N queue、1/N client、10q/3c、missing client、Unicode order 與全部 Java strategy 相同。
+- [x] **P11-V02** — initial-offset policy 符合 Java；query/persist failure 不得重設為零或移除 live replacement。
 
-- [ ] **P11-U01** — Java allocation fixture、scripted membership change 與 barrier test 驗證 join/leave convergence、startup、retry、安全 offset 及 shutdown ownership。
+- [x] **P11-U01** — Java allocation fixture、scripted membership change 與 barrier test 驗證 join/leave convergence、startup、retry、安全 offset 及 shutdown ownership。
+- [x] **P11-U02** — 本機測試涵蓋 Pull rebalance 預設值、public listener/registration/query API、namespace mapping、broadcasting/clustering assignment、offset-safe removal，以及 membership 無法取得時保留 assignment。
 
 ### 5.1 實作完成後的本機命令
 
-下列命令由本 phase 或前面的 phase 建立對應 entry point 後執行；此次文件拆分未執行或宣稱測試通過。
+實作期間已執行下列 focused command。目前 package/workspace/Maven gate 結果記錄於[Phase 11 相容性矩陣](../../../docs/compatibility/PHASE_11_OFFLINE_METHOD_MATRIX.md)及較新的[Phase 11 延續執行紀錄](../../../rlogs/2026/09/12-phase-11-rebalance__20261012T011432Z.rlog)。
 
 ```bash
 cargo test -p rocketmq-classic-consumer --test rebalance --locked

@@ -1,0 +1,67 @@
+# P18-V01 Pull header decode modes and current-revision gate — 2026-10-17T17:22:37Z
+
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Java oracle: RocketMQ client 5.5.1, inspected read-only.
+- Code commit: `1db3a1c4 fix(remoting): match Java pull header decode modes`.
+- Added an invoked Java fixture and Maven drift check for fast and reflective
+  `PullMessageRequestHeader` decoding with missing fields, valid fields, and
+  invalid `queueId`, `maxMsgBytes`, and `requestSource` values. The Rust direct
+  custom-header decoder now forwards the Java mode. Pull decoding preserves
+  nullable/inherited fields, fails malformed numbers in fast mode, and ignores
+  individual conversion failures in reflection mode. Pull request-code
+  selection reports missing `sysFlag` before issuing an RPC.
+
+## Verification
+
+- `cargo test --locked -p rocketmq-classic-protocol`: PASS (128 unit tests,
+  integration tests, inventory/validation checks, and 42 doctests).
+- `cargo test --locked -p rocketmq-classic-core -p rocketmq-classic-consumer`:
+  PASS (168 Core and 220 Consumer unit tests, applicable integration tests,
+  and both crates' doctests).
+- Focused Remoting Java differential
+  `pull_header_fast_and_reflective_decode_modes_match_invoked_java`: PASS.
+- Default and all-feature workspace tests pass on Rust 1.85.0 in Linux ARM64
+  `rust:1.85.0-bookworm` with `--init`; all-target/all-feature workspace check
+  and strict Clippy also pass. The explicit Clippy and check reruns returned
+  exit 0.
+- Host `cargo fmt --all -- --check` and `git diff --check`: PASS.
+- `mvn -q -f compat/java-reference/pom.xml verify`: PASS; 37 scenarios, fixture
+  drift checks, and Java/Rust cross-decodes. Existing JDK `Unsafe` and
+  reflective-final-field warnings were printed.
+- `python3 tests/differential/compare.py --self-test` and
+  `--validate-manifest`: PASS; 37 scenarios.
+- `bash tests/stress/run-offline-smoke.sh`: PASS; 16 deterministic race/leak
+  cases × 3 repetitions.
+- `cargo run --locked -p rocketmq-classic-remoting --example fuzz_smoke`: PASS;
+  105 frame seeds, 11 message seeds, 1,856 mutations, 146 frame decodes, and
+  113 message decodes.
+- Workspace examples build; `cargo bench --workspace --no-run --locked` passes.
+  `cargo bench -p rocketmq-classic --bench offline --locked` runs on macOS
+  ARM64 (Apple M5 Max, Rust 1.85.0): frame encode/decode 2,155.3 ns per
+  iteration; Zstandard message decode 1,325.7 ns; Producer send construction
+  1,282.6 ns; 128-entry route lookup 14.1 ns; pending completion 64,001.1 ns.
+  Allocation counts match the observations printed by the benchmark; these are
+  observations, not acceptance thresholds.
+- Locked Cargo metadata, `scripts/check-workspace-metadata.py`, and
+  `cargo package --workspace --list --locked --allow-dirty`: PASS; all seven
+  package listings include `LICENSE` and `NOTICE`.
+- Four Core Unique ID tests pass under both `TZ=UTC` and `TZ=Asia/Taipei`.
+
+## Remaining work
+
+- Broad bidirectional P18-V01 Java source/API/settings/overload input/error/flow
+  reconciliation and Rust reverse-export audit remain open. The new mode
+  adapter is implemented for Pull; other header reflection differences still
+  need audit and evidence.
+- Current-revision GitHub Ubuntu/native Windows evidence for P18-V04 remains
+  open.
+- Phase 19 still has 30 locally runnable Docker/Broker scenarios, environment
+  profiles (including multi-Broker, TLS, and ACL), and full-runner work
+  outstanding.
+- Release version intent and registry dependency-resolution checks remain
+  open.
+- Owner-only production connectivity, credentials/CA, approved HA/fault
+  injection, and capacity/soak checks remain separate final manual items.
+  No plan, Java oracle, remote branch, tag, publication, Broker operation, or
+  deployment was changed.

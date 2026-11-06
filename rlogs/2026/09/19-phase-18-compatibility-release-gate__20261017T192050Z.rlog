@@ -1,0 +1,39 @@
+# P18-V02 current-revision workspace test/check follow-up — 2026-10-17T19:20:50Z
+
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Code revision: `227876c1 fix(protocol): match Java send v2 header decoding`.
+- Verification ran against the code tree at `227876c1`; the following docs-only
+  commit does not change code.
+
+## Verification
+
+- Linux `rust:1.85.0-bookworm` `cargo test --workspace --locked
+  -- --test-threads=1`: PASS.
+- Linux `rust:1.85.0-bookworm` `cargo test --workspace --all-features
+  --locked -- --test-threads=1`: PASS.
+- Linux `rust:1.85.0-bookworm` `cargo check --workspace --all-targets
+  --all-features --locked`: PASS.
+- Linux `rust:1.85.0-bookworm` `cargo clippy --workspace --all-targets
+  --all-features --locked -- -D warnings`: PASS.
+- `cargo fmt --all -- --check` and `git diff --check`: PASS.
+- Maven `verify` passed 37 scenarios, fixture drift checks, and Java/Rust
+  cross-decodes on the same source tree before the code commit.
+
+## Still required for the final current-revision P18-V02 gate
+
+- Differential comparator self-test and 37-row manifest validation.
+- Race/leak and fuzz smoke.
+- Release example build and benchmark compile; offline benchmark observation.
+- Locked metadata, workspace metadata/license/dependency, and package-content
+  checks.
+- Four Core Unique ID tests under UTC and Asia/Taipei.
+
+The previous complete server-free gate is recorded on `01e02a5c` in
+`rlogs/2026/09/19-phase-18-compatibility-release-gate__20261017T184946Z.rlog`.
+The wide P18-V01 source/API/settings/input/error/flow and reverse-export audit,
+current-revision GitHub Ubuntu/native Windows evidence, 30 Phase 19
+Docker/Broker scenarios and required profiles, and pre-publication version and
+registry dependency checks remain open. Owner-only production checks remain
+separate manual items. No plan, Java oracle, remote branch, tag, publication,
+Broker operation, or deployment was changed.

@@ -1,0 +1,34 @@
+# Recorded: 2026-10-23 01:15:13 UTC
+# Code revision: e5075bfe
+
+## Oracle finding
+
+Pinned Java `ProcessQueue.fillProcessQueueInfo(null)` acquires its read lock,
+encounters and catches the null dereference, then releases the lock and returns
+normally. Rust previously required a mutable info reference and could not
+represent the null input. It now exposes `fill_process_queue_info_nullable`,
+which forwards a present info value and does nothing for `None`.
+
+The invoked Java facade fixture records the normal return, and the Rust facade
+comparison calls the nullable method. Fixture SHA-256:
+`57e2890ebeace93ecf00e2509e2bf7557c28f681ad19141f81430fecfe57ddf3`.
+
+## Commits
+
+- `e5075bfe fix(consumer): preserve null ProcessQueue info behavior`.
+- Compatibility/API audit records and this execution log are in the following
+docs-only commit.
+
+## Validation on code revision e5075bfe
+
+- Focused `process_queue_public_methods_match_pinned_java_behavior` facade test — PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml exec:java@verify-consumer-facade-api-fixture` — PASS.
+- Strict Consumer all-target/all-feature Clippy — PASS.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+
+## Remaining Phase 18 status
+
+Broad P18-V01 Java source/API/settings/input/error/control-flow and Rust
+reverse-export reconciliation remains PARTIAL. Thirty live handoff scenarios
+remain `PENDING_PHASE_19`; current-revision remote Ubuntu CI, native Windows
+runtime, and Phase 19 Broker/Docker evidence remain open.

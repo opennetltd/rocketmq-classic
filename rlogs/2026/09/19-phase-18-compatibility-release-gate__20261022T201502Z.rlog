@@ -1,0 +1,17 @@
+
+P18-V01 MessageDecoder signature crosswalk — 2026-10-22 20:15 UTC
+
+Compared all 26 public method signatures in the pinned Java fixture
+`messageDecoderPublicApi` against the Common crate's exported message functions.
+The API map now groups each Java overload with its Rust encoder, decoder,
+property, ID, CRC, or compact-message counterpart and links the invoked
+fixture coverage. This is a docs-only inventory update; no tests were run.
+
+One boundary remains explicit for future audit: Rust's
+`create_message_id_from_host_bytes(&[u8], ...)` returns the same ID for supported
+IPv4/IPv6 host bytes, but its immutable-slice API does not model Java's mutable
+scratch `ByteBuffer` position side effects. Determine whether that behavior is
+part of the compatibility contract before closing the related API row.
+Broad P18-V01 reconciliation, current-revision remote Ubuntu CI, native Windows
+runtime, and Phase 19 Broker/Docker evidence remain open. Protected Phase 19
+worktree paths were not staged. No external CI or push was run.

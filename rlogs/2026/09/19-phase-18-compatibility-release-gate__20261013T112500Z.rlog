@@ -1,0 +1,11 @@
+# Phase 18 execution session — 2026-10-13T11:25:00Z
+
+- Continued P18-V01's Pull raw implementation audit. Added direct Rust `execute_hook_before` and `execute_hook_after` entrypoints backed by the same panic-isolated hook registry used during ordinary pull processing. Made `ConsumeMessageContext::new` public so Rust callers can construct a mutable context for these direct calls.
+- Extended the invoked Java 5.5.1 accessor fixture to register a hook, call both methods directly, and record order plus shared-context mutation. The Rust differential test reads the recorded `directHookEvents` fixture values.
+- Updated the Phase 9 matrix to map hook registration, direct invocation, and context creation.
+- PASS: focused `pull_raw_hook_entrypoints_share_the_supplied_context` test.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (174 unit tests, 43 integration tests, doc tests); the fixture-backed focused hook test was rerun after its assertion was connected to the Java fixture.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and invoked accessor fixture verification).
+- PASS: `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. Remaining raw Pull audit items include `fetchConsumeOffset`/`updateConsumeOffsetToBroker` edge equivalence, `consumerRunningInfo`, and mutable implementation-state accessors. P18-V01 remains open.
+- Rust source, Java fixture, fixture JSON, Phase 9 matrix, and this log are included in the independent hook-entrypoint commit.

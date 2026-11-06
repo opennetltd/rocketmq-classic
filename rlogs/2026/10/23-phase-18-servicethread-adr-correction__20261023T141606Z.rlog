@@ -1,0 +1,13 @@
+# Phase 18 ServiceThread ADR correction
+
+- Recorded: 2026-10-23 14:16:06 UTC
+- Code revision: `0c372d0a`
+- Branch: `phase/18-phase-18-compatibility-closure`
+
+The ServiceThread ADR still described `makeStop()` as never waking its worker,
+which contradicted the pinned Java source and the implementation/API map. It
+now records the started-worker Rebalance wake, the PullMessageService blocking
+queue behavior, and the Rust names for both shutdown overloads.
+
+Documentation-only correction. `git diff --check` passed. No code, fixture,
+test, plan, Phase 19 path, or pinned Java checkout was changed.

@@ -1,0 +1,45 @@
+Phase 11 execution session started on branch `phase/12-phase-11-rebalance`; initial worktree was clean at Phase 10 commit `6345cd2f`.
+
+Permission check: current tool environment grants unrestricted filesystem access and has approval policy `never`; no permission grant is required. Read the complete Phase 11 English/Traditional Chinese plans, shared execution index, coding-general workflow, and Phase 10 compatibility matrix. Confirmed exact Java client commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Pinned Java source inventory: five public allocation strategies (`AllocateMessageQueueAveragely`, `AllocateMessageQueueAveragelyByCircle`, `AllocateMessageQueueByConfig`, `AllocateMessageQueueByMachineRoom`, `AllocateMessageQueueConsistentHash`). `RebalanceService` defaults are wait=20,000 ms and min=1,000 ms. The runtime already owns coalesced rebalance signals; Phase 11 must attach Push reconciliation and trigger it after successful startup/subscription changes.
+
+Next action: add Java-generated allocation fixtures and implement/test P11-01/P11-03 strategy parity before lifecycle reconciliation.
+
+P11-01/P11-02 implementation checkpoint: added the private-independent public strategy trait/error contract and `AllocateMessageQueueAveragely`; added Java 5.5.1 allocation fixture generator/verify hook and captured all five public Java strategies plus the custom consistent-hash constructor, including empty-input validation. Fixture SHA-256 is `4a4ad4b705c2afdee6daf92c3aa6972ac1455782c070ac7345885ed15a4169dc`.
+
+Commands/results:
+- `mvn -q -f compat/java-reference/pom.xml compile exec:java -Dexec.args='rebalance-fixtures .../fixtures/rebalance/allocation.json'` — PASS; invoked 5.5.1 strategy classes directly.
+- `mvn -q -f compat/java-reference/pom.xml compile exec:java -Dexec.args='rebalance-fixtures .../fixtures/rebalance/allocation.json --verify'` — PASS; deterministic fixture drift check.
+- `cargo fmt --check` — PASS.
+- `cargo test -p rocketmq-classic-consumer --test rebalance --locked` — PASS; average fixture differential and partition invariants.
+- `git diff --check` — PASS.
+
+A first focused test run exposed test setup that tried to isolate empty consumer IDs with an empty queue list; Java checks the queue list first. The test now uses a non-empty queue for that branch, and the subsequent focused run passed. The other four Rust allocation strategies and Push lifecycle cases remain unimplemented; P11-V01 is PARTIAL, P11-V02/U01 not implemented, P11-V03/V04 pending Phase 19.
+
+P11-03 implementation checkpoint: ported the remaining Java 5.5.1 strategies: circle average, explicit config list, machine-room partitioning and consistent hash. Consistent hash uses Java's MD5 UTF-8/first-four-byte ring key, virtual node names/indexing, sorted signed-long ring points, and accepts custom hash functions; negative virtual node counts return an error. Machine-room parsing preserves Java `String.split("@")` trailing-empty behavior.
+
+Expanded the Java fixture schema with actual strategy names and options. It now covers five public strategy classes plus the custom-hash overload over five input scenarios (30 strategy/scenario cases). The Rust integration test compares each consumer assignment and missing-current result, verifies invalid-input precedence, and checks disjoint complete ownership for partitioning strategies. Added machine-room delimiter edge tests and consistent-hash default/zero/negative vnode checks. Updated Cargo.lock for the existing workspace `md-5` dependency and compatibility matrix; P11-V01 is now UNIT_VERIFIED.
+
+Commands/results:
+- `cargo fmt --check` — PASS.
+- `cargo test -p rocketmq-classic-consumer --test rebalance --locked` — PASS (2 tests, all strategy fixtures and option edges).
+- `mvn -q -f compat/java-reference/pom.xml compile exec:java -Dexec.args='rebalance-fixtures .../fixtures/rebalance/allocation.json --verify'` — PASS; checked fixture SHA-256 `9a0cfabcf4234e955f19c5d5cebd438de25a0b5f45b5386d4c880549c91a0d8b`.
+- `git diff --check` — PASS.
+
+Next: wire strategy selection, snapshots, reconciliation, initial offsets and Push triggers; P11-V02/U01 remain open.
+
+P11 reconciliation follow-up: compared `PushConsumer::rebalance_once` with pinned Java `RebalanceImpl.rebalanceByTopic`. Local clustering now looks up membership before handling a missing route and emits Java's empty-set queue callback for non-retry topics while preserving the previous assignment. Available empty routes still reach the allocator. Broker assignment queries no longer depend on the local route table. `LiteSelective` now follows Java's default no-op branch pending Phase 13 POP handling. Added `missing_clustering_route_queries_membership_notifies_empty_and_keeps_assignment` and `lite_selective_rebalance_leaves_assignments_for_pop_handling`.
+
+P11 race-coverage follow-up: added `queue_removal_fences_a_pull_response_already_in_flight`, using barriers to hold a returned pull response until the queue generation has been dropped and safely removed. The response is rejected without changing offsets or queue contents.
+
+Validation on 2026-10-12:
+- `cargo fmt --check` and `git diff --check` — PASS.
+- `cargo test -p rocketmq-classic-consumer --lib --locked` — PASS (77 tests).
+- `cargo test -p rocketmq-classic-consumer --test rebalance --locked` — PASS (2 fixture/strategy tests).
+- `cargo build -p rocketmq-classic --examples --locked` — PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml exec:java@verify-java-rebalance-initial-offset-fixtures` — PASS; fixture SHA-256 `6db5b5ddc9ba68c85dd51ef769394ae8551f678412db5f1cae83b05f118435a4`.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — STOPPED at the separate `verify-runtime-config-fixtures` check because `fixtures/runtime/client-config.json` drifted. The Phase 11 initial-offset fixture passed in its named execution; no runtime-config fixture was regenerated.
+- An initial unqualified `exec:java` invocation reached `compat.Main` and printed its usage. Re-running the pom's named initial-offset fixture execution passed.
+
+Updated Phase 10/11 compatibility matrices and both Phase 11 plans with the passing local evidence. P11-V01, P11-V02 and P11-U01 are unit verified; P11-V03/V04 remain pending Phase 19. Orderly compatibility remains partial for Phase 12 locking.

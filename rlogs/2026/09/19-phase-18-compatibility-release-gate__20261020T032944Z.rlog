@@ -1,0 +1,108 @@
+# Phase 18 continuation — 2026-10-20T03:29:44Z
+
+- Resumed on `phase/18-phase-18-compatibility-closure` at `c5e9918a`.
+  The previous turn made progress by identifying offset-store blank-topic
+  divergence and adding an invoked Java oracle; its Maven command failed on
+  sandboxed ~/.m2 lock-file access. The permission interruption left no live
+  Maven process. After the environment changed, resumed normally.
+- Read the Phase 18 plan and coding/Rust/testing instructions. The broad
+  P18-V01 API/configuration/control-flow audit remains open. Preserved existing
+  Phase 19 worktree changes and existing channel-generation documentation.
+- Added direct Java LocalFileOffsetStore/RemoteBrokerOffsetStore observations
+  for all 65,536 UTF-16 code-unit topic filters. Both stores agree on the 25
+  blank code units. The oracle operates on memory only, with no Broker, load,
+  or persistence. Existing runtime-offset fixture verification runs this probe.
+- `mvn -o -q -f compat/java-reference/pom.xml compile exec:java
+  '-Dexec.args=runtime-offset-fixtures /Users/bruce.tsai/Projects/trio/rocketmq-classic/fixtures/runtime/offsets.json'`
+  passed; existing Netty Unsafe deprecation warnings remain.
+- Both new Rust store regressions failed on U+001C before the fix, proving
+  Rust trim() dropped Java-blank controls from whole-table status snapshots.
+  Rust also treats U+0085, U+00A0, U+2007, and U+202F as whitespace where Java
+  requires a literal topic lookup. Moved the Java whitespace decision into the
+  shared private OffsetTable snapshot path and removed both trim() calls.
+- The regressions compare every representable BMP scalar against the invoked
+  Java fixture, plus null/empty/mixed-whitespace, exact topic, untrimmed topic,
+  and detached snapshot behavior. Java-only surrogate code units are absent
+  from the blank set and cannot occur in a Rust String.
+- Both focused regressions pass after the fix. Full locked Consumer tests and
+  doctests passed. Strict workspace/all-target/all-feature Clippy first rejected
+  placement of the new remote test module before production items; moved that
+  module to the end and reran successfully, without lint suppression.
+  Workspace formatting and diff whitespace checks passed. Full offline Maven
+  verify is still running (session 61203); its runtime-offset verification,
+  including the exhaustive blank-filter probe, has passed.
+- Offset-filter fix committed as `8d497d02`. The Consumer run passed 281 tests
+  across 11 targets. Full offline Maven verify subsequently exited 0 (37
+  scenarios, runtime fixtures, 67 typed-header and 15 typed-body cross-decodes).
+
+## Direct runtime consumer-status API
+
+- Source review identified that `MQClientInstance.getConsumerStatus(topic,
+  group)` lacked a direct Rust runtime entrypoint; the inbound processor alone
+  did not satisfy the public API requirement. Added the runtime method and
+  Pull/Push owner adapters, preserving null-group failure, missing/other-owner
+  empty results and exact store-level topic filtering without namespaces.
+- Added 54 actual Java runtime calls (6 group states x 9 topic states), plus
+  Push raw-setter replacement and null-store transitions. Fixture SHA-256 is
+  `0ac2cfdb7f5194c206f75aff4156643f196bd3bdb4585dda8040662efcf95a2d`.
+  The public integration test starts both Rust facades, compares all cases,
+  verifies independent live stores, detached maps and unregister behavior.
+- The initial integration test compile correctly rejected private
+  `with_manager` constructors. Switched to the public constructors and their
+  existing shared default manager; no test seam was made public. The first
+  multi-file patch had an incorrect path and changed nothing; corrected it.
+- Push runtime and inbound status now read the raw implementation's current
+  store after a setter call, rather than retaining the registration snapshot.
+  Null current stores fail instead of reporting an empty successful snapshot.
+  The dedicated inbound processor regression passes. The public runtime
+  integration test also passes including replacement and null transitions.
+- Started current-source locked workspace tests (session 51603) and full
+  offline Maven verify (session 63920). The runtime direct-reset/direct-consume/
+  Running Info entrypoint rows remain substantive P18-V01 audit work; this is
+  not a Phase 18 completion claim.
+- Reviewed and finalized the pre-existing Phase 18 channel-generation docs
+  against `c5e9918a`: public handles/events have address/state/close/write and
+  identity, while connection generation is private bookkeeping. The remoting,
+  runtime, security and ADR crosswalks use the current regression names. These
+  documentation corrections are committed separately from consumer-status code.
+- Channel-generation documentation committed as `a48b5ad5`. Current-source
+  strict workspace/all-target/all-feature Clippy passed; fmt/diff checks,
+  comparator self-tests, all 37 manifest scenarios and workspace package
+  metadata/license/dependency-direction checks passed. Current-source offline
+  Maven verify (session 63920) exited 0, including the regenerated runtime
+  status/store-transition fixture and Java/Rust header/body cross-decodes.
+  Locked workspace tests (session 51603) remain live and are being observed;
+  the focused public status and inbound-store regressions have passed.
+
+## Verification at code revision 43cb8b4c
+
+- Consumer-status implementation, direct Java fixtures, unit/integration tests
+  and source crosswalk committed as `43cb8b4c`.
+- `cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked` both exited 0: each passed
+  1,660 tests across 87 result-bearing targets. This includes the new public
+  runtime-status and live Push-store regressions, existing field/API guards
+  and the previously committed private-generation remoting regressions.
+- Strict workspace/all-target/all-feature Clippy, workspace fmt check and
+  `git diff --check` passed. Offline Maven verify passed with the updated
+  status oracle, all 37 scenarios, golden fixtures, 67 typed-header and 15
+  typed-body cross-decodes. Existing Java 27 Netty Unsafe/final-field warnings
+  remain warnings; the Maven process exited 0.
+- Comparator self-tests, 37-scenario manifest validation and workspace
+  metadata/package-license/dependency-direction checks passed. Fixed-seed fuzz
+  passed with 121 frame seeds, 11 message seeds, 2,112 mutations, 170 frame and
+  109 message decodes. Deterministic race/leak smoke passed 16 cases x 3.
+- Release facade examples built successfully. The isolated Asia/Taipei unique-ID
+  Java-fixture regression passed (1 test). No benchmarked code path or package
+  metadata changed in this session; previous benchmark/package preparation
+  evidence is not a new benchmark or registry-availability claim.
+- All command sessions started here have completed. Branch inspection confirms
+  retained Phase 0–6 branches (`01-phase-00` through `07-phase-06`) and separate
+  Phase 7–18 branches; this session's changes remain on the Phase 18 branch.
+  Pre-existing Phase 19 files remain unstaged and untouched.
+- Completion audit remains open: direct runtime `resetOffset`,
+  `consumeMessageDirectly` and `consumerRunningInfo` are confirmed API rows
+  requiring further implementation/reconciliation; existing inbound/owner
+  handlers alone are insufficient evidence. Broader bidirectional P18-V01 and
+  current-revision native platform CI evidence remain incomplete. No Phase 18
+  acceptance or Phase 19 live compatibility claim is made; the goal stays active.

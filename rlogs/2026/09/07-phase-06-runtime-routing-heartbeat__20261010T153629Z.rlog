@@ -1,0 +1,9 @@
+# Phase 6 execution session — 2026-10-10T15:36Z
+
+- Continued lookup input reconciliation on `07-phase-06-runtime-routing-heartbeat`; the Java checkout `/Users/nanashi07/Projects/3rd/rocketmq` remains absent, so this slice uses the pinned 5.5.1 fixture artifact.
+- Pinned Java `MQClientInstance.findConsumerIdList(topic, "")` forwards the empty group to `MQClientAPIImpl`. The first proxy fixture looked at `RemotingCommand.getExtFields()` before header encoding and reported an absent field. The remoting bytecode shows the standard encoder calls `makeCustomHeaderToNet()` for this header; the corrected oracle commit `a33ac3fe` materializes that header before recording it. It observes `consumerGroup=""` on the command while the null-group fixture still has no field.
+- Java oracle commits `e26b1449` and `a33ac3fe` precede Rust loopback regression `a8e8b6a9`. `empty_consumer_group_matches_java_rpc_and_preserves_blank_header_field` verifies the materialized wire header and consumer-list response. The initial regression exposed the fixture's observation-point error; no Rust production change was needed.
+- `fixtures/runtime/lookup.json` SHA-256: `53ff77d17eac5dec1f2bdbc05a84ea691f0cd6452da8f5dd1ae9a356a10e130c`.
+- Validation passed: focused loopback regression and strict core Clippy; `cargo test --workspace --all-targets --locked` with local socket access; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; pinned offline Maven verify (22 scenarios, fixture drift and Java cross-decodes); comparator self-test and manifest validation (22 scenarios); formatting and `git diff --check`.
+- Updated the API map and requirement audit with the null-versus-empty header distinction and corrected observation path. Full Phase 6 source/API/input/platform reconciliation remains open; P6-V04 stays `PENDING_PHASE_19`.
+- Documentation/log commit: pending.

@@ -1,0 +1,70 @@
+# Phase 18 P18-V01 continuation — Fastjson helper public-surface closure
+
+Session started: 2026-10-14T09:27:16Z
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Branch: phase/19-phase-18-compatibility-release-gate
+Base revision: b01afbfb
+Pinned Java client source: efa1be59d6fc747ad220f036c86030f05f0419f9
+
+## Audit finding and change
+
+- The reverse scan found 24 public helper types/functions under
+  `rocketmq_classic_common::serde_fastjson`. Pinned Java 5.5.1 exposes public
+  JSON operations through `FastJsonSerializer` and `RemotingSerializable`, but
+  not equivalent public per-field coercion helpers; the helpers are DTO
+  implementation plumbing.
+- Made common's helper module private and retained only the `MessageQueue`
+  conversion subset there. Protocol now owns the route/body/heartbeat adapters
+  in a crate-private module. Rustdoc compile-fail examples guard both external
+  import paths. Existing DTO parser behavior and Java fixture outcomes remain
+  unchanged.
+- The first visibility pass left unused common-side helpers and produced
+  dead-code warnings. Reduced that module to its actual MessageQueue dependency
+  closure; the final strict Clippy run is warning-free.
+- Updated ADR-0014/0015, the Phase 6 audit, and release checklist. Plan files
+  remain unchanged.
+
+## Validation
+
+- PASS: `cargo test -p rocketmq-classic-common -p rocketmq-classic-protocol --locked`;
+  common 21 tests, protocol 114 tests, integration tests and compile-fail docs.
+- PASS: `cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked`, including doctests.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all -- --check`, `git diff --check`, and
+  `cargo doc -p rocketmq-classic-common -p rocketmq-classic-protocol --no-deps --locked`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify`; Java fixture drift,
+  37 differential scenarios and cross-decodes completed. Maven emitted existing
+  JDK/Netty Unsafe and reflective-final-field warnings, then exited 0.
+- PASS: differential comparator self-test; scenario manifest validation (37).
+- PASS: `bash tests/stress/run-offline-smoke.sh` (16 deterministic race/leak
+  cases × 3 repetitions).
+- PASS: `cargo run --locked -p rocketmq-classic-remoting --example fuzz_smoke`
+  (104 frame seeds, 10 message seeds, 1,824 bounded mutations).
+- PASS: facade release example build; offline benchmark compilation;
+  workspace/package metadata and package-content listing.
+
+## Commits
+
+- `b62e66c1 fix(compat): keep Fastjson adapters crate-private`
+- `c513a1d8 docs(compat): record Fastjson API visibility audit`
+
+## Remaining work
+
+- P18-V01's full Java source/API/input/control-flow reconciliation and
+  Java-to-Rust reverse-export audit remain open. This commit closes one public
+  helper-surface discrepancy only.
+- Current-revision GitHub Ubuntu CI evidence remains unavailable.
+- Windows IP Helper runtime, non-macOS BSD runtime, and real IPv6-only-host
+  evidence remain unverified; Linux Docker IPv6-only coverage is not a host
+  result.
+- Confirm the `0.1.0` release version set and registry dependency resolution
+  before any publication. All packages remain `publish = false`.
+- Phase 19 local Broker/Docker scenarios remain the automated integration gate;
+  no Broker or Docker was used here.
+
+## Java checkout
+
+- Read pinned source with `git show`; the Java checkout was not modified. Its
+  observed HEAD is `2238256de`; pre-existing untracked file
+  `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java` was left untouched.

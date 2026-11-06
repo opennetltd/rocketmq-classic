@@ -1,0 +1,51 @@
+# Phase 18 Remoting process timer and callback-list execution log
+
+- Session timestamp: 2026-10-17 09:14:05 UTC.
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Java oracle: `/Users/bruce.tsai/Projects/3rd/rocketmq`, pinned source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; checkout inspected read-only.
+- Scope: close the invoked `RemotingCommand` process-timer and callback-list
+  API slice. The Phase 18 plan was not modified.
+
+## Changes
+
+- Added a monotonic `ProcessTimer` value with start/stop/reset state and
+  elapsed-time access, plus a no-argument `CommandCallback` wrapper.
+- Added `RemotingCommand` process-timer and callback-list getters/setters.
+- The inbound frame decoder attaches a running timer before dispatching each
+  complete command. Timer and callback state remain off-wire.
+- Added an invoked Java 5.5.1 fixture for null/default values, set/get identity,
+  timer start/stop/reset and illegal-state branches, callback-list mutation,
+  invocation count, and clearing. Added Rust unit and transport regressions.
+- Java's `Stopwatch` and callback interface are represented by Rust-native
+  types and `Result` errors; Java exception classes are not recreated.
+- Fixture SHA-256:
+  `8a7ae4f5b258cff9ad87462c5568fe363d079605c487e5327dc672d69981b4c8`.
+
+## Commands and results
+
+- `cargo test -p rocketmq-classic-remoting --all-features --locked`: exit 0;
+  113 unit, 8 codec, 1 fuzz regression, 7 security, 107 transport and 15
+  doctests passed.
+- `cargo test -p rocketmq-classic-remoting --all-features --locked --test
+  transport p3_default_processor_handles_unknown_codes_but_exact_registration_wins`:
+  exit 0; inbound timer assertion passed.
+- `cargo check --workspace --all-features --locked`: exit 0.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings`: exit 0 after replacing a boolean equality assertion
+  with a direct assertion.
+- `cargo fmt --all -- --check` and `git diff --check`: exit 0.
+- `mvn -o -q -f compat/java-reference/pom.xml verify`: exit 0; 37 scenarios,
+  fixture-drift checks and Java/Rust header/body cross-decodes passed.
+
+## Commit and remaining gates
+
+- Code/test/fixture and documentation are prepared for separate commits.
+- This closes the process-timer and callback-list method slice only. The
+  `RemotingCommand` default language/opaque behavior, long-poll RPC metric
+  emission, multi-entry `toString()` map ordering, custom-header representation
+  differences, and broad bidirectional P18-V01 audit remain open.
+- The final full-workspace P18-V02 run, current-revision Ubuntu/Windows CI,
+  P18-V03 package/version review, P18-V04 handoff/CI evidence, and outstanding
+  Phase 19 local Broker scenarios remain open.

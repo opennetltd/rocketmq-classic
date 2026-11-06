@@ -1,0 +1,53 @@
+# Phase 18 born-host string getter override closure and P18-V02 server-free refresh — 2026-10-21T20:33:58Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `7473872c` (`feat(common): dispatch subtype host string getters`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `dec0f7c46539bec116f6430c7b02fdde406a289929fc093d5694dd4c9369bd54`.
+
+## Change
+
+- Added separate runtime-subtype hooks for Java's virtual
+  `MessageExt.getBornHostString()` and `getBornHostNameString()`.
+- The base path continues deriving both strings from the stored host address.
+- The invoked Java/Rust direct-consume fixture overrides both getters and
+  compares their custom return values.
+
+## Verification
+
+- PASS: focused direct-consume differential.
+- PASS: serial `cargo test --workspace --locked --quiet` and
+  `cargo test --workspace --all-features --locked --quiet`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: pinned `mvn -q -f compat/java-reference/pom.xml verify`: 37 scenarios,
+  9 Running Info, 27 direct-consume, 15 reset cases, 83 typed headers, 16
+  typed bodies and Java/Rust cross-decodes. Existing JDK Unsafe, Netty Unsafe
+  and reflective-final-field warnings were emitted.
+- PASS: differential comparator self-test and manifest validation (37
+  scenarios).
+- PASS: offline deterministic race/leak smoke, 16 cases × 3 repetitions.
+- PASS: release fuzz smoke, 137 frame seeds, 11 message seeds, 2,368 bounded
+  mutations, 201 frame decodes and 118 message decodes.
+- PASS: release workspace examples and `cargo bench --workspace --no-run
+  --locked`.
+- PASS: locked Cargo metadata (8 workspace members, 216 total packages,
+  208 registry packages), no-deps metadata (8 packages), workspace
+  metadata/license/dependency checks, and seven product package listings
+  containing `LICENSE` and `NOTICE`.
+- PASS: four Core Unique ID tests under both `TZ=UTC` and `TZ=Asia/Taipei`.
+- PASS: offline benchmark on Apple M5 Max, macOS aarch64, Rust 1.85.0:
+  frame encode/decode 2,477.7 ns/iteration; zstd decode 1,194.2 ns; producer
+  request construction 1,367.4 ns; 128-entry route lookup 15.4 ns; loopback
+  pending completion 72,055.8 ns. Allocation counts/bytes per iteration:
+  40/4,676; 17/197,493; 54/3,665; 0/0; 81/9,546. These are observations,
+  not thresholds.
+
+## Current status
+
+This refresh closes current-revision server-free P18-V02 gates on `7473872c`.
+Overrides of the host-byte getters and ByteBuffer overloads, broad P18-V01
+API/settings/input/error/control-flow/reverse-export reconciliation, and
+current-revision GitHub Ubuntu/native Windows P18-V04 runtime evidence remain
+open. No push, remote CI, Broker or Docker run was performed. Pre-existing
+Phase 19 paths were left untouched and unstaged.

@@ -76,10 +76,10 @@ Build table-driven RPC request/status/error tests with scripted peers and Java f
 
 Write the failing check/oracle fixture before its implementation. The cases below must become runnable checks, not manual checklist-only claims. Run these checks without Docker or a live Broker; use Java fixtures, controlled clocks and scripted peers. Shared commands and evidence rules are in the execution index.
 
-- [ ] **P5-V01** — Every method has scripted success, expected domain outcome, unknown error code and malformed-success-response tests.
-- [ ] **P5-V03** — One Broker method call emits one attempt; NameServer failover and oneway paths obey their documented deadline/pending rules.
+- [x] **P5-V01** — Every method has scripted success, expected domain outcome, unknown error code and malformed-success-response tests.
+- [x] **P5-V03** — One Broker method call emits one attempt; NameServer failover and oneway paths obey their documented deadline/pending rules.
 
-- [ ] **P5-U01** — Java-derived request/response fixtures cover each RPC success/error branch and exact invocation mode without a live server.
+- [x] **P5-U01** — Java-derived request/response fixtures cover each RPC success/error branch and exact invocation mode without a live server.
 
 ### 5.1 Local commands after implementation
 

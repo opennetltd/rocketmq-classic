@@ -1,0 +1,56 @@
+Phase 18 ACL IPv6 expansion locale parity and current local gate — 2026-10-22 17:41 UTC
+
+Code revision: `6155f4cc`. Branch: `phase/18-phase-18-compatibility-closure`.
+Environment: macOS AArch64, Apple M5 Max, 18 logical CPUs, Rust 1.85.0.
+Pinned Java reference: RocketMQ client 5.5.1, commit
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Compatibility slice:
+- Pinned Java public `AclUtils.expandIP` uppercases with default-locale
+  `String.toUpperCase()`. Rust now selects `LC_ALL`, `LC_CTYPE`, then `LANG`
+  and uses Turkish/Azeri `i`/`ı` mappings before IPv6 segment expansion.
+- The Java fixture temporarily sets `Locale` to `tr-TR`, records `i::1`,
+  `ı::1`, and a valid IPv6 case, then restores the original locale in
+  `finally`. The Rust subprocess regression compares every result under
+  `LC_ALL=tr_TR.UTF-8`.
+- ACL fixture SHA-256:
+  `eaaa69bf97320ab0eb4b957415effe0c6b06e9d55ab0c5ec642e46f8ec3a1e94`.
+
+PASS:
+- `cargo test -p rocketmq-classic-core auth::tests::acl_expand_ip_matches_turkish_java_default_locale --locked`
+- `cargo test -p rocketmq-classic-core auth::tests::public_acl_utility_surface_matches_pinned_java_fixture --locked`
+- `cargo test --workspace --locked`
+- `cargo test --workspace --all-features --locked`
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+- `cargo fmt --all -- --check`; `git diff --check`
+- Pinned Java `mvn -o -q -f compat/java-reference/pom.xml
+  -Dproducer.core.fixture.verify=true verify`: 37 scenarios, 36 route/VIP
+  cases, Java decoding of 106 typed headers and 19 typed bodies. Direct ACL
+  fixture verification also passes.
+- `python3 tests/differential/compare.py --self-test`
+- `python3 tests/differential/compare.py --validate-manifest`: 37 scenarios
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`:
+  163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes, and
+  112 message decodes
+- `bash tests/stress/run-offline-smoke.sh`: 16 deterministic race/leak cases
+  x 3 repetitions
+- `cargo build -p rocketmq-classic --examples --release --locked`
+- `cargo bench -p rocketmq-classic --bench offline --locked`
+- `cargo clippy -p rocketmq-classic --bench offline --all-features --locked
+  -- -D warnings`
+- Workspace metadata/dependency/license checks; locked Cargo metadata reports
+  8 workspace members and 216 packages. All seven product `cargo package
+  --list --locked` checks include `LICENSE` and `NOTICE`.
+- Four Core Unique ID tests under each of `TZ=UTC` and `TZ=Asia/Taipei`
+- Windows GNU Core all-target check and Consumer stack-capture test
+  `--no-run` cross-compilation
+
+The differential `tests/differential/run.sh --check-all` still has 30
+manifest scenarios without live runners; it is an open inventory gate. No
+Docker resources were started for that check.
+
+Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export
+reconciliation remains open. Current-revision remote Ubuntu CI and native
+Windows execution remain unverified. Phase 19 Broker/Docker validation remains
+open. No push or external CI was run; protected Phase 19 worktree files remain
+unstaged.

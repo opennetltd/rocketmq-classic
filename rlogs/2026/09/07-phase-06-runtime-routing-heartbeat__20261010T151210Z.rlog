@@ -1,0 +1,13 @@
+Execution session: 2026-10-10T15:12:10Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Initial state: clean worktree at `b06a18a2` after adding direct Java cases for null-topic runtime broker lookups. The requested external Java checkout `/Users/nanashi07/Projects/3rd/rocketmq` is absent in this environment. The offline pinned `rocketmq-client:5.5.1` fixture was used; it identifies source commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Selected slice: match null-topic behavior in `MQClientInstance.findConsumerIdList` and `queryAssignment`. Both actual Java calls reach `findBrokerAddrByTopic(null)` and throw `NullPointerException` before their Broker RPC paths. Oracle commit `b06a18a2` records both outcomes in `fixtures/runtime/lookup.json`; Rust commit `f8bfaf9b` adds nullable topic entry points on `ClientRuntime` and an invoked-fixture regression. Fixture SHA-256: `faa61d981bb7e8aa362bb5060716a6752813259a1dd7dd03ac074320f7d59e43`.
+
+Validation: focused `null_topic_consumer_and_assignment_lookups_match_invoked_java` passed. Full `cargo test --workspace --all-targets --locked` and strict `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` passed. Pinned offline Maven verify passed (22 scenarios, lookup fixture drift checks, and Rust-to-Java cross-decodes). Comparator self-test and manifest validation passed (22 scenarios); formatting and diff checks passed.
+
+Documentation update: `PHASE_6_API_CONFIG_MAP.md` maps both nullable topic entry points and their typed error. `PHASE_6_REQUIREMENT_AUDIT.md` records the actual Java outcomes, fixture digest, and source checkout availability. The topic input branches close; the broader Phase 6 method/input/platform reconciliation remains open, and P6-V04 remains `PENDING_PHASE_19`.
+
+Documentation/log commit: pending.

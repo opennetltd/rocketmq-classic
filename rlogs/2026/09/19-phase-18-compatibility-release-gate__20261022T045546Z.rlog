@@ -1,0 +1,442 @@
+Phase 18 compatibility closure session
+Started: 2026-10-22 04:55:46 UTC
+Branch: phase/18-phase-18-compatibility-closure
+Baseline revision: d030c74d2be4404db8ee2ac5323ab6bc44f5d8ff
+
+Initial state
+- Preserved the user's existing Phase 19 worktree files without staging or editing them:
+  integration-tests/README.md, tests/differential/run.sh,
+  integration-tests/run-local.sh, and
+  rlogs/2026/09/20-phase-19-docker-local-validation__20261017T224455Z.rlog.
+- The previously closed direct ACL RPC slice remains committed at the baseline.
+- Re-read the Phase 18 plan and current compatibility audit summaries.
+- P18-V01 is explicitly still open: the broad Java source/API/input/error/flow
+  reconciliation and reverse-export audit has not been closed. Existing scoped
+  notes explicitly leave this work open, so Phase 18 cannot yet be accepted.
+- Five named 5.5.1 regressions in the plan are request/reply, runtime
+  construction, blank address, header encoding, and batch validation. Their
+  current evidence needs a direct inventory check.
+
+Actions and evidence will be appended below; this log is append-only.
+
+P18-05 current-revision benchmark
+- `cargo bench -p rocketmq-classic --bench offline --locked` passed on
+  `d030c74d2be4404db8ee2ac5323ab6bc44f5d8ff`.
+- Environment: macOS AArch64, Apple M5 Max, 18 logical CPUs, Rust 1.85.0.
+- Timings (ns/op): frame encode/decode 2692.2; zstd message decode 1993.0;
+  producer request construction 2182.5; 128-entry route lookup 27.9; loopback
+  pending completion 81564.5. Allocation observations are respectively
+  40/4676, 17/197493, 54/3665, 0/0, and 81/9546 calls/bytes per operation.
+- Appended the measurement to
+  `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`; timings are
+  observations only, not acceptance thresholds.
+
+P18-02 typed-header regression found during full test refresh
+- `mvn -o -q -f compat/java-reference/pom.xml verify` passed at baseline
+  `d030c74d2be4404db8ee2ac5323ab6bc44f5d8ff`: 37 scenarios, Java decoded 106
+  Rust-generated frames and 19 Rust typed body fixtures.
+- Default workspace tests at that baseline exposed an unhandled header family
+  in `query_admin_header_reflection_modes_match_invoked_java_551` and malformed
+  optional integer behavior for GetAllSubscriptionGroup headers.
+- Added fast/reflection decode-and-reencode checks for GetAllSubscriptionGroup
+  request/response and QueryConsumeQueue request headers. Updated malformed
+  optional integer decoding to match the pinned Java fixture. Fixture SHA-256:
+  `ce98f356e351ec5028e8f01f2ba36612306a4559278006599e8c44ff125b9766`.
+- Focused regression now passes:
+  `cargo test -p rocketmq-classic-remoting --lib
+  query_admin_header_reflection_modes_match_invoked_java_551 --locked`.
+- Full default/all-feature workspace refresh is running again after this fix.
+
+Header validation-matrix follow-up
+- The next workspace run found one older Protocol validation matrix still
+  classified malformed `GetAllSubscriptionGroup` optional integers as errors.
+- Updated its expected behavior to match the pinned Java decode fixture for
+  empty, malformed and out-of-range values. The focused check passes:
+  `cargo test -p rocketmq-classic-protocol --test headers
+  header_validation_matrix --locked`.
+- Full workspace and all-feature refresh remain pending.
+
+P18-V02 current server-free workspace refresh
+- After the typed-header fix, the full command sequence passed:
+  `cargo fmt --all -- --check`; strict workspace/all-target/all-feature
+  Clippy; `cargo test --workspace --locked --quiet`;
+  `cargo test --workspace --all-features --locked --quiet`; Core unique-ID
+  fixture test under UTC and Asia/Taipei; remoting fixed-budget fuzz smoke;
+  offline race/leak smoke (16 cases x 3); release facade examples; and
+  workspace bench compilation.
+- Fuzz smoke result: 163 frame seeds, 11 message seeds, 2,784 bounded
+  mutations, 245 frame decodes, and 112 message decodes.
+- The manifest has 37 scenarios; differential comparator self-test and
+  manifest validation passed. Workspace metadata, license-file and dependency
+  direction checks passed.
+- `git diff --check` passed. This refresh is from the working tree based on
+  `d030c74d2be4404db8ee2ac5323ab6bc44f5d8ff`; Maven verify and benchmark will
+  be rerun after the fix is committed.
+
+P18-05 benchmark and P18-02 pinned Java verify at `80faab5a`
+- The post-commit `cargo bench -p rocketmq-classic --bench offline --locked`
+  passed at revision `80faab5a` on macOS AArch64, Apple M5 Max, 18 logical
+  CPUs, Rust 1.85.0. Timings in ns/op: frame encode/decode 3349.2; Zstd
+  message decode 2341.8; producer request construction 2533.5; 128-entry
+  route lookup 34.0; loopback pending completion 85556.8. Allocation counts
+  and bytes/op remain 40/4676, 17/197493, 54/3665, 0/0, and 81/9546.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` passed at the same
+  source revision using Maven's Java 27 runtime. It validated 37 differential
+  scenarios, 73 ClientConfig identity/default/clone checks, runtime routing,
+  discovery, heartbeat, address, hook, Broker lookup, client, consumer
+  operation and offset fixtures, all typed header groups, and Java decoding
+  106 Rust-generated header fixtures plus 19 typed body fixtures. Existing
+  JDK/Netty Unsafe and reflective-final-field warnings were emitted.
+- The standalone `java` command resolves to Zulu OpenJDK 21.0.12 while Maven
+  resolves to Homebrew OpenJDK 27. CI pins Java 27. `git status` confirmed
+  Maven did not modify fixture/source inputs; protected Phase 19 files remain
+  untouched and unstaged.
+
+P18-V04 Windows cross-compilation follow-up
+- `cargo test --target x86_64-pc-windows-gnu -p
+  rocketmq-classic-consumer --lib
+  stack::tests::jstack_includes_current_and_other_named_threads --no-run
+  --locked` passed and produced the Windows test executable used by the
+  native CI job.
+- `cargo check -p rocketmq-classic-core --all-targets --target
+  x86_64-pc-windows-gnu --locked` passed, including Windows-gated local
+  address enumeration and helper code. The actual Windows stack capture
+  assertion still requires a native Windows runner; this macOS host has no
+  Windows runtime.
+- Updated `docs/release-checklist.md` with the exact five regression test
+  names and this cross-compilation evidence. P18-V01 broad audit remains open.
+- Appended a correction to
+  `docs/compatibility/PHASE_6_REQUIREMENT_AUDIT.md`: current Windows GNU
+  cross-compilation supersedes the older missing-linker note, while native
+  Windows execution remains outstanding.
+
+P18-V01 Rustdoc export reverse-name pass — 2026-10-22
+- `cargo +nightly rustdoc -p rocketmq-classic-core --lib --locked -- -Z
+  unstable-options --output-format json` passed after hiding internal
+  cross-crate adapters from generated API docs. Common, Protocol, and Remoting
+  Rustdoc JSON generation also passed. Producer and Consumer JSON came from
+  the prior successful rustdoc pass; no code in those crates changed here.
+- Exact Rustdoc-name joins now account for Core (682 named public items),
+  Producer (357), and Consumer (445) with zero exact-name omissions. A source
+  scan of `crates/rocketmq-classic/src/lib.rs` accounted for all 125 direct
+  facade re-exports with zero omissions. Generated crate-root module markers
+  were excluded from the counts.
+- Added Java crosswalks for the previously omitted Rust Core API, Producer
+  hook/table/trace/request-future names, and Consumer ProcessQueue/POP/listener/
+  offset/trace names in `docs/compatibility/PHASE_6_API_CONFIG_MAP.md`.
+- Verified `getBrokerLiteInfo` and `triggerLiteDispatch` directly in pinned
+  Java source commit `efa1be59d6fc747ad220f036c86030f05f0419f9`; both are
+  present there with request codes 200074 and 200079. The separate Java
+  checkout's current HEAD differs, so source checks used the pinned commit.
+- Remaining exact-name join gaps: Common 127, Protocol 908, Remoting 65. Most
+  are message properties, generated protocol DTO/header methods, request/
+  response codes, route collection aliases, and remoting metrics/helpers;
+  broad P18-V01 behavior/control-flow reconciliation remains open.
+- `git diff --check` passed. No tests were added or run in this documentation
+  pass. Protected Phase 19 worktree changes remain untouched and unstaged.
+
+P18-V01 Common public export reconciliation follow-up — 2026-10-22
+- Added exact-name crosswalks for the Common `MessageConst`, `MessageSysFlag`,
+  `CompressionType`, `MessageDecoder`, `TopicValidator`, typed codec errors,
+  runtime message-subtype adapters, and `NameServerAddressUtils` exports.
+- Removed `SharedMessageProperties::shares_map_with`, a Rust-only pointer-
+  identity inspection helper used only by one integration assertion. The
+  consumer test now checks the same two-way property-map alias behavior by
+  mutating each side and observing the other.
+- Regenerated Common Rustdoc JSON successfully. Its exact-name join now covers
+  431 public names with zero omissions. `cargo fmt --all -- --check`,
+  `git diff --check`, and focused integration test
+  `direct_runtime_consumption_matches_java_status_callbacks_and_offset_isolation`
+  passed.
+- Current remaining exact-name join gaps are Protocol (908 of 1,498 names) and
+  Remoting (65 of 338 names). Most Protocol hits are Java DTO accessors and
+  fields; the reverse semantic audit remains open.
+
+P18-V01 Remoting/Protocol export continuation — 2026-10-22 06:04 UTC
+- Pinned Java 5.5.1 `NettyRemotingClient` source confirms the GO_AWAY cause
+  text for first and repeated responses. Removed Rust-only public
+  `GoAwayCause.connection_generation`, removed the generation suffix from both
+  display branches, and updated the regression to assert both Java message
+  shapes. Rust still places the peer address in Java's `channelId` slot because
+  the Rust Tokio connection has no Netty channel ID.
+- Regenerated Remoting Rustdoc JSON. The current scan contains 399 public item
+  records / 338 distinct names, including the synthetic crate-root marker;
+  the 337 actual API identifiers are crosswalked to Java RemotingCommand,
+  RemotingClient, RequestPipeline, ResponseFuture, NettyClientConfig, TLS,
+  metrics, channel, helper, and error APIs. The only raw name miss is the
+  generated crate-root marker.
+- Added Protocol semantic crosswalks. Reflected Java request/response header
+  inventories cover 61 types. The owner-based join checked 1,011 Rust public
+  associated functions; 1,004 match through snake_case-to-camelCase and the
+  remaining seven are individually mapped to inherited Java methods, the V2
+  factory, and `ClientID` capitalization.
+- Protocol raw exact-string scan currently has 1,499 distinct names including
+  the crate-root marker, with 969 names not literally present in the map.
+  These are DTO field/accessor, code-constant, and Rust spelling differences;
+  the source/default/input/error/control-flow audit remains open. This current
+  measurement supersedes the earlier raw count in this log.
+- `cargo fmt --all -- --check`, focused GO_AWAY regression
+  `cargo test -p rocketmq-classic-remoting error::tests::go_away_cause_retains_address_and_retry_state_with_java_message_shape --locked`, and `git diff --check` passed. Remoting Rustdoc generation passed.
+- Protected Phase 19 worktree changes were left untouched and unstaged. No
+  live Broker, Docker validation, or release action was performed. P18-V01 and
+  native Windows runtime evidence remain open.
+
+P18-V01 Remoting crate verification follow-up — 2026-10-22 06:05 UTC
+- Full `cargo test -p rocketmq-classic-remoting --locked` passed: 138 unit,
+  8 codec, 1 bounded-fuzz regression, 7 security, 107 transport, and 20
+  rustdoc tests.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings` passed. Formatting, focused GO_AWAY regression,
+  and diff checks also passed.
+
+P18-V01 Protocol DTO/identity crosswalk follow-up — 2026-10-22 06:10 UTC
+- Expanded the Protocol map for Java object-reference identity (`SharedValue::ptr_eq`
+  maps Java `==`), locked mutable handles, owned setter adapters, snapshot reads,
+  DataVersion/BitSet/namespace/collection/enum methods, and derived route and
+  LiteSubscription helpers. These entries clarify Rust ownership/name adapters;
+  they do not close source/default/error/control-flow parity.
+- Re-ran the exact-string Rustdoc name scan after the crosswalk edits: Protocol
+  has 1,499 distinct names (including the crate-root marker), 949 names not
+  literally present in the map; Remoting has 338 names and only the synthetic
+  root marker unmatched. Protocol's raw string count is not a missing-feature
+  count because Java camelCase, inherited APIs, collection fields, and Rust
+  ownership adapters require owner-level mapping.
+- P18-V01 remains open for full DTO/body source and control-flow reconciliation.
+  No tests were added or run for this documentation-only continuation.
+
+P18-V01 TopicConfig model API and verification — 2026-10-22 06:42 UTC
+- Closed the pinned Java 5.5.1 `TopicConfig` / `TopicMessageType` model-method
+  slice. Added Java reflection and operation cases to
+  `fixtures/producer/core.json`, Rust API coverage for mutable defaults,
+  nullable/shared attributes, copy/equality/hash/string behavior, encoding and
+  partial decoding, enum errors, Lite expiration, Unicode decimal parsing,
+  and message-property precedence. Updated the Protocol API crosswalk and
+  requirement audit; the broader DTO/control-flow P18-V01 audit remains open.
+- `cargo fmt --all -- --check`, strict Common/Protocol Clippy, and
+  `cargo test -p rocketmq-classic-protocol --locked` passed. The latter ran
+  156 unit tests, all Protocol integration suites including both new
+  `topic_config_public_api` tests, and 157 doctests. The earlier
+  `cargo test -p rocketmq-classic-core --test admin_rpc --locked` run passed
+  all 120 tests.
+- Java producer-core fixture generation and verification passed using Azul
+  JDK 21. A first full Maven verify under JDK 21 stopped at the strict runtime
+  address oracle, which is checked in from Homebrew JDK 27. For a complete
+  local run, generated that address oracle temporarily under JDK 21, ran
+  `mvn -q -f compat/java-reference/pom.xml verify`, and restored the original
+  `fixtures/runtime/address.json` byte-for-byte in a `finally` block. The full
+  Maven verify passed, including Java producer-core and runtime fixtures,
+  Rust-to-Java decode fixtures, and Java self-tests. Maven-generated changes
+  to the two `body-subscription-group-wrapper` remoting fixtures were reverted
+  as unrelated output. `git diff --check` passed after documentation updates.
+- Phase 19 protected worktree files remain untouched and unstaged. No live
+  Broker, Docker validation, or release action was performed. Broad P18-V01
+  and native Windows P18-V04 runtime evidence remain open.
+
+P18-V02/V03 server-free gate and benchmark run — 2026-10-22 06:55 UTC
+- Current workspace revision passed `cargo fmt --all -- --check`,
+  `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`, `cargo test --workspace --locked`, and
+  `cargo test --workspace --all-features --locked`. The Java 5.5.1-specific
+  `TZ=Asia/Taipei` unique-ID test passed.
+- Differential comparator self-test and `--validate-manifest` passed; the
+  manifest contains 37 validated Phase 19 handoff scenarios. Expanded the
+  comparator self-test to reject changed result status, attempt ordering,
+  retry count, duplicate business-key relationship, and queue-offset
+  relationship; the updated self-test passes.
+- Fuzz smoke passed with 163 frame seeds, 11 message seeds, 2,784 bounded
+  mutations, 245 frame decodes, and 112 message decodes. The offline race/leak
+  smoke passed 16 cases at three repetitions each. Workspace metadata,
+  license files, and dependency direction passed `scripts/check-workspace-
+  metadata.py`.
+- Facade examples compiled in release mode. The offline benchmark compiled
+  and ran on macOS ARM64, Apple M5 Max, 18 logical CPUs, `rustc 1.85.0`,
+  release profile. Fixed inputs/iterations and observations: remoting frame
+  encode/decode 20,000 x 427 B, 2,285 ns/op, 40 allocations and 4,676 B/op;
+  Zstd message decode 10,000 x 146 B, 1,662 ns/op, 17 allocations and
+  197,493 B/op; send request construction 20,000 x 512 B, 1,789 ns/op,
+  54 allocations and 3,665 B/op; route lookup (128 entries) 100,000 x 10 B,
+  19 ns/op, zero allocations; loopback pending completion 500 x 128 B,
+  61,802 ns/op, 81 allocations and 9,546 B/op. These are local measurements,
+  not performance thresholds.
+- The Phase 19 handoff manifest is locally complete and validated; actual
+  Windows stack-capture execution and current-revision remote GitHub CI evidence
+  still require their respective Windows/CI environments. Broad P18-V01 audit
+  remains open. Phase 19 protected worktree changes remain unstaged; no live
+  Broker, Docker, publication, or release action was performed.
+
+P18-V04 Windows current-tree compile refresh — 2026-10-22 06:59 UTC
+- On current code revision `8215f1d9`,
+  `cargo check -p rocketmq-classic-core --all-targets --target
+  x86_64-pc-windows-gnu --locked` passed, and the exact native stack test
+  cross-compiled with
+  `cargo test --target x86_64-pc-windows-gnu -p rocketmq-classic-consumer
+  --lib stack::tests::jstack_includes_current_and_other_named_threads
+  --no-run --locked`.
+- These are compile checks on macOS. The stack assertion still needs execution
+  on Windows; current-revision remote GitHub CI evidence remains pending.
+
+P18-V01 direct derived Message getter overrides and full local gates — 2026-10-22 07:16 UTC
+- Commit `2f65745b` adds direct subtype hooks for `getTags`, `getKeys`,
+  `isWaitStoreMsgOK`, `getBuyerId`, `getDelayTimeLevel`,
+  `getDelayTimeSec`, `getDelayTimeMs`, `getDeliverTimeMs`,
+  `getTopicSysFlag`, and `getGroupSysFlag`. The invoked Java oracle returns
+  values distinct from its `getProperty` override and records all ten calls;
+  `direct_subtype_overrides_win_over_property_derived_message_getters`
+  compares values, fallback properties, and call count. Fixture SHA-256:
+  `0d818f3b8a711661a382de19a07db7292c5976f20ddee9a6106b78b9e8860f82`.
+- Current-tree checks passed: format; strict workspace all-target/all-feature
+  Clippy; default and all-feature locked workspace tests; Common tests;
+  Consumer direct-consume tests; Java fixture verification; full pinned Maven
+  `verify`; differential self-test and 37-scenario manifest; 16 deterministic
+  race/leak cases x 3; fuzz smoke (163 frame seeds, 11 message seeds, 2,784
+  mutations, 245 frame decodes, 112 message decodes); workspace metadata,
+  package-license and dependency-direction checks; release examples and
+  offline benchmark compilation.
+- Full Maven verification used Azul JDK 21 after temporarily regenerating
+  `fixtures/runtime/address.json` for that runtime. The saved address fixture
+  and initially clean `body-subscription-group-wrapper.json`/`.bin` files were
+  restored byte-for-byte in `finally`. Windows core and consumer cross-target
+  checks passed; the exact stack test compiled for Windows. Native Windows
+  execution and current-revision remote GitHub CI remain pending. Broad
+  P18-V01 remains open. Phase 19 protected worktree files remain unstaged;
+  no Broker, Docker, publication, or release action was performed.
+
+P18-V01 nullable direct getter results — 2026-10-22 07:19 UTC
+- Commit `d4f1a4f1` adds invoked Java/Rust direct getter cases for explicit
+  null from `getTags`, `getKeys`, `getBuyerId`, `getTopicSysFlag`, and
+  `getGroupSysFlag`. The fixture returns conflicting non-null and malformed
+  `getProperty` values to verify direct null precedence and skipped sysflag
+  parsing. Fixture SHA-256:
+  `8640635c5eb044d1485c182be377a308f909885477d01916ba234fb34ef70b7b`.
+- Java fixture `--verify`, all six `runtime_direct_consume` tests, focused
+  Common/Consumer strict Clippy, format, and `git diff --check` pass. This
+  continuation changes fixture, tests and compatibility docs only; full
+  workspace and Maven gates for the production hooks passed at `2f65745b`.
+- Broad P18-V01, current-revision remote Ubuntu CI and native Windows stack
+  execution remain open. Phase 19 protected worktree files remain unstaged.
+
+P18-V01 subtype-hook docs and crosswalk refresh — 2026-10-22 07:20 UTC
+- `ca57278a` clarifies the public `MessageExt` getter documentation: direct
+  subtype hooks take precedence, then inherited getters use the Java
+  `getProperty` path. `51894f4f` names all ten `MessageExtSubtype` hooks
+  explicitly in the Java/Rust crosswalk and API map.
+- `cargo fmt --all -- --check` and `git diff --check` pass. These commits
+  document the implementation and fixture evidence already validated at
+  `2f65745b` / `d4f1a4f1`; they do not change runtime behavior.
+- Broad P18-V01, current-revision remote Ubuntu CI and native Windows stack
+  execution remain open.
+
+
+P18-V01 Producer live runtime setter flow — 2026-10-22 07:32 UTC
+- Pinned Java `DefaultMQProducerImpl.sendKernelImpl` reads the facade's current VIP flag for each send, while `initTopicRoute` consumes the startup topic list once. Added invoked `runtimeSetterFlows`: it changes producer group, VIP setting, and topics after startup initialization; a hook captures the live group and normal broker port before a timeout. No Broker is contacted.
+- Rust producer send routing now uses `Producer::send_message_with_vip_channel()` instead of the runtime ClientConfig snapshot. Topic and send tests compare post-setter effects with the Java fixture. Fixture SHA-256: `1c3ac406157b2ad70f5ffd438b893e1b8c39a62c83a7339a819e752cfa587acb`.
+- `cargo test -p rocketmq-classic-producer --locked` passes (147 unit tests and all integration/doctest targets); strict Producer Clippy, `cargo fmt --all -- --check`, `git diff --check`, and pinned `mvn -f compat/java-reference/pom.xml verify` pass.
+- This closes the named Producer group/VIP/topics runtime flow slice only. Broad P18-V01 Java API/settings/input/error/control-flow/reverse-export reconciliation and native Windows execution remain open. Protected Phase 19 worktree files remain unstaged.
+
+
+P18-V01 Producer topic-list alias semantics — 2026-10-22 07:44 UTC
+- Java's producer constructor/setter retains the supplied `List<String>` reference and getter returns it. `runtimeSetterFlows` now mutates the caller list after setting it, checks getter alias behavior, and confirms the started route set remains the initial snapshot. No Broker is contacted.
+- Added public `ProducerTopicList` shared handle and re-exported it from Producer and facade crates. `Producer` and `ProducerConfig` retain/list getters preserve aliases; `ProducerConfig::clone` makes a detached list snapshot. Rust tests cover caller mutation, config clone independence and startup route retention. Fixture SHA-256: `ae8e09607bfaac817640a03dc596675757a511c26e03e7d9f0ca7e8a51201cd8`.
+- `cargo test -p rocketmq-classic-producer -p rocketmq-classic --locked` passes (Producer 150 unit tests and all integration/doctest targets; facade tests all pass); strict Producer/facade Clippy, formatting, `git diff --check`, and pinned Maven `verify` pass.
+- This closes the named topic-list alias slice only. The 2026-10-14 audit statement that producer sends used the startup VIP snapshot is superseded: Java send flow reads the live facade flag; runtime `ClientConfig` remains a separate startup clone. Broad P18-V01 reconciliation and native Windows execution remain open. Protected Phase 19 files remain unstaged.
+
+
+P18-V01 Producer factory lifecycle overloads — 2026-10-22 07:54 UTC
+- Commit `aa634c47` adds `Producer::start_with_factory(bool)` and
+  `shutdown_with_factory(bool)`; the no-argument methods delegate with `true`.
+  The Java lifecycle fixture records that `shutdown(false)` leaves a RUNNING
+  client factory untouched. Its setup explicitly places the factory in RUNNING
+  state before the call. Fixture SHA-256:
+  `ec75f9a8fb8eec074f63ea1f26dabb87547bce1960376b0d7c72f85614713a98`.
+- `factory_lifecycle_overloads_leave_runtime_control_to_the_caller` exercises
+  the Rust false branches and outer runtime start/shutdown. Producer/facade
+  tests pass (151 Producer unit tests plus all integration and doctest targets);
+  strict Clippy, formatting, `git diff --check`, and pinned Maven `verify`
+  pass (37 scenarios and Java/Rust cross-decodes).
+- This closes the Producer start/shutdown factory-control slice only. Broad
+  P18-V01 reconciliation, current-revision remote Ubuntu CI, and native Windows
+  execution remain open. Protected Phase 19 worktree files remain unstaged.
+
+
+P18-V01 Producer startup heartbeat flow — 2026-10-22 08:16 UTC
+- Commit `5f634435` mirrors pinned `DefaultMQProducerImpl.start(boolean)`'s
+  unconditional post-start `sendHeartbeatToAllBrokerWithLock()` call. Rust
+  sets Producer state to RUNNING, sends a heartbeat over cached runtime routes,
+  then starts the request-future scanner. The local scripted test preloads a
+  Broker route, starts an already-running shared runtime with
+  `start_with_factory(false)`, and verifies the heartbeat includes the new
+  Producer group.
+- `cargo test -p rocketmq-classic-producer -p rocketmq-classic --locked`
+  passes (152 Producer unit tests plus all integration/doctest and facade
+  targets); strict Producer/facade Clippy, formatting, and `git diff --check`
+  pass. The focused heartbeat test uses live local TCP because paused Tokio
+  time can expire connection setup before the peer is polled.
+- Java's synchronous `initTopicRoute()` for configured startup topics remains
+  open for the broader P18-V01 startup-flow audit. Current-revision remote
+  Ubuntu CI and native Windows execution remain open. Protected Phase 19
+  worktree files remain unstaged.
+
+P18-V01 Producer configured-topic startup routing — 2026-10-22 08:14 UTC
+- Commit `af04d054` mirrors pinned `DefaultMQProducerImpl.initTopicRoute()`: startup snapshots configured topics, namespace-wraps them, reuses an already-usable cached publish route, tries the topic route otherwise, then falls back through `TBW102` when no publish route is available. The fallback uses the Producer's current `default_topic_queue_nums`; remoting transport failures still fail startup while route/client errors retain Java's warning-and-continue behavior.
+- The scripted NameServer test verifies the configured-topic request, missing-topic `TBW102` fallback, and queue-count cap (8 default queues reduced to 2). `producer_start_skips_route_lookup_for_cached_publish_info` verifies that a valid cached publish-info hit sends no NameServer request. The existing post-start topic-list snapshot test now serves route replies for its configured startup topic.
+- `cargo test -p rocketmq-classic-producer -p rocketmq-classic --locked` passes (153 Producer unit tests, 11 admin, 27 Producer API, 18 scripted-send, 7 transaction, facade, and doctest targets); strict all-target/all-feature Clippy, formatting, and `git diff --check` pass. The change is Rust-only and does not alter the pinned Java fixture, so Maven `verify` was not rerun for this slice; the last recorded Java verify passed 37 scenarios at the lifecycle slice.
+- This closes the configured-topic startup route-initialization slice only. Broad P18-V01 API/settings/flow reconciliation, P18-V02/V03/V04, current-revision remote Ubuntu CI, and native Windows execution remain open. Protected Phase 19 worktree files remain unstaged.
+
+P18-V02 full current-revision server-free refresh — 2026-10-22 08:24 UTC
+- The Producer startup-route implementation is at code commit `af04d054` (documentation HEAD at run start: `5400211e`). `cargo fmt --all -- --check`, strict workspace all-target/all-feature Clippy, `cargo test --workspace --locked`, and `cargo test --workspace --all-features --locked` pass. The Phase 18 Unique ID fixture passes under `TZ=UTC` and `TZ=Asia/Taipei`; differential self-test and all 37 handoff scenarios validate.
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` passes with 163 frame seeds, 11 message seeds, 2,784 bounded mutations, 245 frame decodes and 112 message decodes. `bash tests/stress/run-offline-smoke.sh` passes all 16 deterministic race/leak cases × 3 repetitions.
+- `mvn -f compat/java-reference/pom.xml verify` passes under Java 27 (Maven 3.10.0), including the Java self-test, runtime route/config/heartbeat probes, 37 scenarios, 106 typed-header decodes and 19 typed-body decodes. Maven leaves no tracked fixture changes. `scripts/check-workspace-metadata.py` passes.
+- Release facade examples build; `cargo bench -p rocketmq-classic --bench offline --locked --no-run` and the fixed-input offline benchmark run pass. The observation is recorded at `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md` for macOS AArch64, Apple M5 Max, 18 CPUs and Rust 1.85.0; no threshold is asserted. `docs/release-checklist.md` records the full gate.
+- Local P18-V02 server-free validation is current through the Producer startup-route change. Broad P18-V01 reconciliation, current-revision remote Ubuntu CI and native Windows stack-capture execution remain open; no Broker, Docker, publication or release action was performed. Protected Phase 19 worktree files remain unstaged.
+
+P18-V04 Windows cross-target refresh — 2026-10-22 08:26 UTC
+- At code revision `af04d054`, `cargo check -p rocketmq-classic-core --all-targets --target x86_64-pc-windows-gnu --locked` passed. The exact consumer stack test also cross-compiled with `cargo test --target x86_64-pc-windows-gnu -p rocketmq-classic-consumer --lib stack::tests::jstack_includes_current_and_other_named_threads --no-run --locked`.
+- This confirms current-tree Windows compilation only. Native Windows stack assertion execution and current-revision remote GitHub Ubuntu CI remain outstanding. Broad P18-V01 reconciliation remains open; no Broker, Docker, publication, or release action was performed. Protected Phase 19 worktree files remain unstaged.
+
+P18-V02 startup-route regression gate refresh — 2026-10-22 08:34 UTC
+- Code commit `561bae6d` adds a scripted NameServer transport-close test proving configured-topic Producer startup propagates the transport error and unregisters the producer lease. Producer package tests pass (154 unit, 11 admin, 27 facade, 3 request/reply, 18 scripted-send, 7 transaction, 7 doctests); strict Producer Clippy passes.
+- Current-revision formatting, strict workspace all-target/all-feature Clippy, default and all-feature locked workspace tests pass. Differential comparator self-test and all 37 handoff scenarios pass. Fuzz smoke passes with 163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes and 112 message decodes. Deterministic race/leak smoke passes all 16 cases × 3.
+- Pinned `mvn -f compat/java-reference/pom.xml verify` succeeds on Java 27 with 37 scenarios, Java decoding of 106 Rust-generated typed headers and 19 typed bodies, and no tracked fixture changes. Workspace metadata/license/dependency checks, release examples, offline benchmark compile and run also pass. The benchmark observation is appended to `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+- Broad P18-V01 reconciliation, current-revision GitHub Ubuntu CI and native Windows stack-capture execution remain open. No Broker, Docker, publication, or release action was performed; protected Phase 19 worktree files remain unstaged.
+
+P18-V01 startup-route error parity correction — 2026-10-22 08:44 UTC
+- The earlier `561bae6d` test asserted that a startup route transport failure released the producer registration. A direct pinned Java 5.5.1 loopback probe disproved that expectation: Java throws `IllegalStateException` caused by `RemotingSendRequestException`, remains `START_FAILED`, and retains the Producer group in its factory table. Fixture `fixtures/producer/lifecycle.json` now records the invoked result.
+- Code commit `4cabbffb` removes the Rust unregister-on-route-error path. The Rust regression compares the Java fixture, observes the retained group and `START_FAILED`, then explicitly cleans its scripted runtime after the assertion. Producer package tests and strict Producer Clippy pass; the exact test cross-compiles for Windows. The earlier test/gate result remains a historical checkpoint and is superseded for this branch.
+- Full workspace/Maven gate refresh after `4cabbffb`, broad P18-V01 source/API/settings/input/error/control-flow and reverse-export reconciliation, current-revision GitHub Ubuntu CI, and native Windows stack-capture execution remain open. No Broker, Docker, publication, or release action was performed; protected Phase 19 worktree files remain unstaged.
+
+P18-V01 factory-start failure parity and gate refresh — 2026-10-22 09:03 UTC
+- A direct pinned Java 5.5.1 probe confirms that an invalid periodic interval throws `IllegalArgumentException`; Producer and factory remain `START_FAILED`, and the Producer group remains registered. `fixtures/producer/lifecycle.json` records `startupFactoryStartFailure`. Commit `cd212ffb` keeps the failed runtime in Rust's manager table, preserves its external Producer/Consumer registrations while stopping owned transport/workers, and lets terminal-state unregister remove retained rows.
+- Producer and core startup-failure regressions pass. The default and all-feature locked workspace suites pass; strict workspace all-target/all-feature Clippy passes. `cargo fmt --all -- --check`, `git diff --check`, differential self-test, all 37 manifest scenarios and workspace metadata checks pass.
+- Pinned Java `mvn -f compat/java-reference/pom.xml verify` passes, including the lifecycle fixture, 37 scenarios and Java decoding of 106 typed headers and 19 typed bodies. Fixed-seed fuzz smoke passes (163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes, 112 message decodes); offline deterministic race/leak smoke passes 16 cases × 3.
+- Release facade examples and offline benchmark compile/run pass; the benchmark sample is recorded in `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`. Current core Windows all-target check and the exact Producer lifecycle regression compile for `x86_64-pc-windows-gnu`; native Windows execution is not available in this gate.
+- Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export reconciliation, current-revision GitHub Ubuntu CI, and native Windows stack-capture execution remain open. No Broker, Docker, publication or release action was performed; protected Phase 19 worktree files remain unstaged.
+
+P18-V01 push/pull Consumer factory-start parity and gate refresh — 2026-10-22 09:13 UTC
+- Pinned Java 5.5.1 push and pull Consumer probes confirm invalid factory scheduling throws `IllegalArgumentException`, retains the group, and leaves both Consumer and factory in `START_FAILED`. The invoked fixture is `fixtures/consumer/lifecycle.json` (SHA-256 `3dab90cd55b37eb428f7a09cda4c6302345b13df867ef1a4e58f34a7ee856b3b`). Commit `b46612bf` keeps those Rust registrations after failed runtime startup while stopping owned push workers; regressions compare service state, failed runtime, registration, and manager identity.
+- Default and all-feature locked workspace tests, strict all-target/all-feature Clippy, formatting, diff checks, differential self-test, all 37 manifest scenarios, workspace metadata checks, pinned Maven `verify`, fixed-seed fuzz smoke, deterministic race/leak smoke, release examples, benchmark compile/run, and Windows cross-target checks pass. The benchmark sample is recorded in `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+- Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export reconciliation, LitePull lifecycle, current-revision remote GitHub Ubuntu CI, and native Windows stack-capture execution remain open. No Broker, Docker, publication, or release action was performed; protected Phase 19 worktree files remain unstaged.
+
+P18-V01 LitePull factory-start parity and gate refresh — 2026-10-22 09:24 UTC
+- A direct pinned Java 5.5.1 probe confirms an invalid factory schedule throws `IllegalArgumentException`, leaves LitePull Consumer and factory in `START_FAILED`, retains the group, and makes retry throw `MQClientException`. The current combined fixture `fixtures/consumer/lifecycle.json` has SHA-256 `26fadf1fbcc7b51c64e17c10626347dbc59a520279948f030ff6359b15195387`. Code commit `ad7a0523` adds a failed-start LitePull state and preserves Java's failed-state retry/shutdown behavior; the regression checks the failed runtime, registration identity, and explicit cleanup.
+- Default and all-feature locked workspace tests, strict workspace all-target/all-feature Clippy, formatting, diff checks, differential self-test, all 37 manifest scenarios, workspace metadata checks, pinned Java `mvn verify`, fuzz smoke (163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes and 112 message decodes), deterministic race/leak smoke (16 cases × 3), release facade examples, offline benchmark compile/run, and Windows cross-target checks pass. Benchmark observation is recorded in `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+- Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export reconciliation, current-revision remote GitHub Ubuntu CI, and native Windows stack-capture execution remain open. No Broker, Docker, publication, or release action was performed; protected Phase 19 worktree files remain unstaged.
+
+P18-V01 LitePull listener-route failure parity and gate refresh — 2026-10-22 09:32 UTC
+- A direct pinned Java 5.5.1 probe confirms a pre-registered LitePull listener route transport failure throws `MQClientException`, leaves Consumer and factory in `SHUTDOWN_ALREADY`, removes the group, and makes retry throw `MQClientException`. Fixture `litePullListenerRouteFailure` in `fixtures/consumer/lifecycle.json` has SHA-256 `841aac58bbeaf12908aebc79796f75885f00e5356ad61dd06aed4cbf4e0ef9f3`. Code commit `aab73bb3` propagates the Rust route failure and shuts down the pull engine; its regression verifies terminal runtime state, removed registration, and rejected retry.
+- Default and all-feature workspace tests, strict workspace all-target/all-feature Clippy, formatting, diff checks, differential self-test, all 37 manifest scenarios, workspace metadata checks, pinned Java `mvn verify`, fixed-seed fuzz smoke, deterministic race/leak smoke (16 cases × 3), release facade examples, benchmark compile/run, and Windows cross-target checks pass. The current benchmark observation is recorded in `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+- Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export reconciliation, current-revision remote GitHub Ubuntu CI, and native Windows stack-capture execution remain open. No Broker, Docker, publication, or release action was performed; protected Phase 19 worktree files remain unstaged.
+
+P18-V01 LitePull post-start listener-route parity and gate refresh — 2026-10-22 09:42 UTC
+- Pinned Java 5.5.1 confirms a route failure during listener registration throws `MQClientException`, keeps the listener registered, leaves Consumer and factory `RUNNING`, and throws again on retry. Fixture `litePullListenerRegistrationRouteFailure` in `fixtures/consumer/lifecycle.json` has SHA-256 `a17cfdae54f83a7a1ee3d1612f9bb5509175936da1adf289f799a48e232c4db5`. Code commit `148308fb` makes Rust registration async to fetch the route, retains the listener on errors, scans unsubscribed listener topics, and calls the listener after later route recovery. This changes the Rust call site to require `.await`.
+- `cargo test -p rocketmq-classic-consumer --locked` passes (251 unit tests, package integration tests and 13 doctests); strict Consumer all-target/all-feature Clippy, format/diff checks, the focused callback-recovery regression and its Windows GNU cross compile pass. Pinned Java `mvn -f compat/java-reference/pom.xml verify` passes with 37 scenarios and 106 typed headers plus 19 typed bodies.
+- Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export reconciliation, current-revision GitHub Ubuntu CI, and native Windows stack-capture execution remain open. No Broker, Docker, publication, or release action was performed; protected Phase 19 worktree files remain unstaged.
+
+P18-V01 LitePull broker subscription-check parity and gate refresh — 2026-10-22 11:21 UTC
+- The invoked Java 5.5.1 LitePull probe refreshes a SQL92 subscription route, sends `CHECK_CLIENT_CONFIG`, and receives Broker response code 44. Java throws `MQClientException`, shuts Consumer and factory down, and removes the group. Fixture `litePullBrokerSubscriptionCheckFailure` in `fixtures/consumer/lifecycle.json` has SHA-256 `0087e05cd0480a8a6cc6b993324f0ee8ad2ce6d8f58ab8ef8175813908023369`. Code commit `c04e57ee` refreshes LitePull subscription routes, invokes the runtime broker check, and cleans up the engine and any workers when validation fails.
+- `cargo test -p rocketmq-classic-consumer --locked` passes (251 unit tests, 21 Lite/POP integration tests, all other package integration tests and 13 doctests). Strict Consumer all-target/all-feature Clippy, format/diff checks, the SQL92 regression's Windows GNU cross compile, and pinned Maven `verify` pass; Java verifies 37 scenarios and decodes 106 typed headers plus 19 typed bodies.
+- Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export reconciliation, current-revision GitHub Ubuntu CI, and native Windows stack-capture execution remain open. No Broker, Docker, publication, or release action was performed; protected Phase 19 worktree files remain unstaged.
+
+P18-V01 LitePull listener-registration lifecycle serialization — 2026-10-22 11:30 UTC
+- Pinned Java 5.5.1 reflection confirms LitePull `start()`, `shutdown()`, and `registerTopicMessageQueueChangeListener()` synchronize on one implementation monitor. Fixture `litePullMethodSynchronization` is recorded in `fixtures/consumer/lifecycle.json` (SHA-256 `4972ae18d32a4aa337b1c4aad81153b81fa86a28112e505bceab8a660693ac5b`). Code commit `33b8084d` makes Rust listener registration take the lifecycle gate before the reconciliation gate; a scripted Broker pauses startup in `CHECK_CLIENT_CONFIG` and verifies registration resumes only after startup completes.
+- `cargo test -p rocketmq-classic-consumer --locked` passes (251 unit tests, 22 Lite/POP integration tests, all other package integration tests and 13 doctests). Strict Consumer all-target/all-feature Clippy, formatting, diff checks, and pinned Maven `verify` pass; Java verifies 37 scenarios and decodes 106 typed headers plus 19 typed bodies.
+- Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export reconciliation, current-revision GitHub Ubuntu CI, and native Windows stack-capture execution remain open. No Broker, Docker, publication or release action was performed; protected Phase 19 worktree files remain unstaged.

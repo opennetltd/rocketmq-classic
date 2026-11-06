@@ -1,0 +1,7 @@
+# Phase 6 HashMap putAll traversal parity — 2026-10-10T19:05:58Z
+
+- Added pinned Java 5.5.1 `HashMap` source fixtures for factory, producer, and consumer tables. The fixture captures traversal across buckets 2, 5, and 9 and the partial `ConcurrentHashMap.putAll` result when the second row has a null value.
+- Added Rust regressions that feed the captured visit order to the existing ordered nullable-row adapter and compare post-failure key sets. The first full suite found only an unordered snapshot comparison in the tests; sorting snapshot keys fixed it.
+- Validation passed: `cargo test --workspace --all-targets --locked`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; pinned offline Maven `verify` (22 scenarios, fixture drift checks, and Java cross-decodes); differential comparator self-test and manifest validation (22 scenarios); `cargo fmt --all -- --check`; `git diff --check`.
+- `client-config.json` SHA-256: `437c23de4e128513fcf91e211d231d4fc5691eec1b6314458c8b5916c4a64126`.
+- Arbitrary source-map traversal variants and broader Phase 6 source/API/input/reverse-export reconciliation remain open; P6-V04 remains a Phase 19 handoff.

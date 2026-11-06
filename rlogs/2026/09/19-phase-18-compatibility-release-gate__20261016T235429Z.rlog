@@ -1,0 +1,49 @@
+# Phase 18 compatibility gate — writer-feature continuation
+
+Date: 2026-10-16 UTC
+Branch: `phase/19-phase-18-compatibility-release-gate`
+Code commit: `9026c715 feat(protocol): map single quote JSON writer features`
+Plan: `plan/2026/09/19-phase-18-compatibility-release-gate.md`
+
+## Scope and constraints
+
+Continue P18-V01 feature parity against the pinned Fastjson2 2.0.63 oracle for
+the Java RocketMQ 5.5.1 client. Do not change the plan, Java repository, or
+oracle source; do not start Docker or contact a Broker; do not push, tag,
+publish, or deploy. Keep code and documentation in separate commits.
+
+## Changes and evidence
+
+- Implemented `UseSingleQuotes` and `UnquoteFieldName` in the inherited JSON
+  writer adapters for the mapped body DTOs, route DTOs, and `HeartbeatData`.
+- The recursive writer now distinguishes map entries from bean fields,
+  preserves the pinned Fastjson boolean/enum field-name behavior, unquotes
+  Java identifier names, and applies single-quote string escaping. The
+  `EscapeNoneAscii` pass now recognizes single-quoted strings.
+- Extended fixture-backed differential assertions across the mapped DTOs.
+  Added a string-escaping regression based on Fastjson 2.0.63 output for
+  apostrophe, double quote, backslash, newline, and non-ASCII text, including
+  the `UseSingleQuotes + EscapeNoneAscii` combination.
+- `TZ=UTC cargo test -p rocketmq-classic-protocol --all-features --locked`:
+  passed (123 unit tests, all Protocol integration targets, and 42 doctests).
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features
+  --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- `TZ=UTC mvn -o -q -f compat/java-reference/pom.xml verify`: passed all 37
+  scenarios, fixture-drift checks, and Java/Rust cross-decodes.
+- Writer-feature behavior mappings increased from 11/48 to 13/48; 35 remain
+  unmapped. The broad P18-V01 bidirectional audit remains open.
+
+## Remaining Phase 18 work
+
+- Finish the broad Java/Rust API, settings, overload/input/error/control-flow,
+  inherited API, and reverse-export audit; map the remaining writer features.
+- Rerun the complete workspace P18-V02 gate after the remaining Phase 18 code
+  changes.
+- Obtain current-revision GitHub Ubuntu address-profile and native Windows
+  stack-runtime evidence for P18-V04.
+- Phase 19 Docker/Broker automation and scenario execution remain automatic
+  requirements, not manual-validation exceptions.
+- The owner-validation handoff and pre-publication version/registry checks
+  remain outstanding. No Docker/Broker run, push, tag, publication, or deploy
+  occurred.

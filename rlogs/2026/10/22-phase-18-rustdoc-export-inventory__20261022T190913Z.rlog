@@ -1,0 +1,27 @@
+# Phase 18 current Rustdoc export inventory
+
+- Recorded: 2026-10-22 19:09:13 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source revision: `782a9cdba540796da034c1975355c52ba681979a`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Verification
+
+- `RUSTDOCFLAGS='-Z unstable-options --output-format json' cargo +nightly doc --workspace --all-features --locked --no-deps` — passed.
+- Counted distinct public item names with `crate_id == 0` and public visibility in each product library's Rustdoc JSON, excluding the generated crate-root item:
+  - Common: 439
+  - Consumer: 445
+  - Core: 682
+  - Producer: 362
+  - Protocol: 1,524
+  - Remoting: 337
+- `git diff --check` — passed for the documentation update.
+
+The Producer count corrects the earlier reverse-scan record of 357 names.
+This is an exported-name inventory only; it does not prove the mapped Java
+behavior for every API. The broad P18-V01 source/API/settings/input/error/
+control-flow and reverse-export audit remains open. Current-revision remote
+Ubuntu CI, native Windows execution, and Phase 19 Broker/Docker validation
+remain open. The Rustdoc build emitted the existing workspace `publish` and
+Consumer `AtomicU64::fetch_update` warnings. No tests, push, or external CI
+were run.

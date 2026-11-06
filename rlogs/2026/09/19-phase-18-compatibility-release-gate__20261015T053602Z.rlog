@@ -1,0 +1,91 @@
+# Phase 18 compatibility release gate — execution log
+
+- P18-V01 follow-up: the pinned Java `MessageAccessor.cloneMessage` helper was
+  covered through Producer selector preparation but had no direct Rust public
+  API mapping. Added `Message::clone_message`, which copies the Java helper's
+  topic/body/flag/property values and leaves the transaction ID unset. Producer
+  selector preparation now uses the same method. Rust-owned snapshots have
+  independent body/property storage; the pinned Java helper shares those
+  references.
+- Added a direct Java `messagePublicApi` invocation and Rust differential for
+  the helper's field projection, distinct result, transaction-ID omission, and
+  source retention. Updated the Phase 8 method matrix and release checklist.
+  Message fixture SHA-256:
+  `7c61fee7311b7926b92b845899083e5f80a2ba8e67105ed7656de3d5e3a17a22`.
+- Fixture generation initially ran Maven's existing compiled class and left the
+  JSON stale; the first Rust differential then failed because the new fixture
+  keys were absent. Recompiled the Java harness with `mvn compile exec:java`,
+  regenerated the fixture, and reran the differential successfully.
+- Validation: Common `message_public_api_matches_java_551_fixture` PASS;
+  Producer `invoke_message_queue_selector_returns_the_namespaced_queue_without_sending`
+  PASS; strict all-target/all-feature Clippy for Common and Producer PASS;
+  `TZ=Asia/Taipei mvn -q -o -f compat/java-reference/pom.xml verify` PASS
+  (37 scenarios, fixture drift checks, and Java/Rust cross-decodes); workspace
+  formatting and `git diff --check` PASS.
+- This closes the direct `cloneMessage` method mapping only. Broad P18-V01,
+  current-revision full P18-V02, GitHub Ubuntu address-profile evidence, Phase
+  19 Broker/Docker automation, and release version/registry checks remain open.
+- P18-V01/P18-V02 follow-up: the workspace UTC run exposed that Java's
+  `getNearlyTimeFromID` fixture stored an absolute epoch tied to the fixture
+  generation month and timezone. Replaced it with the Java result's delta from
+  its selected local month start, which is stable across month rollovers and
+  zones; updated the differential and Producer matrix. Fixture SHA-256:
+  `0e63b403150e979b8d10baae980fcd5283343f9092f63308b9bbed95f250c8b6`.
+- Added an explicit CI run of the near-time differential under
+  `TZ=Asia/Taipei`; the default workspace CI continues to run under Ubuntu UTC.
+  Focused Core tests pass under both UTC and Asia/Taipei, and the regenerated
+  Java Producer fixture verifies under UTC. Full P18-V02 must be rerun after
+  this follow-up commit.
+- P18-V02 server-free verification on current revision `1aae4772` (2026-10-15):
+  `TZ=UTC cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked` pass. Strict workspace
+  Clippy, `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios,
+  fixture drift and Java/Rust cross-decodes), strict
+  `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`,
+  comparator self-test and
+  37-scenario manifest validation, `bash tests/stress/run-offline-smoke.sh`
+  (16 cases × 3), fuzz smoke (104 frame seeds, 10 message seeds, 1,824
+  mutations), release example build, workspace benchmark compilation, locked
+  Cargo metadata, workspace metadata/license/dependency checks, seven package
+  content listings, formatting and `git diff --check` pass. The near-time
+  ClientID differential passes under UTC and Asia/Taipei. This closes only the
+  current revision's server-free P18-V02 gate; P18-V01, current-revision GitHub
+  Ubuntu address-profile evidence, Phase 19 Broker/Docker validation, and
+  release version/registry checks remain open.
+- P18-V01 Java oracle for nullable reserved-property-set membership:
+  against pinned RocketMQ 5.5.1, `MessageConst.STRING_HASH_SET` accepts null;
+  while null is present, `Message.putUserProperty(null, "value")` throws the
+  base `java.lang.RuntimeException` before blank-name validation. Added the
+  invoked fixture case and regenerated `fixtures/messages/records.json` with
+  `mvn -q -f compat/java-reference/pom.xml compile exec:java
+  -Dexec.args='message-decode-fixtures fixtures/messages/records.json false'`;
+  the focused Java fixture verification passes. Fixture SHA-256:
+  `80f920015068610174b266111497c018abf9ca4c8b183d6233471a81772f0723`.
+  Rust behavior is not yet updated; that parity change and differential remain
+  open.
+- P18-V01 oracle refinement: the same mutable Java set also accepts an empty
+  name. With `""` present, `Message.putUserProperty("", "value")` throws the
+  base `java.lang.RuntimeException` before blank-name validation. Regenerated
+  and verified the Java message fixture; current SHA-256:
+  `cd48ccada3c107facb4ec332316ef29e569cca7c50cd3b0711152b7234cd6b98`.
+- P18-V01 Rust parity correction (`51be0d20`): `STRING_HASH_SET` now stores
+  `Option<String>`, allowing Rust callers to represent Java's null set member.
+  Both nullable and ordinary `put_user_property` paths check current reserved
+  membership before blank validation. The fixture-backed differential covers
+  live null/empty additions, Java's base `RuntimeException`, mutation restore,
+  ordinary null-name rejection when null is absent, and dynamic string
+  membership/removal. Updated the Phase 6 API map, Phase 8 method matrix,
+  requirement audit, and release checklist. Fixture SHA-256:
+  `cd48ccada3c107facb4ec332316ef29e569cca7c50cd3b0711152b7234cd6b98`.
+- Validation on `51be0d20`: `cargo test -p rocketmq-classic-common
+  --all-features --locked`, strict Common Clippy, `TZ=UTC cargo test
+  --workspace --locked`, `cargo test --workspace --all-features --locked`,
+  strict workspace Clippy, Maven verify (37 scenarios and fixture/cross-decodes),
+  comparator self-test and 37-scenario manifest, 16 race/leak cases × 3,
+  fuzz smoke (104 frame seeds, 10 message seeds, 1,824 mutations), release
+  examples, workspace benchmark compilation, locked Cargo metadata, metadata/
+  license/dependency check, seven package listings, format, and diff checks all
+  pass. Common all-feature tests passed 21 unit, 19 message decode, 1 Topic
+  Validator, and 14 doctests. This closes the nullable reserved-set slice and
+  P18-V02 server-free gate on this revision; broad P18-V01, current-revision
+  GitHub Ubuntu evidence, and Phase 19 Broker/Docker validation remain open.

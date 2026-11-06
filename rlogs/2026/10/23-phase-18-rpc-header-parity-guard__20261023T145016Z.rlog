@@ -1,0 +1,27 @@
+# Phase 18 RPC request-header source/fixture parity guard
+
+- Recorded: 2026-10-23 14:50:16 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source revision: `7885fbe5` (`test(protocol): enforce RPC header inventory parity`)
+- Pinned Java source: RocketMQ 5.5.1,
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Change
+
+- The request-header identity fixture now contains 49 entries covering the
+  48 Rust types in `impl_rpc_request_header_semantics!` plus the separately
+  implemented `ConsumeMessageDirectlyResultRequestHeader`.
+- Added a test assertion that compares the Rust macro type list to the Java
+  fixture names after excluding that separately implemented type. A future
+  header addition must update the invoked Java API/identity oracle.
+
+## Verification
+
+- `cargo test --offline --locked -p rocketmq-classic-protocol request_header_equality_and_hash_match_rpc_base_fields` — passed.
+- `cargo clippy --offline --locked -p rocketmq-classic-protocol --all-targets --all-features -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- No push or remote CI was run; existing Phase 19 user-owned paths were not edited or staged.
+
+This adds an inventory-coverage invariant only. Broad P18-V01 remains
+PARTIAL; native Windows runtime and current-revision remote Ubuntu CI remain
+open, and Phase 19 Broker/Docker work remains outside scope.

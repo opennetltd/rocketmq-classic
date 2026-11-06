@@ -1,0 +1,9 @@
+Session: 2026-10-10T01:29:01Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Runtime inbound availability continuation: added `unbound_created_and_stopped_processors_return_system_error` in `crates/rocketmq-classic-core/src/runtime/inbound.rs`. It exercises an unbound `RuntimeProcessor`, a runtime in Created state, and the same bound processor after normal start/shutdown; all return `SYSTEM_ERROR` with the source-specific unavailable/not-running remarks. The first test attempt incorrectly expected `shutdown()` from Created to return true; it returned false as the established lifecycle contract specifies. The test was corrected to start before shutdown, with no production change. Test commit `614487a6`; matrix/audit commit `b97bfa7a`.
+
+Verification passed: `cargo test -p rocketmq-classic-core unbound_created_and_stopped_processors_return_system_error --locked`; `cargo clippy -p rocketmq-classic-core --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+
+Other inbound feature owners remain pending in their planned phases; broader Phase 6 source/input/API reconciliation remains open and P6-V04 stays assigned to Phase 19.

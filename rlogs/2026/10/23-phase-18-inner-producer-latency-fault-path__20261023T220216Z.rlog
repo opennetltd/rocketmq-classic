@@ -1,0 +1,49 @@
+# Phase 18 internal producer latency-fault path
+
+- Recorded: 2026-10-23 22:02:16 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Starting revision: `c441a425`
+- Implemented revision: `325c77fe`
+- Pinned Java source: `rocketmq-all-5.5.1`, `2ed890cd27b047cc124638aa3c80e391dde942b8`
+- Scope: retry-topic publication through `MQClientInstance`'s internal producer
+
+## Finding and change
+
+The Consumer fallback previously built a direct send loop, bypassing the
+Producer's latency fault table, fault updates, and detector. Pinned Java
+`MQClientInstance` copies its `ClientConfig` into `CLIENT_INNER_PRODUCER`, and
+`MQFaultStrategy` initializes its latency-fault and detector switches from that
+configuration.
+
+Rust retry-topic publication now sends through the existing Producer send
+loop using the Consumer's `ClientRuntime`. A typed runtime extension retains
+one internal Producer per runtime, so Consumer owners sharing a runtime also
+share the Producer's fault table. The internal Producer receives the Consumer
+client configuration and TLS setup. The shared send loop performs namespace
+handling, route lookup, compression, the default three synchronous attempts
+within 3000 ms, previous-Broker avoidance, retry-response classification, and
+latency fault selection and updates. Its detector task is started lazily when
+`startDetectorEnable` is true.
+
+Pinned Java source SHA-256 values:
+
+- `MQClientInstance.java`: `55619893df475f32332d4a49787ac4a8add0d881de76922d528ba6eb7f3e267d`
+- `ClientConfig.java`: `f957a6e18c789690051dc704f59fd0729a190de2b0010a7aef3498cc5e8700c2`
+- `MQFaultStrategy.java`: `a60fe418a886b408fe8edd1c66e8755501ffd2b8e179b0c78e34f1bfe25ec8ee`
+
+## Verification
+
+- `cargo fmt --all`: passed.
+- `git diff --check`: passed.
+- `cargo check -p rocketmq-classic-core -p rocketmq-classic-producer -p rocketmq-classic-consumer`: passed.
+- Tests were not run in this slice. Existing Consumer scripted fallback returns before the production Producer path, so a dedicated production-path latency-selection and detector regression is still needed.
+- Java source and fixtures were unchanged; Maven fixture verification was not rerun.
+
+## Acceptance boundary
+
+The production path now reuses the Producer fault strategy and runtime-shared
+internal Producer. This slice has compile evidence but lacks a dedicated
+production-path regression. Broad P18-V01 source/API/settings/input/error/
+control-flow and reverse-export reconciliation remains `PARTIAL`. P18-V04
+current-revision platform evidence remains open. No remote CI was run, and the
+Phase 19 Docker paths were left untouched.

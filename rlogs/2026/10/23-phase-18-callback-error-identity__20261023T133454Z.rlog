@@ -1,0 +1,28 @@
+# Phase 18 transaction callback error identity semantics
+
+- Recorded: 2026-10-23 13:34:54 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source revision: `a4228eb2` (`fix: retain callback error identity semantics`)
+- Pinned Java source: RocketMQ 5.5.1,
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Change
+
+- `TransactionCallbackError` previously derived `Clone`, `PartialEq`, and `Eq`
+  over its message string.
+- Java callback exceptions inherit identity-based equality from `Object`, so
+  two distinct exceptions with the same message are not value-equal.
+- The Rust wrapper no longer exposes those traits. A compile-fail doctest
+  verifies it cannot satisfy `Clone + PartialEq + Eq` bounds. Callback error,
+  panic, and null-result control flow is unchanged.
+
+## Verification
+
+- `cargo test --offline --locked -p rocketmq-classic-producer --all-features` — passed, including 155 unit tests, 11 admin tests, 27 producer API tests, 18 scripted-send tests, 7 transaction tests, and 9 doctests.
+- `cargo clippy --offline --locked -p rocketmq-classic-producer --all-targets --all-features -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- No push or remote CI was run; existing Phase 19 user-owned paths were not
+  edited or staged.
+
+This closes one error-wrapper identity mismatch only. Broad P18-V01 source/API/
+settings/input/error/control-flow reconciliation remains open.

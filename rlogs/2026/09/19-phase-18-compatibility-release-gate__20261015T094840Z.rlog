@@ -1,0 +1,39 @@
+# Phase 18 Java message-ID decoder parity — 20261015T094840Z
+
+- Inspected the pinned Java 5.5.1 `MessageDecoder.decodeMessageId` and
+  `UtilAll.string2bytes` call path. Invalid hexadecimal nibbles map to `-1`
+  and produce a decoded `0xFF` byte; Producer, Push, and Pull all attempt the
+  physical Broker view before unique-key fallback.
+- Replaced the duplicate strict Core parser at the Producer/Push/Pull call
+  sites with the Java-mapped Common decoder. Removed the Core-only decoded DTO,
+  error enum, and function; added a compile-fail doctest guarding those public
+  exports.
+- Added scripted facade regressions that mutate the final physical-ID offset
+  nibble to `G`. Producer verifies `VIEW_MESSAGE_BY_ID` is sent first at offset
+  `255`, then the unique-key query fallback. Push and Pull verify the physical
+  lookup at offset `255` returns without the unique-key query.
+- The first focused Producer run exposed a test expectation mismatch: the
+  scripted unique-key query correctly returned Java's terminal `NO_MESSAGE`.
+  Updated the assertion to expect that response while checking the exact wire
+  sequence; the focused Producer and Consumer tests then pass.
+- PASS: `cargo test -p rocketmq-classic-producer --test admin
+  view_message_uses_java_permissive_decoder_for_non_hex_physical_ids --locked`;
+  `cargo test -p rocketmq-classic-consumer --test admin
+  push_and_pull_view_message_match_java_unique_key_fallback_and_physical_lookup
+  --locked`.
+- PASS: `cargo test --workspace --locked`;
+  `cargo test --workspace --all-features --locked`;
+  `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`;
+  `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `mvn -f compat/java-reference/pom.xml verify` (37 scenarios and
+  fixture/cross-decode checks); differential self-test and 37-scenario
+  manifest validation; offline fuzz smoke (104 frame seeds, 10 message seeds,
+  1,824 mutations); deterministic race/leak smoke (16 cases × 3); release
+  examples; offline benchmark compilation; workspace metadata/license/dependency
+  checks.
+- Code commit: `fa6c0ff0 fix(compat): use Java message ID decoding across facades`.
+- Updated the Phase 6 requirement audit and release checklist. Broad P18-V01,
+  current-revision GitHub Ubuntu address-profile evidence, and Phase 19 local
+  Broker/Docker scenarios remain open.
+- No plan or Java reference files were modified. No push, tag, publication,
+  or Broker validation was performed.

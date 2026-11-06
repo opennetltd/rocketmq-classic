@@ -1,0 +1,42 @@
+# Phase 18 current-revision server-free gate — 2026-10-17T23:08:53Z
+
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Pinned Java oracle remains RocketMQ client 5.5.1 at
+  `efa1be59d6fc747ad220f036c86030f05f0419f9` in the read-only checkout
+  `/Users/bruce.tsai/Projects/3rd/rocketmq`. Its existing untracked
+  `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java` was preserved.
+- The first current-revision default workspace test run failed at
+  `crates/rocketmq-classic-protocol/tests/headers.rs::header_validation_matrix`:
+  `HeartbeatRequestHeader` had been added to the public `CommandHeader`
+  inventory but omitted from the validation matrix. Added its Java fixture row
+  with the inherited `ns`, `nsd`, `bname`, and `oway` fields. The focused test
+  passed; the fix was committed as `5e5775fa`.
+- Current-revision verification on `5e5775fa` passed:
+  - `cargo fmt --all -- --check` and `git diff --check`.
+  - `cargo test --workspace --locked --offline -- --test-threads=1`.
+  - `cargo test --workspace --all-features --locked --offline -- --test-threads=1`.
+  - `cargo check --workspace --all-targets --all-features --locked --offline`.
+  - `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`.
+  - `TZ=UTC mvn -o -q -f compat/java-reference/pom.xml verify`: 37 scenarios,
+    fixture drift checks, 56 typed-header cross-decodes and 14 typed-body
+    cross-decodes passed. Java emitted existing JDK/Unsafe and reflection
+    warnings, but exited successfully.
+  - Differential comparator self-test, 37-row manifest validation, and
+    `bash tests/stress/run-offline-smoke.sh` (16 cases × 3 repetitions).
+  - Fuzz smoke: 107 frame seeds, 11 message seeds, 1,888 bounded mutations,
+    165 frame decodes and 116 message decodes.
+  - Release examples, workspace bench compilation, offline benchmark run,
+    locked Cargo metadata, workspace metadata/license/dependency-direction
+    checks, workspace package-content listing, UTC and Asia/Taipei unique-ID
+    tests.
+- Offline benchmark observations on macOS ARM64 Apple M5 Max, Rust 1.85.0:
+  frame encode/decode 2,250.0 ns, Zstd message decode 1,154.0 ns, Producer
+  request construction 1,204.7 ns, 128-entry route lookup 16.0 ns, and
+  loopback pending completion 65,466.7 ns per iteration; these are
+  observations, not thresholds.
+- This closes the current-revision P18-V02 server-free rerun. Broad P18-V01
+  source/API/settings/input/error/control-flow and reverse-export reconciliation,
+  current-revision Ubuntu/native Windows CI evidence, and final P18-V03 package
+  review remain open. Phase 19 local Broker cases and profiles remain separate
+  unfinished work. No plan, external Java checkout, remote branch, tag,
+  publication, or deployment was changed.

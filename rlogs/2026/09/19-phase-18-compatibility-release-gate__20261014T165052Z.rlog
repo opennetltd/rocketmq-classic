@@ -1,0 +1,59 @@
+Phase 18 continuation — Producer QueueFilter API crosswalk — 2026-10-14 UTC
+
+Starting state
+- Branch `phase/19-phase-18-compatibility-release-gate`; prior HEAD `a6abeb38`.
+- Java oracle remains pinned at `efa1be59d6fc747ad220f036c86030f05f0419f9` and read-only.
+- The pending slice inventories the public nested `TopicPublishInfo.QueueFilter.filter` signature and Rust nullable callback aliases.
+
+Changes
+- `aa26bc90` — `test(producer): pin publish queue filter surface`. The invoked Java Producer fixture now records the nested functional interface's exact public method signature. Rust tests require the fixture and the Phase 7 matrix crosswalk for the Java method and Rust callback aliases. Phase 6/7 audit text records the refreshed fixture digest.
+- Fixture SHA-256: `f998d5e4d5d716d3cb0aa4f510f574960cb499a80b728f24ea7b8b150114e04e`.
+
+Validation
+- PASS: `cargo test -p rocketmq-classic-producer --locked publish_info` — 6 unit tests and 7 integration tests.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` — Java self-test, 37 scenarios, runtime fixture probes, fixture drift validation and Rust/Java cross-decodes.
+- PASS: `cargo fmt --all -- --check` and `git diff --check` after formatting.
+
+Remaining work
+- P18-V01 remains open for broad overload/input/error/control-flow, inherited/deprecated API and Rust reverse-export/configuration reconciliation.
+- P18-V04 still needs current GitHub Ubuntu evidence for the Java address profile.
+- Reconcile Phase 15–17 verification evidence requirement by requirement; targeted Phase 17 query/error/reset-race checks have some evidence, but the complete reconciliation is not recorded.
+- Phase 19 local Docker/Broker interoperability matrix remains to be built and executed. It is separate from the final owner-run deployment/production manual items.
+- Confirm intended `0.1.0` release version and registry dependency resolution before any eventual publication; publication/tagging is outside this task.
+
+No push, publication, tag, plan-file edit, or Java oracle modification was made.
+
+Phase 18 continuation — consumer facade `viewMessage` parity — 2026-10-14 UTC
+
+Starting revision: `c5d4505e`; branch `phase/19-phase-18-compatibility-release-gate`.
+Java oracle: pinned client 5.5.1 source `efa1be59d6fc747ad220f036c86030f05f0419f9`, read-only.
+
+Changes
+- `f98bdaa8` — `fix(compat): align message view fallback with Java`. Added the full declared/inherited Push/Pull/Lite facade reflection fixture and Rust inventory guard. Confirmed Push/Pull facades have no separate `queryMessageByUniqKey` public method and removed Rust's extra `query_message_by_unique_key` facade methods.
+- Producer, Push, and Pull `view_message` now try physical lookup first and fall back to Java's unique-key query when ID parsing or the physical RPC fails. Fallback defaults match Java: max 32, current time minus three days, `Long.MAX_VALUE`, first result, and nullable no-result. Scripted tests cover request fields, namespace behavior, direct lookup, and terminal errors.
+- Updated the Pull example to use public Java-mapped `register_message_queue_listener(topic, None)` after `register_topic` became crate-private.
+- Updated the Phase 17 matrix, Phase 6 requirement audit, and release checklist. Marked Phase 15–17 requirement reconciliation as open because Phase 16/17 records still show incomplete local audit/closure evidence.
+- Consumer facade fixture SHA-256: `6f1c84a130e13bfbf2bac19a85baa5978784d2c41689fc7f0b09b7d9b2803f55`.
+
+Validation on the final code worktree
+- PASS: `cargo test --workspace --locked` and `cargo test --workspace --all-features --locked`, including doctests.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` — 37 scenarios, fixture drift checks, runtime fixture probes, and Java/Rust cross-decodes.
+- PASS: `python3 tests/differential/compare.py --self-test`; `python3 tests/differential/compare.py --validate-manifest` — 37 scenarios.
+- PASS: `bash tests/stress/run-offline-smoke.sh` — 16 race/leak cases × 3; `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` — 1,824 bounded mutations.
+- PASS: release example build, offline benchmark compilation, and `python3 scripts/check-workspace-metadata.py`.
+
+Still open
+- P18-V01 broad bidirectional Java/Rust source, overload/input/error/flow, inherited API, and reverse-export/configuration audit remains local parity work.
+- P18-V04 still needs the current GitHub Ubuntu address-profile result.
+- Phase 15–17 requirement-by-requirement reconciliation remains incomplete; Phase 16 source/API/settings audit and Phase 17 non-macOS all-thread `jstackEnable` parity/closure need follow-up.
+- Phase 19 local Docker/Broker interoperability scenarios remain to be built and run. Final deployment/production manual items remain separate.
+- The intended `0.1.0` release version and registry dependency resolution remain to be confirmed before any publication.
+
+No push, publication, tag, plan edit, or Java oracle modification was made.
+
+Current-tree audit correction — 2026-10-14 UTC
+
+- The preceding continuation incorrectly listed a non-macOS all-thread `jstackEnable` implementation gap. Current `stack.rs` contains macOS (ARM64/x86_64), Linux (AArch64/x86_64), and Windows (ARM64/x86_64) process-thread capture. Commits `0b8e98c8` and `93473a3e` are ancestors of the current Phase 18 branch; `cargo test -p rocketmq-classic-consumer stack::tests --locked` passes on the current macOS ARM64 host. The Phase 17 matrix records Linux runtime tests on both architectures and Windows cross-target checks. Native Windows runtime execution remains a final platform validation item.
+- Re-read the Phase 15, 16, and 17 matrices against their plans and execution records. Phase 15 P15-V01/V02/U01 are locally verified and P15-V03 is Phase 19; Phase 16 records all local acceptance gates passed and live/owner checks in Phase 19; Phase 17 records local P17-V01/V03/U01 evidence and assigns Broker-backed P17-V02 to Phase 19. Updated the release checklist to mark that local cross-phase reconciliation complete; plans remain untouched.
+- P18-V01's broader Phase 6 source/API/input/branch and Rust reverse-export reconciliation remains open. P18-V04 still lacks current-revision GitHub Ubuntu evidence. Phase 19 Broker/Docker and pre-publication version/registry checks remain outstanding.

@@ -1,0 +1,24 @@
+# Phase 18 current-tree clean-target workspace gate continuation
+
+- Recorded: 2026-10-24 07:26:54 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Code/test revision: `d897a9e246959c92bec939eaf4e07f9f82b0e8e7`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Host: macOS 26.6.1, AArch64
+- Rust: `rustc 1.85.0 (4d91de4e4 2025-02-17)`
+- Isolated Cargo target directory: `/tmp/rocketmq-phase18-target`
+
+## Verification
+
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo test --offline --locked --workspace` — passed, including all package integration tests and doctests.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo test --offline --locked --workspace --all-features` — passed, including all package integration tests and doctests.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo clippy --offline --locked --workspace --all-targets --all-features -- -D warnings` — passed.
+- `cargo fmt --all -- --check` — passed.
+- `python3 tests/differential/compare.py --self-test` — comparator and manifest self-test passed.
+- `cargo build --offline --locked -p rocketmq-classic --examples --release` — passed.
+- The Remoting `fuzz_regressions` binary that had stalled in `dyld` under the repository target directory was copied unchanged to `/tmp/phase18_fuzz_regressions`; its bounded regression test passed.
+- Pinned offline Maven `verify` on the same code revision passed: fixture drift checks, 37 scenarios, 11 message fixtures, 106 typed headers, and 19 typed bodies.
+- `git diff --check` passed. The four pre-existing Phase 19 paths remain unchanged and unstaged.
+
+The clean target directory allowed both workspace configurations and strict Clippy to complete. No Rust assertion failed. This closes the current-tree server-free test gate and does not close broad P18-V01 bidirectional source/API/settings/input/error/control-flow and reverse-export reconciliation. Native Windows runtime and current-revision remote Ubuntu CI remain unverified. Phase 19 Broker/Docker evidence remains separate. No push or remote CI was run.

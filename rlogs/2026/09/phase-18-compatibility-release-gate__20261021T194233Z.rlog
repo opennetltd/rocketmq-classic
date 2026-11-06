@@ -1,0 +1,62 @@
+# Phase 18 subtype scheduling-property closure and P18-V02 server-free refresh — 2026-10-21T19:42:33Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `c6048c18` (`feat(common): dispatch subtype scheduling properties`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `5148df4ac22baa84eb75326238a8d5903927ba1c0380dc34b7cc4093a47bf446`.
+
+## Change
+
+- `MessageExt` routes wait-store, buyer ID, delay-level, delay-seconds,
+  delay-milliseconds and delivery-milliseconds getters through the
+  caller-defined subtype's virtual `getProperty` hook.
+- Setter dispatch hooks cover wait-store, buyer ID, instance ID, delay level,
+  delay seconds, delay milliseconds and delivery milliseconds.
+- The invoked Java 5.5.1 direct-consume fixture compares custom getter values
+  and all seven setter calls against Rust.
+
+## Verification
+
+- PASS: focused direct-consume integration tests (3 cases).
+- PASS: `cargo test --workspace --locked --quiet` (serial run).
+- PASS: `cargo test --workspace --all-features --locked --quiet` (serial run).
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify`: 37 scenarios,
+  9 Running Info, 27 direct-consume, 15 reset cases, 83 typed headers, 16
+  typed bodies and Java/Rust cross-decodes. Existing JDK Unsafe and
+  reflective-final-field warnings were emitted.
+- PASS: differential comparator self-test and 37-scenario manifest validation.
+- PASS: offline deterministic race/leak smoke, 16 cases × 3 repetitions.
+- PASS: release fuzz smoke, 137 frame seeds, 11 message seeds, 2,368 bounded
+  mutations, 201 frame decodes and 118 message decodes.
+- PASS: release workspace examples and `cargo bench --workspace --no-run
+  --locked`.
+- PASS: locked Cargo metadata (8 workspace members, 216 total packages,
+  208 registry packages), no-deps metadata (8 packages), workspace
+  metadata/license/dependency checks, and seven publishable package
+  listings containing `LICENSE` and `NOTICE`.
+- PASS: four Core Unique ID tests under `TZ=UTC` and
+  `TZ=Asia/Taipei`.
+- PASS: offline benchmark on Apple M5 Max, macOS aarch64, Rust 1.85.0:
+  frame encode/decode 2,265.5 ns/iteration; zstd message decode 1,146.5 ns;
+  producer request construction 1,179.5 ns; 128-entry route lookup 15.7 ns;
+  loopback pending completion 71,501.4 ns. These are observations, not
+  thresholds.
+
+## Notes
+
+An initial attempt to run the default and all-feature workspace suites in
+parallel collided on the consumer tests' exclusive offset-store fixture and
+reported `OffsetStore(AlreadyOpen)`. Both suites passed when rerun serially.
+No push, remote CI, Broker or Docker run was performed. Pre-existing Phase 19
+working-tree paths were left untouched and unstaged.
+
+## Current status
+
+This refresh closes current-revision server-free P18-V02 gates on `c6048c18`.
+It covers this inherited-property subtype slice only. Broad P18-V01
+API/settings/input/error/control-flow/reverse-export reconciliation, mutable
+custom `getProperties()` map identity, and current-revision GitHub Ubuntu and
+native Windows P18-V04 runtime evidence remain open. Phase 19 Broker/Docker
+validation is separate.

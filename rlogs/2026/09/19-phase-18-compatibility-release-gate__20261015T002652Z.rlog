@@ -1,0 +1,6 @@
+# Phase 18 execution session — 20261015T002652Z
+
+- Reconciled the ACL public surface with pinned Java 5.5.1: `AclClientRpcHook::session_credentials` and `AclException::cause_message` are test-only crate-private helpers; removed the Rust-only string-cause constructors `AclException::with_cause_message` and `with_status_code_and_cause`. Added compile-fail rustdoc coverage for these boundaries and updated the Phase 16 ACL matrix.
+- The first strict Clippy pass identified dead code after the visibility change. Removing the unused string-cause constructors/helper type resolved it; no runtime ACL behavior changed.
+- `cargo test -p rocketmq-classic-core --all-features --locked` passed, including all core integration targets and 11 doctests. `cargo clippy -p rocketmq-classic-core --all-targets --all-features --locked -- -D warnings`, `cargo fmt --all -- --check`, and `git diff --check` passed.
+- P18-V01 remains partial for per-overload input/error/control-flow reconciliation, Java reverse-export, inherited/trait APIs, and broad source/input coverage. A full workspace P18-V02 rerun on the current revision, the required current-revision GitHub Ubuntu result, and locally runnable Phase 19 Docker/Broker scenarios remain outstanding. Windows/BSD/real-host IPv6 checks remain final owner-environment items. No plan file changed.

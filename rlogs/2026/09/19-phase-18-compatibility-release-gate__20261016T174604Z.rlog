@@ -1,0 +1,130 @@
+# Phase 18 current-revision server-free gate — 2026-10-16 17:46 UTC
+
+- Tested code revision: `ff138fa3` (`fix(remoting): preserve mutable Java hook
+  and pipeline semantics`). The compatibility-document edits in this worktree
+  do not change code.
+- `cargo fmt --all -- --check` — passed.
+- `cargo test --workspace --locked -- --test-threads=1` — passed.
+- `cargo test --workspace --all-features --locked -- --test-threads=1` — passed.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+  — passed.
+- `mvn -f compat/java-reference/pom.xml verify` — BUILD SUCCESS; validated 37
+  scenarios, Java 5.5.1 fixture drift/probes, and Java decoding of Rust-generated
+  Remoting, typed-header and typed-body fixtures. The updated runtime hook
+  fixture, including request-pipeline opaque mutation, matched the pinned Java
+  harness.
+- `python3 tests/differential/compare.py --self-test` and
+  `python3 tests/differential/compare.py --validate-manifest` — passed; 37
+  scenarios validated.
+- Focused Remoting pipeline mutation regression — passed. Full transport suite
+  passed as part of both workspace runs (107 tests).
+- `bash tests/stress/run-offline-smoke.sh` — passed 16 deterministic race/leak
+  cases × 3 repetitions.
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` —
+  passed: 105 frame seeds, 11 message seeds, 1,856 bounded mutations, 146 frame
+  decodes, 113 message decodes.
+- `cargo build -p rocketmq-classic --examples --release --locked` and
+  `cargo bench --workspace --no-run --locked` — passed.
+- `git diff --check` — passed before the code commit; formatting and documentation
+  were checked on this worktree.
+- P18-V02 server-free local gates pass on this code revision. P18-V01 remains
+  open: full bidirectional Java/Rust source/API/input/error/control-flow and
+  reverse-export reconciliation is incomplete. Remoting error remarks remain
+  explicitly unresolved because Java uses `UtilAll.exceptionSimpleDesc` while
+  Rust exposes its typed error text.
+- Current-revision GitHub Ubuntu address-profile and native Windows runtime CI
+  evidence remain pending. Phase 19 Docker/Broker scenarios, `docs/owner-validation.md`,
+  and release-version/registry dependency resolution also remain pending. No
+  Broker/Docker run, push, tag, publication, deployment or compatibility claim
+  was made.
+
+# Continuation — 2026-10-16 17:58 UTC
+
+- Reviewed the pending compatibility/release documentation changes across
+  `KNOWN_DIFFERENCES.md`, `PHASE_3_REMOTING_INVENTORY.md`,
+  `PHASE_6_REQUIREMENT_AUDIT.md`, and `release-checklist.md` against the user
+  parity rule: public API/settings remain exact; other observable behavior is
+  assessed by flow logic, without requiring Java library components to be
+  duplicated in Rust.
+- Recorded Java `UtilAll.exceptionSimpleDesc` versus Rust error-remark text as
+  diagnostic-only variation. Error category, response code, ordering and
+  terminal path remain parity requirements. This resolves the status wording,
+  not the broader P18-V01 audit.
+- `git diff --check` passed. These documentation edits are committed separately
+  from code changes. Broad P18-V01, current-revision P18-V02 rerun, P18-V04
+  remote CI evidence, and Phase 19 automation/scenario execution remain open.
+
+# Current-revision server-free gates — 2026-10-16 18:10 UTC
+
+- Code revision: `15c6ca4f`; the separate compatibility-document commit is
+  `ebeb6460`. The implementation difference from the prior tested code is the
+  removal of two unused public mutable pipeline methods; the active
+  `execute_detailed_with_context_mut` path remains.
+- Passed on `15c6ca4f`: `cargo fmt --all -- --check`; locked default and
+  all-feature workspace tests with one test thread; strict all-target,
+  all-feature workspace Clippy; pinned Maven `verify` (37 scenarios, Java
+  runtime probes and cross-decodes); differential self-test and 37-scenario
+  manifest validation; offline deterministic race/leak smoke (16 cases × 3);
+  fuzz smoke (105 frame seeds, 11 message seeds, 1,856 mutations, 146 frame
+  decodes, 113 message decodes); release facade example build; workspace bench
+  compilation; locked Cargo metadata; and `git diff --check`.
+- Current server-free P18-V02 gates pass. P18-V01 broad bidirectional
+  reconciliation remains incomplete. Current-revision GitHub Ubuntu and native
+  Windows runtime CI results, Phase 19 Docker/Broker automation and live
+  scenario execution, `docs/owner-validation.md`, and pre-publication
+  version/registry dependency resolution remain open. No push, tag, publication,
+  deployment, Docker/Broker run or compatibility claim was made.
+
+# Phase 18 offline benchmark — 2026-10-16 18:13 UTC
+
+- Executed `cargo bench -p rocketmq-classic --bench offline --locked` on code
+  revision `15c6ca4f`, macOS AArch64, Apple M5 Max, 18 logical CPUs, Rust
+  `1.85.0 (4d91de4e4 2025-02-17)`, optimized release profile.
+- Measured all five fixed-input operations with configured iteration counts and
+  allocation sampling. The outputs are appended to
+  `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`: frame encode /
+  decode 1,932.5 ns; Zstd message decode 1,162.8 ns; Producer request
+  construction 1,176.4 ns; route lookup 15.1 ns; loopback pending completion
+  59,048.3 ns. Allocation observations are recorded there as well.
+- Treat measurements as host-specific observations only. No performance
+  thresholds exist; no optimization was indicated by this baseline alone.
+
+# P18-V01 Remoting public surface slice — 2026-10-16 18:26 UTC
+
+- Generated all-feature Remoting Rustdoc JSON with the installed nightly toolchain
+  and enumerated the public inherent methods on `RemotingClient`. Before the
+  change the scan found the public `invoke_name_server_with_peer`, which had no
+  Java public operation counterpart and was only called by the response-only
+  `invoke_name_server` wrapper. Commit `f853cb69` makes that implementation
+  helper private and adds a compile-fail doctest.
+- Updated the Phase 3 Remoting crosswalk with exact Rust method names for live
+  connect-timeout and GO_AWAY setting adapters, both owned-processor methods,
+  the private response-only helper, and the cross-crate sync peer adapter used
+  by Core's NameServer route errors. The latest scan enumerates 64 public
+  inherent methods and finds zero exact method names absent from the crosswalk.
+- Verification on `f853cb69`: `cargo fmt --all -- --check`, all-feature Remoting
+  doctests (9), strict all-target/all-feature Remoting Clippy, and Core `rpc`
+  route tests (5) pass. This closes a bounded Remoting method-name/public
+  surface slice only; P18-V01 remains open for the full Java/Rust source,
+  settings, overload/input/error/flow, inherited API, and reverse-export audit.
+
+# P18-V01 Remoting semaphore helper API slice — 2026-10-16 18:41 UTC
+
+- Pinned Java 5.5.1 exposes `SemaphoreReleaseOnlyOnce(Semaphore)`,
+  `release()`, and `getSemaphore()`, plus two public `ResponseFuture` constructors.
+  The Rust remoting crate now exposes `client::SemaphoreReleaseOnlyOnce` with
+  nullable shared Tokio semaphore input, same-handle retrieval, and once-only
+  release. `ResponseFuture::new` maps the null-helper constructor and
+  `new_with_release_once` maps the helper constructor; the Tokio-only
+  `new_with_permit` is private and guarded by a compile-fail doctest.
+- Added `RemotingApiSurfaceFixtures` and
+  `fixtures/remoting/response-future-api.json`, pinning both Java
+  `ResponseFuture` constructors, all 20 declared methods, the helper
+  constructor/methods, and repeated-release/null/identity outcomes. Fixture
+  SHA-256: `4fc0509fee67637d2e1655a39dfb810ecac19e264289c6634448fa85f38aab4c`.
+- Implementation commit: `978791b3`. Remoting all-feature tests pass (105 unit,
+  8 codec, 1 fuzz, 7 security, 107 transport, 10 doctests); strict Remoting
+  Clippy passes; formatting and diff checks pass. Pinned Maven `verify` passes
+  with 37 scenarios and the reflection fixture. This closes only the helper and
+  constructor slice; broad P18-V01 remains open and full-workspace gates on the
+  eventual final revision are still due.

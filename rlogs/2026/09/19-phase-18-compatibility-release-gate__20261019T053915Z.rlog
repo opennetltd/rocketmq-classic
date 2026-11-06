@@ -1,0 +1,24 @@
+# Phase 18 continuation — 2026-10-19T05:39:15Z
+
+- Branch: `phase/18-phase-18-compatibility-closure`. Pinned Java 5.5.1 source
+  is `efa1be59d6fc747ad220f036c86030f05f0419f9`. Existing Phase 19 worktree
+  changes were left unstaged and untouched.
+- Closed a typed-header inventory gap for `GetLiteTopicInfoRequestHeader`.
+  Added the Java invoked fixture, public API and nullable-field assertions,
+  Rust inventory/validation rows, and Rust-to-Java frame generation. The
+  header now round-trips parent topic and Lite topic fields; default fields
+  remain absent and `checkFields()` accepts them, matching Java.
+- Added an exact count to the Java Rust-header verification gate: exactly 67
+  typed headers must decode. Previously the gate only required at least 18,
+  allowing inventory omissions to pass.
+- Verification passed: pinned offline Maven `verify` (37 scenarios, 67 exact
+  typed-header cross-decodes, and 15 typed-body cross-decodes); Protocol
+  `header_inventory` (5 tests) and `headers` (19 tests); `cargo fmt --all --
+  --check`; `git diff --check`. Frame SHA-256:
+  `92e15800cdfb810908a8a016582189b5523bdc2d7dbbfc8ff69523f2a7184884`.
+- Code commits: `d578db50` (`test(protocol): inventory Lite topic info header`)
+  and `d4d7588e` (`test(compat): require complete typed header fixtures`).
+  Checklist and audit updates are separate documentation work.
+- This closes one header evidence gap only. Broad P18-V01 reconciliation and
+  final current-revision P18-V02 gates remain open; P18-V04 platform evidence
+  and Phase 19 live Broker execution are tracked separately.

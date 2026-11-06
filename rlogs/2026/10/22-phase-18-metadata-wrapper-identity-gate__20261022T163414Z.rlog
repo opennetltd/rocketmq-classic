@@ -1,0 +1,57 @@
+Phase 18 metadata wrapper identity and current-tree local gate —
+2026-10-22 16:34 UTC
+
+Code revision: `91f842f4`. Documentation revision: `19d15221`. Environment:
+macOS AArch64, Apple M5 Max, 18 logical CPUs, Rust 1.85.0; pinned RocketMQ
+Java client 5.5.1.
+
+Compatibility slice:
+- Removed structural `PartialEq`/`Eq` from `TopicConfigSerializeWrapper` and
+  `SubscriptionGroupWrapper`, matching Java `Object.equals/hashCode` identity
+  behavior. Compile-fail doctests guard both API boundaries.
+- The Java producer-core fixture records equal encoded bytes for independent
+  same-state instances, distinct-instance inequality, same-reference equality,
+  and the declaring owner of `equals`/`hashCode`.
+- Producer core fixture SHA-256:
+  `f0b625d90d319a81070a3cc342f1e655c67d74aa747e0934f12c4b5ed0911095`.
+
+PASS:
+- `cargo test -p rocketmq-classic-protocol --locked`: 160 unit tests, all
+  integration targets, and 166 doctests
+- `cargo test --workspace --locked`
+- `cargo test --workspace --all-features --locked`
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+- `cargo fmt --all -- --check`; `git diff --check`
+- `mvn -f compat/java-reference/pom.xml -Dproducer.core.fixture.verify=false verify`:
+  BUILD SUCCESS, 37 scenarios, 36 runtime route/VIP cases, Java decoding of
+  106 typed headers and 19 typed bodies
+- `mvn -f compat/java-reference/pom.xml -Dproducer.core.fixture.verify=true exec:java@verify-java-producer-core-fixtures`:
+  BUILD SUCCESS
+- `python3 tests/differential/compare.py --self-test`
+- `python3 tests/differential/compare.py --validate-manifest`: 37 scenarios
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`:
+  163 frame seeds, 11 message seeds, 2,784 bounded mutations, 245 frame
+  decodes, 112 message decodes
+- `tests/stress/run-offline-smoke.sh`: 16 deterministic race/leak cases x 3
+  repetitions
+- `cargo build -p rocketmq-classic --examples --release --locked`
+- `cargo bench -p rocketmq-classic --bench offline --locked`
+- `cargo clippy -p rocketmq-classic --bench offline --all-features --locked -- -D warnings`
+- `python3 scripts/check-workspace-metadata.py`
+- `cargo metadata --locked --format-version 1 --no-deps`
+- Locked package-list checks for all seven product crates; each includes
+  `LICENSE` and `NOTICE`
+- `cargo test -p rocketmq-classic-core --lib unique_id::tests --locked` under
+  both UTC and `TZ=Asia/Taipei`: four tests passed in each zone
+- `cargo check -p rocketmq-classic-core --all-targets --target
+  x86_64-pc-windows-gnu --locked`
+- `cargo test --target x86_64-pc-windows-gnu -p rocketmq-classic-consumer
+  --lib stack::tests::jstack_includes_current_and_other_named_threads
+  --no-run --locked`
+
+Benchmark observations are recorded in
+`docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`; no performance
+threshold is asserted. No push, external CI, Broker, or Docker run was made.
+Broad P18-V01 reconciliation, current-revision Ubuntu CI, native Windows
+execution, and Phase 19 Broker/Docker validation remain open. Protected Phase
+19 worktree files remain unstaged and unmodified by this gate.

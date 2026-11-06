@@ -1,0 +1,22 @@
+# Phase 18 Producer fault-array nullability closure — 2026-10-14T00:48:29Z
+
+- Continued on `phase/19-phase-18-compatibility-release-gate` from `1ced0a32`. Compared the runtime Producer fault-array behavior with pinned RocketMQ Java client 5.5.1 source commit `efa1be59d6fc747ad220f036c86030f05f0419f9`. The Java checkout at `/Users/bruce.tsai/Projects/3rd/rocketmq` was read-only and unchanged.
+- Added invoked Java fixture cases for null `latencyMax` and `notAvailableDuration` setters/getters, deferred null-pointer failures when each null table is read, an array-index failure only when a matching latency threshold reaches a missing duration row, and ignored extra duration rows. The first fixture compile needed the missing `InvocationTargetException` import; after adding it, fixture generation and drift verification passed.
+- Rust `ProducerLongArray` now represents Java null separately from an empty array and exposes nullable snapshots. Fault updates return the matching Java exception class through `ProducerError`; latency-fault-disabled sends do not read the tables. Added differential assertions for null handle operations and all invoked exception/array-length branches.
+- Updated `fixtures/producer/core.json`; SHA-256: `2f8c6d40c4669a6a662085e8cddef749338c91fcbb1bf64829ef1f59f77a284e`.
+- Code, oracle, and fixture were committed as `1845c55a` (`fix(producer): preserve nullable fault tables`). Phase 7 Producer matrix, Phase 6 audit, release checklist, and this log are being recorded separately.
+
+## Verification
+
+- PASS: `cargo test -p rocketmq-classic-producer --locked` (112 unit tests and all Producer integration/doc targets).
+- PASS: `cargo test --workspace --locked`.
+- PASS: `cargo test --workspace --all-features --locked`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, fixture-drift checks, and Java/Rust cross-decodes).
+- PASS: `python3 tests/differential/compare.py --self-test`; `python3 tests/differential/compare.py --validate-manifest` (37 scenarios); `python3 scripts/check-workspace-metadata.py`.
+- PASS: `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` (1,824 bounded mutations).
+- PASS: `bash tests/stress/run-offline-smoke.sh` (16 deterministic race/leak cases × 3 repetitions).
+- PASS: `cargo build -p rocketmq-classic --examples --release --locked`; `cargo bench -p rocketmq-classic --bench offline --locked --no-run`.
+- No Broker or Phase 19 Docker scenario was run. Windows IP Helper, non-macOS BSD, and real IPv6-only-host runtime evidence remain separate environment checks.
+- P18-V01 remains PARTIAL: the broad Java source/API/input/branch and Rust reverse-export audit is not complete. A current GitHub Ubuntu workflow result, Phase 19 Broker/Docker scenarios, and registry dependency/version resolution also remain open. This log does not claim Phase 18 or the overall Phase 15–18 objective is complete.

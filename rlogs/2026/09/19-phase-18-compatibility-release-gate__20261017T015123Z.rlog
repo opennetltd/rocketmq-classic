@@ -1,0 +1,105 @@
+# Phase 18 compatibility release gate — execution log
+
+- 2026-10-17: Resumed Phase 18 on branch
+  `phase/19-phase-18-compatibility-release-gate` at `b976099f`.
+- Confirmed the Java reference checkout `/Users/bruce.tsai/Projects/3rd/rocketmq`
+  is outside the worktree and will remain read-only. The only pre-existing
+  worktree change is an uncommitted `IgnoreErrorGetter` acceptance/doc update in
+  `writer_feature.rs`; no DTO fixture assertions or Java oracle overrides cover
+  it yet.
+- Next: add pinned Java-oracle writer output evidence and Rust assertions for
+  `IgnoreErrorGetter`, verify at protocol scope, and commit code/tests separately
+  from compatibility documentation and this append-only log.
+- Completed `IgnoreErrorGetter` writer-feature mapping and fixture coverage.
+  The pinned Java oracle explicitly invokes the feature for 41 body, 8 route,
+  and 3 heartbeat rows; all outputs equal the corresponding default encoding.
+  Rust feature assertions now cover the mapped body, route, and heartbeat DTOs.
+- The initial Maven `exec:java -Dexec.mainClass=...` regeneration attempt used
+  the POM-configured `compat.Main` and failed its usage check. Regeneration then
+  used Maven compile/classpath plus direct Java invocation of the three pinned
+  fixture generators. A first structural comparison script also rejected the
+  expected new fixture key; after narrowing it to allow only that key, the
+  comparison confirmed no other fixture changes.
+- `cargo test -p rocketmq-classic-protocol --all-features --locked`: passed
+  (126 unit tests, all Protocol integration targets, 42 doctests).
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features
+  --locked -- -D warnings`: passed. `cargo fmt --all -- --check` and
+  `git diff --check`: passed.
+- `mvn -f compat/java-reference/pom.xml verify`: passed; all 37 scenarios,
+  Java fixture drift checks, and Rust/Java cross-decodes passed. Maven verifies
+  the refreshed `lookup.json`, `route.json`, and `heartbeat.json` fixtures.
+- Code/test commit: `cceed2ab feat(protocol): map IgnoreErrorGetter writer flag`.
+  Documentation and execution-log updates are recorded separately.
+- Mapped Fastjson2 `IgnoreNonFieldGetter`: oracle fixtures show it removes the
+  three computed `QueueTimeSpan` timestamp strings, writes `MessageQueue` map
+  keys as quoted compact JSON strings, and quotes numeric route-map keys.
+  Rust applies the getter filter in the shared serializer and the custom body
+  map-key serializer; fixture assertions cover body, route, and heartbeat DTOs.
+- The first Rust compile required qualifying the shared JSON-string writer.
+  The next comparison exposed that `QueryConsumeTimeSpanBody` uses the shared
+  serializer, so filtering only the special body serializer left its three
+  getter fields present. Moved the filter to the shared route serializer and
+  reran the entire Protocol suite successfully.
+- `cargo test -p rocketmq-classic-protocol --all-features --locked`: passed
+  (126 unit tests, all Protocol integration targets, 42 doctests).
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features
+  --locked -- -D warnings`: passed. `cargo fmt --all -- --check` and
+  `git diff --check`: passed.
+- `mvn -f compat/java-reference/pom.xml verify`: passed all 37 scenarios,
+  fixture drift checks, and Rust/Java cross-decodes.
+- Code/test commit: `333e24a8 feat(protocol): map IgnoreNonFieldGetter writer flag`.
+  Compatibility documentation and this log update are recorded separately.
+
+RemotingCommand response/oneway flag helper oracle coverage (2026-10-17)
+
+- Extended the pinned Java runtime fixture to invoke `markResponseType`,
+  `isResponseType`, `markOnewayRPC`, and `isOnewayRPC` for default, oneway,
+  combined, repeated-mark, and unrelated-high-bit cases. The generated values
+  are flags 0, 2, 3, 3, and 259 with matching type and predicates.
+- The fixture comparison confirmed the only change was the nested
+  `remotingEnumMethodCases.commandFlags` entry. Rust assertions compare the
+  Java flag, type, and both predicates and require the fixture case count to
+  match. Code/test commit: `f017a1df`.
+- Passed `cargo test -p rocketmq-classic-remoting --all-features --locked`
+  (108 unit tests, 8 codec tests, 1 fuzz regression, 7 security tests, 107
+  transport tests, and 15 doctests); strict all-target/all-feature Remoting
+  Clippy; focused `remoting_enum_methods_and_command_type_match_invoked_java`;
+  `cargo fmt --all -- --check`; and `git diff --check`.
+- `mvn -o -f compat/java-reference/pom.xml verify` passed all 37 scenarios,
+  fixture drift checks, and Java/Rust cross-decodes. The API crosswalk and
+  release-checklist update are committed separately. Broad P18-V01 remains
+  open.
+
+RemotingCommand suspended-state API parity (2026-10-17)
+
+- Pinned Java 5.5.1 declares public `isSuspended()` / `setSuspended(boolean)`
+  over a false-default, non-wire field. Rust now exposes `suspended` with
+  `is_suspended` / `set_suspended`; a Java-invoked fixture covers default,
+  true, and reset-to-false, and a Rust assertion confirms command-header
+  encoding omits the state and decode resets it to false.
+- Source review of pinned `NettyRemotingAbstract.writeResponse` shows Java uses
+  this state as `LABEL_IS_LONG_POLLING` on RPC latency metrics. The Rust
+  remoting crate has no equivalent RPC metric emission; this observable
+  telemetry flow remains open and is not waived by the API field mapping.
+- Passed `cargo test -p rocketmq-classic-remoting --all-features --locked`
+  (108 unit tests, 8 codec tests, 1 fuzz regression, 7 security tests, 107
+  transport tests, and 15 doctests), strict all-target/all-feature Remoting
+  Clippy, format/diff checks, and `mvn -o -f compat/java-reference/pom.xml
+  verify` (37 scenarios, fixture drift and cross-decodes). Code commit:
+  `811d6dda`; documentation and this log entry are recorded separately.
+
+Pinned RemotingCommand public method surface audit (2026-10-17)
+
+- Extended `RemotingApiSurfaceFixtures` to reflect every declared public
+  constructor and method on Java 5.5.1 `RemotingCommand`. The pinned class has
+  zero public constructors and 57 public methods; the fixture delta contains
+  only these two inventory fields. Rust now pins the source commit, counts,
+  and key method signatures. Code/test commit: `b6129174`.
+- The audit found unmapped or only operation-level coverage for command
+  factories and global request IDs, protocol/header metadata helpers, attached
+  custom-header methods, command timer/callback-list methods, and command
+  `toString`; the long-poll metric flow is also absent. The API crosswalk marks
+  these families OPEN/PARTIAL instead of treating the method-name inventory as
+  completion evidence. Maven `verify` passed with all 37 scenarios, Java
+  fixture-drift checks, and Java/Rust cross-decodes; the focused Rust inventory
+  test, strict Remoting Clippy, format, and diff checks passed.

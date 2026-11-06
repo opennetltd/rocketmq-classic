@@ -1,0 +1,57 @@
+# Phase 18 Fastjson leading-dot and incomplete-exponent parity
+
+- Recorded: 2026-10-24 01:40:51 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Code/test revision: `9333cbc2b8f445036d47db48339c5211c3849e81`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Host: macOS 26.6.1, Apple M5 Max, AArch64, 18 logical CPUs
+- Rust: 1.85.0
+- Heartbeat fixture SHA-256:
+  `0e32da4ec9a0c121617bb8f1684e2f9ddc9a568bfe992eb3ce3be6aa8c1b3e76`
+
+## Compatibility change
+
+- Added nine pinned Java heartbeat DTO cases for positive leading-dot integer
+  tokens, String-field rejection, explicit-plus acceptance, and incomplete
+  exponent conversions. The corpus now has 1,111 cases.
+- Rust preserves leading-dot token provenance through typed DTO decoding so
+  numeric fields can accept `.5` while String fields reject it. Explicit `+.5`
+  and negative `-.5` keep their Java behavior. General `serde_json::Value`
+  parsing continues to decode `.5` as a number.
+- Incomplete `1e`, `1e+`, `1e-`, suffix forms, and trailing-dot exponent forms
+  normalize to the observed numeric prefix and Java Float/Double String form.
+- This closes these Fastjson token branches only. Broad P18-V01
+  source/API/settings/input/error/control-flow and reverse-export
+  reconciliation remains PARTIAL.
+
+## Verification
+
+- Focused Fastjson parser tests and the 1,111-case heartbeat DTO differential —
+  passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` —
+  passed.
+- `cargo test --workspace` and `cargo test --workspace --all-features` —
+  passed sequentially, including doctests.
+- `mvn -o verify` from `compat/java-reference` — passed: 37 scenarios, fixture
+  drift checks, 11 message fixtures, 106 typed headers, and 19 typed bodies
+  cross-decoded.
+- Differential comparator self-test and 37-scenario manifest validation —
+  passed.
+- Workspace metadata/package-license/dependency check — passed. Offline package
+  listings for all seven product crates include `Cargo.toml`, `LICENSE`, and
+  `NOTICE`.
+- Offline deterministic race/leak smoke — 20 cases × 3 repetitions passed.
+  Fuzz smoke — 163 frame seeds, 11 message seeds, 2,784 bounded mutations,
+  245 frame decodes, and 192 message decodes passed.
+- Windows GNU workspace `cargo check` and strict all-target/all-feature Clippy
+  passed as compile-only evidence.
+- Release facade examples and fixed-input offline benchmark passed. Benchmark
+  sample is recorded in
+  `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`; observations are
+  machine-specific and have no performance threshold.
+
+Native Windows runtime and current-revision remote Ubuntu CI remain unverified.
+Phase 19 Broker/Docker validation is separate. No push or remote CI was run.
+The four protected Phase 19 worktree items remain unchanged and unstaged.

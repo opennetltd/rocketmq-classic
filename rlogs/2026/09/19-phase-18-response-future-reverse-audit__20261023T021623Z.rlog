@@ -1,0 +1,24 @@
+# Phase 18 ResponseFuture pinned-source reverse audit — 2026-10-23T02:16:23Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Rust revision: `0f50eaed`.
+
+## Audit
+
+Read the pinned Java `ResponseFuture.java` and `SemaphoreReleaseOnlyOnce.java`
+from the exact source commit, then compared them with the Rust implementation,
+fixture, and Phase 3/6 crosswalks. Java's two constructors and 20 public
+methods are present in `fixtures/remoting/response-future-api.json`; Rust
+represents the constructor overloads with nullable owned values and keeps the
+transport-owned permit constructor private. The callback/result ordering,
+timeout comparison, setter-versus-latch behavior, wait/put response behavior,
+and release-once semantics have named fixture-backed regressions. Existing
+compatibility notes cover only JVM-thread interruption and unstable Java
+identity text as runtime/diagnostic differences. No new source/API mismatch
+was found in this slice.
+
+This closes only the ResponseFuture reverse-source slice. Broad P18-V01
+source/API/settings/input/error/control-flow and reverse-export reconciliation
+remains PARTIAL; remote Ubuntu CI, native Windows runtime, and Phase 19
+Broker/Docker evidence remain open.

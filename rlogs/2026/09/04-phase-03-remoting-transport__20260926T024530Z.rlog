@@ -1,0 +1,30 @@
+# Phase 3 execution log — continuation 2026-09-26T024530Z
+
+- Plan: `plan/2026/09/04-phase-03-remoting-transport.md` and paired Traditional Chinese plan; neither plan file was modified.
+- Goal: continue automatable Java 5.5.1 source mapping without accepting Phase 3 or starting Phase 4.
+
+## Source review and implementation
+
+- Reviewed Java `NettyRemotingClient.invokeImpl` GO_AWAY handling and `RemotingCommand.createRequestCommand`. Java reconstructs the retry request as a fresh request: code and ext fields/body are carried forward, while the new command gets Java defaults for language/version/flag/remark/opaque and serialization configuration.
+- Rust previously cloned the original command, carrying the request flag and remark into retry. Changed GO_AWAY retry to construct a fresh `RemotingCommand` with Java language/default fields, preserving code/ext fields/body. Hooks remain suppressed on retry and the original deadline/admission ownership stays in force.
+- Strengthened `p3_go_away_retries_once_on_a_new_connection` to inspect the retried command's Java language, reset flag/remark, preserved ext fields/body, and verify only one outbound hook call.
+- Updated README, ADR-0001, Java compatibility summary and Phase 3 inventory to describe tested retry reconstruction and leave ChannelWrapper/reconnect edge behavior marked PARTIAL.
+- Full English and Traditional Chinese Phase 3 plans were re-read. No plan edits. Phase 3 remains NOT ACCEPTED; Phase 4 remains blocked. P3-V04 remains deferred to Phase 19.
+
+## Validation
+
+- Targeted GO_AWAY retry test passed.
+- `cargo fmt --all --check` — PASS.
+- `cargo test --workspace --locked --offline` — PASS: 11 common + 9 protocol + 1 protocol fixture + 11 remoting unit + 4 codec + 51 transport tests (87 unit/integration total), plus doc tests.
+- `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings` — PASS.
+- `python3 scripts/check-workspace-metadata.py` — PASS.
+- `python3 tests/differential/compare.py --self-test` — PASS.
+- `git diff --check` — PASS.
+- One parallel workspace test run initially exposed an existing scheduling-sensitive assertion in `p3_expired_async_callback_retains_request_and_timeout_metadata`; it expected the second callback event immediately after observing the first. Changed the test to wait (bounded) for the callback's second event, then reran the full gates successfully.
+- No Maven, live Broker, Docker or Phase 19 validation was run. Java reference checkout was read-only and unchanged.
+
+## Remaining status
+
+- Remaining known source-mapped issues include error/cause taxonomy and timeout races, Java executor/event lifecycle and thread behavior, oneway post-return failure visibility, exact ChannelWrapper/GO_AWAY recovery, NameServer scan/reconnect behavior, hook equality semantics, unmapped TLS properties/reload and encrypted-key handling, and framework-only Netty APIs/controls. These are documented PARTIAL/NOT EQUIVALENT blockers, not waived.
+- P3-V01/V02/V03/U01 have offline automated coverage; this continuation does not assert exhaustive acceptance. P3-V04 stays `PENDING_PHASE_19`.
+- No commit created in this continuation; code and docs remain for review/commit independently. No Phase 4 work was started.

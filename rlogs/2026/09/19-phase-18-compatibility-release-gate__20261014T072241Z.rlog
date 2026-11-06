@@ -1,0 +1,34 @@
+# Phase 18 compatibility and release-gate execution
+
+Session started: 2026-10-14T07:22:41Z
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Branch: phase/19-phase-18-compatibility-release-gate
+Base revision: 33d8988ed2156266b01798a28a2cf599907e775e
+
+## Initial audit
+
+- Re-read the coding skill and Rust workflow; plan files remain read-only.
+- Confirmed Phase 15, 16, and 17 branches exist; current Phase 18 branch is based on Phase 17 and has the Producer offline gate evidence through f3d5b44d.
+- Worktree has an existing uncommitted update to docs/compatibility/PHASE_6_REQUIREMENT_AUDIT.md; preserve and reconcile it before committing.
+- Phase 18 audit still says P18-V01 PARTIAL and has no current-revision GitHub Ubuntu workflow result. The local P18-V02 rerun is recorded passing on f3d5b44d.
+- Pinned Java 5.5.1 source shows DefaultMQProducerImpl.shutdown(boolean) calls MQClientInstance.unregisterProducer(current facade group); MQClientInstance removes by that group key. Rust Producer::shutdown currently unregisters the original GroupLease. This is a source-confirmed non-manual behavior mismatch; implement a fixture-backed differential before changing lifecycle behavior.
+- P15 matrix currently claims owner-scoped pending-request drain on producer shutdown. Source review of RequestFutureHolder.shutdown(DefaultMQProducerImpl) shows it only removes the producer from producerSet and stops the global timeout scanner when the set becomes empty; it does not remove pending requests or notify callbacks. Track this as a separate source-confirmed P15/P18 parity finding; do not conceal it as an accepted difference.
+
+## Work in progress
+
+No implementation change made yet. Next: build a pinned-Java invocation for producer shutdown after group mutation, then add matching Rust lifecycle coverage and update the relevant compatibility evidence.
+
+## Follow-up — Producer shutdown and request-future lifecycle (2026-10-14)
+
+- Implemented the source-confirmed Java 5.5.1 shutdown behavior: public Producer shutdown unregisters by the current nullable group, leaves RUNNING on null-group failure, and group-key removal leaves pending request/reply entries alone. Added the invoked Java `ProducerLifecycleFixtures` oracle, `fixtures/producer/lifecycle.json`, Rust lifecycle/pending tests, and Maven drift verification. Fixture SHA-256: `9d5063e8ae538f7da3f957c874dfb95dd81a6a85bf113a947a796de1815001d8`.
+- Updated `docs/compatibility/PHASE_7_PRODUCER_MATRIX.md`, `PHASE_6_API_CONFIG_MAP.md`, `PHASE_15_REQUEST_REPLY_MATRIX.md`, `PHASE_6_REQUIREMENT_AUDIT.md`, and `docs/release-checklist.md`. Kept this log append-only; the initial work-in-progress note above records the earlier state.
+- PASS: `cargo test --workspace --locked` and `cargo test --workspace --all-features --locked` (sequential final-worktree rerun). PASS: `cargo test -p rocketmq-classic-producer --locked` (132 unit tests plus integration/doc targets) and `cargo test -p rocketmq-classic-core --lib --locked` (156 tests).
+- Clippy first identified three `redundant_pattern_matching` lints in new tests. Replaced those `matches!(..., Err(_))` assertions with `.is_err()`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` then passed.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, fixture drift checks and Java/Rust cross-decodes); `python3 tests/differential/compare.py --self-test`; `python3 tests/differential/compare.py --validate-manifest` (37 scenarios); `python3 scripts/check-workspace-metadata.py`.
+- PASS: `bash tests/stress/run-offline-smoke.sh` (16 race/leak cases × 3); `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` (104 frame seeds, 10 message seeds, 1,824 mutations); `cargo build -p rocketmq-classic --examples --release --locked`; `cargo bench --workspace --no-run --locked`; `cargo metadata --locked`; `cargo package --workspace --list --locked --allow-dirty` (seven workspace crates); `cargo fmt --all -- --check`; `git diff --check`.
+- No Docker or live Broker was used. P18-V01 is still PARTIAL: per-overload input/branch mapping, Java-side reverse exports, inherited/trait APIs, and broad source/input reconciliation remain local work. A current GitHub Ubuntu CI result is still missing. Phase 19 local Docker scenarios and deployment-specific owner validation remain outstanding; package version confirmation and registry dependency resolution also remain pre-publication work.
+
+## Record addendum — revision and metadata command (2026-10-14)
+
+- Implementation/fixture commit: `9834d96d` (`fix(producer): match Java shutdown lifecycle`).
+- The workspace metadata parse was run as `cargo metadata --locked --format-version 1 --no-deps | python3 -c 'import json,sys; d=json.load(sys.stdin); print("workspace metadata parsed: %s packages" % len(d["packages"]))'`; it reported seven packages. This clarifies the shorthand `cargo metadata --locked` entry above.

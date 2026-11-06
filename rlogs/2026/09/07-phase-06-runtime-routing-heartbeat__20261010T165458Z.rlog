@@ -1,0 +1,5 @@
+# Phase 6 execution session — 2026-10-10T16:54Z
+
+- Audited the pinned Java `MQClientInstance.start()` behavior when the retained `namesrvAddr` changes after runtime construction. The forked `RuntimeStartMutationProbe` records two directions: null-to-configured skips discovery; configured-to-null attempts discovery once while preserving the constructor-time active address list.
+- Strengthened the native null-to-configured differential in `crates/rocketmq-classic-core/tests/config.rs` with a counting `TopAddressing` provider. The test now proves zero discovery calls, in addition to checking that the constructor-time empty active address list remains unchanged. The opposite mutation direction already has a counting native provider and verifies one call.
+- Validation: both `start_*` config integration tests pass; strict Clippy for the config test target passes; `cargo fmt --all -- --check` and `git diff --check` pass. Pinned offline Maven verify also passed during the audit, including the `RuntimeStartMutationProbe` fixture gate and manifest22. No production or Java fixture changed.

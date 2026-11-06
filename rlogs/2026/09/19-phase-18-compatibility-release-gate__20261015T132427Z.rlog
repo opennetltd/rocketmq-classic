@@ -1,0 +1,18 @@
+# Phase 18 Remoting configuration inventory reconciliation — 2026-10-15T13:24:27Z
+
+- Reconciled the Phase 3 Remoting inventory with the live
+  `enableReconnectForGoAway` adapter in code commit `f506067d`. Java reads the
+  retained setting when handling GO_AWAY; Rust reads its atomic setting at the
+  same response boundary. The `p3_go_away_reads_live_setting_after_client_start`
+  regression and Java `RemotingLiveConfigProbe` are included in the current
+  server-free gate run on `9881c230`.
+- Updated historical notes to identify all three remoting settings now covered
+  by live adapters: sync timeout socket-close, GO_AWAY reconnect, and callback
+  executor disable. Remaining Java-mutable `ClientConfig` read-timing rows
+  still require P18-V01 reconciliation.
+- Documentation-only change. PASS: `cargo fmt --all -- --check` and
+  `git diff --check`; no source code or plan changed.
+- This closes the GO_AWAY setting inventory row only. Broad P18-V01, current
+  GitHub Ubuntu address-profile evidence/P18-V04, Phase 19 local Docker/Broker
+  automation, and release-version/registry checks remain open.
+- No push, tag, publication, or Broker validation.

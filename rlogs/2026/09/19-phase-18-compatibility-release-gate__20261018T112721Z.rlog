@@ -1,0 +1,34 @@
+# Phase 18 POP public helper parity — 2026-10-18T11:27:21Z
+
+- Branch: `phase/19-phase-18-compatibility-closure`; base revision `cac0f3e6`.
+  Oracle remains Java client 5.5.1 pinned to source marker
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- Source audit found remaining public helper behavior on the POP headers:
+  `PopMessageRequestHeader.getQueueId()` maps all negative values to `-1`,
+  `getOrder()` preserves nullable Boolean while `isOrder()` maps null to false,
+  and both POP header classes override `toString()` with a selected field list.
+- Added Rust equivalents for those helpers and the exact Java-format string
+  output. Expanded the invoked Java fixture with default/populated string output,
+  negative queue ID, and null/true order cases. Fixture SHA-256:
+  `5876a0b734633ff2488d5487df7104fb35ee350b970e1556b0e8c881346a3150`.
+- The first strict Protocol Clippy run rejected `assert_eq!(bool, false)` in
+  the new regression. Replaced it with `assert!(!...)`; the focused fixture
+  differential and strict Protocol Clippy then passed.
+- Verification on macOS ARM64 / Rust 1.85.0: Protocol all-feature unit,
+  integration, and doctests PASS; focused optional-header Java fixture test
+  PASS after the lint correction; strict all-target/all-feature Protocol
+  Clippy PASS; `mvn -o -q -f compat/java-reference/pom.xml verify` PASS (37
+  scenarios, fixture checks, 66 typed-header and 15 typed-body cross-decodes);
+  `cargo fmt --all -- --check` and `git diff --check` PASS. Maven emitted
+  existing JDK Unsafe/reflection warnings and exited 0.
+- This closes only the named POP helpers. The broad P18-V01 API/settings/input/
+  error/flow/reverse-export audit, complete P18-V02 supplementary gates, final
+  P18-V03 package/provenance and pre-publication checks, current-revision P18-V04
+  Ubuntu/native Windows evidence, and Phase 19 local scenarios/profiles remain
+  open. Existing Phase 19 README/runner changes remain unstaged and untouched.
+
+# POP response header reflection defaults — 2026-10-18T11:40:10Z
+- Java fixture extended for both POP response headers across fast/reflection hints, absent/malformed/overflow primitive values, valid Arabic-Indic digits, and encoded defaults. Fixture SHA-256: `1a6bd80ad46c645132412e217517de98e7242e88d457034215c921aca4a4e23f`.
+- Rust now defaults missing/invalid primitive values to zero and classifies those fields as optional in the header validation matrix. The first Protocol run exposed the stale matrix's required-field expectation and empty-value behavior; after correcting both, `cargo test -p rocketmq-classic-protocol --all-features --locked` passed (143 unit tests, all integration targets, 51 doctests).
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features --locked -- -D warnings` passed. `mvn -o -q -f compat/java-reference/pom.xml verify` passed the 37-scenario manifest, Java fixture drift checks, 66 typed-header and 15 typed-body cross-decodes. `cargo fmt --all -- --check` and `git diff --check` passed.
+- Code commit: `f5a924fa` on new branch `phase/18-phase-18-compatibility-closure`. The broad P18-V01 audit, full-workspace current-revision P18-V02 supplement, P18-V03/V04 final checks and Phase 19 local runners/profiles remain open. Existing Phase 19 runner changes were not staged or included.

@@ -1,0 +1,33 @@
+# Phase 18 current-tree server-free gate
+
+- Recorded: 2026-10-24 00:18:52 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Code/test revision: `23ef8749456fe53dc1c036a60787a35fb941bed7`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Host: macOS 26.6.1, Apple M5 Max, AArch64, 18 logical CPUs
+- Rust: 1.85.0; Rustdoc toolchain: nightly
+- Cargo target directory: `/tmp/rocketmq-phase18-target`
+
+## Verification
+
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — passed.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo test --offline --locked --workspace` — passed, including doctests.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo test --offline --locked --workspace --all-features` — passed, including doctests. Default and all-feature suites ran sequentially.
+- `mvn -o -f compat/java-reference/pom.xml verify` — passed: 37 scenarios, fixture drift, 11 message fixtures, 106 typed headers, and 19 typed bodies cross-decoded.
+- `python3 tests/differential/compare.py --self-test` — passed; `--validate-manifest` validated 37 scenarios.
+- `python3 scripts/check-workspace-metadata.py` — passed metadata, package-license, and dependency-direction checks.
+- Offline `cargo package --list --offline --locked -p <crate>` checks for all seven product crates — each includes `LICENSE` and `NOTICE`.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target CARGO_NET_OFFLINE=true bash tests/stress/run-offline-smoke.sh` — passed 20 cases × 3 repetitions.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo run --offline -p rocketmq-classic-remoting --example fuzz_smoke --locked` — passed 163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes, and 192 message decodes.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo build --offline --locked -p rocketmq-classic --examples --release` — passed.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo bench --offline --locked -p rocketmq-classic --bench offline` — passed; results are recorded in `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo check --offline --locked --workspace --all-targets --all-features --target x86_64-pc-windows-gnu` and the matching strict Clippy command — passed as compile-only evidence.
+- Current Rustdoc export names (crate-root excluded): Common 439, Consumer 460, Core 798, Producer 361, Protocol 1,524, and Remoting 337.
+
+Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export
+reconciliation remains open. Native Windows runtime and current-revision
+remote Ubuntu CI remain unverified. Phase 19 Broker/Docker validation remains
+separate. No push or remote CI was run; the four protected Phase 19 worktree
+paths remain unchanged and unstaged.

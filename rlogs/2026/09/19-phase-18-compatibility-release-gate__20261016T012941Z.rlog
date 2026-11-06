@@ -1,0 +1,33 @@
+# Phase 18 current-revision server-free gate — 2026-10-16T01:29:41Z
+
+Code revision: `fd809302` (`fix(api): complete phase facade type exports`)
+Environment: macOS 26.6.1 arm64; Rust 1.85.0 / Cargo 1.85.0; Maven 3.10.0 / Java 27.
+
+- `TZ=UTC cargo test --workspace --locked` — PASS, including all integration
+  and doctests.
+- `TZ=UTC cargo test --workspace --all-features --locked` — PASS.
+- `cargo check --workspace --all-targets --all-features --locked` — PASS.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+  — PASS.
+- `mvn -f compat/java-reference/pom.xml verify` — PASS; 37 scenarios,
+  invoked Java fixture checks, and Java/Rust cross-decodes.
+- Differential comparator `--self-test` and `--validate-manifest` — PASS;
+  37 scenarios.
+- `bash tests/stress/run-offline-smoke.sh` — PASS; 16 race/leak cases × 3.
+- Remoting fuzz smoke — PASS; 105 frame seeds, 11 message seeds, 1,856 bounded
+  mutations, 146 frame decodes, and 113 message decodes.
+- Release facade examples and workspace benchmark compilation — PASS.
+- Locked no-deps/full Cargo metadata, `scripts/check-workspace-metadata.py`, and
+  all seven `cargo package --list --locked --allow-dirty` checks — PASS. Metadata
+  reports 7 workspace packages, 215 total, and 208 registry packages with
+  license metadata; all seven packages include LICENSE and NOTICE.
+- `TZ=Asia/Taipei cargo test -p rocketmq-classic-core --all-features --locked unique_id::tests::` — PASS (4 tests).
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+
+This closes the server-free P18-V02 gate on `fd809302`. Broad bidirectional
+P18-V01 source/API/input/error/control-flow/reverse-export reconciliation,
+current-revision GitHub Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker
+automation/scenarios, and pre-publication registry/version resolution remain
+open. Owner-run deployment topology, credentials/CA, and production checks
+remain manual Phase 19 items. No Docker, live Broker, push, tag, or publication
+was performed.

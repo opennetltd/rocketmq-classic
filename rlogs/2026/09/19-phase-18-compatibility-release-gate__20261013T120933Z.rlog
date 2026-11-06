@@ -1,0 +1,11 @@
+# Phase 18 execution session — 2026-10-13T12:09:33Z
+
+- Continued P18-V01's Java 5.5.1 `DefaultMQPullConsumerImpl` raw accessor audit. Added invoked Java evidence for the public `PullAPIWrapper` getters, suggested broker selection, mutable hook list, hook execution, nonnegative random helper, and `get/setPullAPIWrapper` identity/null behavior.
+- Rust now returns `None` before startup, uses shared `Arc` identity for wrapper replacement, creates a fresh unit-aware wrapper during startup as Java does, and shares the registered hook list with that wrapper. Added Rust equivalents for the wrapper's broker selection getters/setters, suggested-node mutation, hook-list alias, direct hook execution, and random helper. Normal pull processing continues through the retained wrapper.
+- Initial compilation rejected a let-chain unsupported by pinned Rust 1.85; rewrote it as nested `if`. Initial strict Clippy flagged the shared hook-list signature complexity; factored it into public `SharedFilterMessageHooks` and reran checks.
+- PASS: focused accessor and wrapper differential tests.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (177 unit tests and all consumer integration/doc targets).
+- PASS: `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and Java fixture drift checks).
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- No Docker or live Broker was used. `get/setServiceState`, the public `RebalanceImpl` surface, the remainder of the nested wrapper public-method map, broad Phase 6 bidirectional reconciliation, and P18-V01 remain open.

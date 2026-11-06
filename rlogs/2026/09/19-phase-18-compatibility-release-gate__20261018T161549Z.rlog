@@ -1,0 +1,28 @@
+# P18-V01 LockBatchResponseBody API inventory — 2026-10-18T16:15:49Z
+
+- Branch: phase/18-phase-18-compatibility-closure.
+- Closed one P18-V01 DTO API slice for Java 5.5.1 LockBatchResponseBody.
+  The Rust lock_okmq_set field is private, with core and test callers using the
+  accessor and the Remoting fixture generator using the setter. The Java
+  reflection fixture records the public no-argument constructor, the declared
+  getLockOKMQSet/setLockOKMQSet signatures, and no public fields. Rust checks
+  that inventory and an external compile-fail example guards field privacy.
+- Regenerated fixtures/runtime/lookup.json through the pinned Maven harness.
+  SHA-256: bf612d3a20c17748bd2026256383e92dfb8f0dcde455677583036fcdbc92543c.
+- Code and fixture commit: 43a7cebb
+  (fix(protocol): match lock response DTO visibility).
+- Passed: cargo test -p rocketmq-classic-protocol -p rocketmq-classic-core
+  --locked --offline (including integration and doctest targets; 60 Protocol
+  doctests); strict all-target/all-feature Clippy for Protocol, Core, and
+  Remoting; cargo check -p rocketmq-classic-remoting --example
+  generate_fixtures --locked --offline; Maven offline verify (37 scenarios,
+  fixture checks, 66 typed-header and 15 typed-body cross-decodes);
+  cargo fmt --all --check; git diff --check.
+- Broad P18-V01 source/API/settings/input/error/flow reconciliation and Rust
+  reverse-export audit remain open. The P18-V02 full workspace server-free
+  gate must be refreshed after this change. P18-V03 provenance/version/
+  registry preflight, current Ubuntu/native Windows P18-V04 evidence, and
+  Phase 19's missing local scenario runners/profiles remain open.
+- Existing Phase 19 README/runner changes were left unstaged and unmodified.
+  The external Java checkout was not modified. No plan, Broker/Docker state,
+  remote CI, package publication, release tag, or push changed.

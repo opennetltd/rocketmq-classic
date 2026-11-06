@@ -1,0 +1,25 @@
+# Phase 3 remoting transport work log — 2026-09-28 01:12:17 UTC
+
+## Scope and gate
+Continued the local Java 5.5.1 / Rust transport audit. Phase 3 remains unaccepted and Phase 4 remains blocked. P3-V04 remains a Phase 19 handoff, not a Phase 3 local gate.
+
+## Findings and changes
+- Source comparison of `NettyRemotingAbstract.processRequestCommand` with Rust inbound dispatch found a timing discrepancy: Java performs exact/default processor lookup and `rejectRequest()` on the inbound handler path before executor submission; Rust previously performed those steps only after its inbound queue was consumed. A processor-table change in that interval could redirect an already-received request.
+- Rust now prepares each decoded request at the connection dispatch boundary: no-processor/reject outcomes are handled there, and accepted requests carry a snapshot of their selected processor/executor through the unbounded worker queue. Default-processor fallback remains part of lookup. Added client unit `inbound_request_keeps_processor_selected_at_dispatch_time` to assert replacement cannot redirect queued work. Updated existing queue/shutdown tests to model already-accepted prepared work.
+- Updated `docs/compatibility/PHASE_3_REMOTING_INVENTORY.md` with source behavior and test evidence.
+- Preserved historical untracked `rlogs/2026/09/04/phase-03-remoting-transport__20260927T085045Z.rlog` unchanged. No plan files were modified.
+
+## Validation
+- Targeted processor snapshot test passed.
+- First workspace test pass exposed test seam setup errors (raw synthetic inbound messages had no snapshotted registration) and a dispatch-call-site adjustment; corrected the seam so production enqueues prepared requests and the synthetic shutdown/backlog cases pass prepared registrations.
+- `cargo test --workspace --offline -- --test-threads=1` — passed: common 11, protocol 9, phase-one fixture 1, remoting unit 51, codec 4, transport 77; doc tests passed.
+- `cargo clippy --workspace --all-targets --offline -- -D warnings` — passed.
+- `cargo fmt --all --check` — passed.
+- `git diff --check` — passed.
+- `python3 scripts/check-workspace-metadata.py` — passed.
+- `python3 tests/differential/compare.py --self-test` — passed.
+
+## Remaining work / blockers
+- Bidirectional public API audit and individual dispositions for the many inventory `PARTIAL` rows remain open; do not infer accepted differences from Tokio/JVM wording without row-specific evidence and owner decision.
+- Continue scan/executor, callback/event, watermarks, TLS loading timing, processor remark/error taxonomy and GO_AWAY/close/shutdown interleaving audit; run final review/gates after subsequent changes.
+- Re-read English and Traditional Chinese plans during final gate review. Phase 3 is not accepted, Phase 4 is not started, and P3-V04 remains pending Phase 19.

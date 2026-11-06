@@ -1,0 +1,9 @@
+# Phase 6 execution session — 2026-10-10T16:10Z
+
+- Continued public manager-removal boundary reconciliation on `07-phase-06-runtime-routing-heartbeat`; the requested Java source checkout is absent here, so the oracle uses pinned RocketMQ 5.5.1 artifacts.
+- Actual pinned `MQClientManager.removeClientFactory(null)` and `removeClientFactory(null, instance)` calls both throw `NullPointerException`. Java oracle/fixture commit: `33eaeafc`.
+- Rust adds `remove_client_factory_by_id_nullable` and `remove_client_factory_nullable`; null IDs map to typed `InvalidRoute` before table mutation. `nullable_manager_removal_overloads_match_invoked_java_null_key_failures` checks both Java fixture outcomes and confirms the existing runtime remains mapped. Implementation/test commit: `42ecbba5`.
+- `fixtures/runtime/client-config.json` SHA-256: `d07554187630871a570e4b26eb68963510eccc492e7933d049a7c3182ee356c2`.
+- Validation passed: focused manager-table regression; `cargo test --workspace --all-targets --locked`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; pinned offline Maven verify (22 scenarios, fixture drift and Java cross-decodes); comparator self-test; manifest validation (22 scenarios); formatting and diff checks.
+- Updated the Phase 6 API map and requirement audit. This closes null-ID behavior for the two manager removal overloads only; broader Phase 6 source/API/input/reverse-export reconciliation remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+- Documentation/log commit: pending.

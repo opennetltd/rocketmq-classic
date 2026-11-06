@@ -1,0 +1,7 @@
+# Phase 18 Common Message property whitespace input — 20261015T011131Z
+
+- Pinned Java 5.5.1 `Message.putUserProperty` uses `String.trim()`, which removes only code points U+0000 through U+0020. Rust's Unicode-wide `str::trim()` rejected values Java accepts.
+- Updated the standard and nullable Rust user-property validation paths to match Java trimming. The invoked Java `messagePublicApi` fixture and Rust test now cover a non-breaking-space key and em-space value being accepted, plus ASCII control/space-only key rejection.
+- Updated Phase 6/8 input maps, requirement audit, release checklist, and the regenerated message fixture. Fixture SHA-256: `24c1d2483ae585b370dc8f1d86ce8297a11c87cb5a47aa70f2bead8ed18b19f9`.
+- PASS: `cargo test -p rocketmq-classic-common --all-features --locked` (21 unit tests, 8 integration tests, 11 doctests); `cargo clippy -p rocketmq-classic-common --all-targets --all-features --locked -- -D warnings`; `mvn -o -q -f compat/java-reference/pom.xml verify` (37 scenarios, fixture drift and Java/Rust cross-decodes); `cargo fmt --all -- --check`; `git diff --check`.
+- This closes the Java `String.trim()` input slice only. Broad Common/P18-V01 reconciliation remains open. The full P18-V02 race/fuzz/example/benchmark/metadata/package-content gates still need a final-revision rerun; current-revision GitHub Ubuntu evidence and Phase 19 Docker/Broker scenarios remain outstanding. No plan file changed.

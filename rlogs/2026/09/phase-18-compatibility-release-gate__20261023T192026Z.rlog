@@ -1,0 +1,59 @@
+# Phase 18 compatibility release gate — 2026-10-23 19:20:26 UTC
+
+Base revision: `875e47d9` on `phase/18-phase-18-compatibility-closure`.
+Implementation changes are committed independently; this append-only record
+refreshes local P18-V02 evidence and records a narrow P18-V01 correction.
+
+## P18-V01 findings
+
+- Pinned RocketMQ 5.5.1 `NettyRemotingClient.java` source SHA-256:
+  `b9822a1abb0710070de051e7f94e0ba5facbf3284f3ae09977de14aee952476d`.
+  `scanAvailableNameSrv()` submits NameServer probes in configured order to a
+  4-core/10-max executor with a 32-entry queue; the default `AbortPolicy`
+  rejects and aborts the remainder of the scan pass at saturation.
+- Pinned `ThreadUtils.java` source SHA-256:
+  `3aef35aa3f9f42eeb8da63e89f0a47b1eecfbe0e13ca2e460cf6be520a48d479`.
+  Rust now submits only the configured-order prefix within its 42-slot bound,
+  starts later ticks at the first address, and applies completed tasks before
+  recalculating capacity. The remoting test pins prefix and restart ordering.
+- Unix offset store writer leases now use non-inherited POSIX `fcntl(F_SETLK)`
+  record locks with explicit unlock on drop. The lock file remains linked to
+  avoid replacement-inode races. A subprocess regression verifies exclusion
+  while another process owns a store and acquisition after drop. The focused
+  test passed; three consecutive parallel all-feature Consumer library suites
+  passed (264 tests each).
+
+## Verification
+
+- `cargo test --workspace --locked --quiet` — passed sequentially.
+- `cargo test --workspace --all-features --locked --quiet` — passed
+  sequentially.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- `bash tests/stress/run-offline-smoke.sh` — passed 20 cases × 3.
+- `cargo run --offline --locked -p rocketmq-classic-remoting --example
+  fuzz_smoke` — passed 163 frame seeds, 11 message seeds, 2,784 bounded
+  mutations, 245 frame decodes, and 192 message decodes.
+- `python3 tests/differential/compare.py --self-test` and
+  `--validate-manifest` — passed; all 37 scenarios validated.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — passed: 37 scenarios,
+  Java 5.5.1 runtime probes, fixture drift checks, 11 message fixtures, 106
+  typed headers, 19 typed bodies, and Java/Rust cross-decodes.
+- Workspace metadata/license/dependency checks, release example build, and
+  offline benchmark passed. Benchmark sample is appended to
+  `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`; it sets no
+  threshold.
+- Windows GNU all-target/all-feature workspace `cargo check` and strict
+  Clippy passed as compile-only evidence.
+- Workspace Rustdoc JSON generation passed. Inventory counts remain
+  name-level evidence, not behavioral proof.
+
+## Remaining scope
+
+This closes the NameServer scan admission/order mismatch and strengthens Unix
+offset writer lock release only. Broad P18-V01 source/API/settings/input/error/
+control-flow and reverse-export reconciliation remains PARTIAL. Native Windows
+runtime, current-revision remote CI, and Phase 19 Broker/Docker scenarios were
+not run. No plan was edited, no push or remote CI was run, and the four
+pre-existing Phase 19 paths remain untouched and unstaged.

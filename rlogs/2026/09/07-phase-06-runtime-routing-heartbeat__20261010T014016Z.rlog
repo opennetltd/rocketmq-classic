@@ -1,0 +1,9 @@
+Session: 2026-10-10T01:40:16Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Registered no-dispatch Lite request correction: invoked pinned Java `ClientRemotingProcessor.processRequest` with request code 200073. Java returned null because the seven-code switch falls through to `aconst_null`; the request is registered by `MQClientAPIImpl` but is not dispatched. Fixture `fixtures/runtime/inbound-routing.json` records `responsePresent: false`, SHA-256 `85e0a87778cdfbca475d540e364c03352f017bda161e8773fea25692e2d837e4`. Oracle/fixture `323e7ecb`. The new native differential first failed (`09d7acb2`), showing a Rust unsupported response where Java returns null. Rust now returns `None` for this sole registered no-dispatch code; the scripted loopback test checks wire silence while preserving explicit errors for the seven dispatched inactive slots. Fix `ad411223`; matrix/audit `b53494ee`; Maven verification audit `68d1e430`.
+
+Verification passed: direct `javac/java` fixture generation and `--verify`; `cargo test -p rocketmq-classic-core --lib runtime::inbound::tests --locked` (8 passed); `cargo test -p rocketmq-classic-core --test inbound --locked` (2 passed with local socket access); strict core/all-target/all-feature Clippy; `cargo fmt --all -- --check`; `git diff --check`; and `mvn -o -q -Dmaven.repo.local=/private/tmp/p6-maven-repository -f compat/java-reference/pom.xml verify` (22 scenarios and Java cross-decodes). The default sandbox denied the loopback test and Java local-interface probe; both gates passed when rerun with local access. The home Maven cache stayed untouched; verification used the temporary cache copy.
+
+This closes the source-registered/no-dispatch response mismatch only. Broader Phase 6 source/API/input reconciliation remains open and P6-V04 stays assigned to Phase 19.

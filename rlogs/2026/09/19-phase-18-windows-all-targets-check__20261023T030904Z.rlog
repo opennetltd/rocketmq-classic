@@ -1,0 +1,11 @@
+# Phase 18 Windows GNU cross-target all-targets check
+# Recorded: 2026-10-23 03:09:04 UTC
+# Code revision: 9fdea903584f893158a4ab1d5622c36b27fbf910
+# Validation worktree HEAD: 10b61e7f72bef8785f15d7b1338061a69079323f
+
+`CC_x86_64_pc_windows_gnu=/opt/homebrew/bin/x86_64-w64-mingw32-gcc cargo
+check --offline --workspace --all-targets --all-features --locked --target
+x86_64-pc-windows-gnu` — PASS. This compiles the workspace's library, test,
+example, and benchmark targets for Windows GNU, including the Phase 18
+ProcessQueue setting and `sendSmartMsg` regressions. It does not execute the
+tests on Windows. The native Windows runtime check remains open.

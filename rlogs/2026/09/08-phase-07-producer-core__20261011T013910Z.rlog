@@ -1,0 +1,73 @@
+Phase 7 execution session: 2026-10-11T01:39:10Z
+Plan: plan/2026/09/08-phase-07-producer-core.md
+Branch: phase/08-phase-07-producer-core (based on accepted Phase 6 commit f0626dc9)
+Reference: Java 5.5.1 tag commit efa1be59d6fc747ad220f036c86030f05f0419f9; server baseline 5.3.4.
+
+Change in progress: add producer/config/facade crates; implement Java producer defaults, group/topic/message preflight validation, and runtime producer registration with identity lease cleanup. Added offline Java defaults/validation fixture generator and Rust differential tests. Source review found `Validators.checkTopic` applies the 127 UTF-16-unit limit even to retry topics; validation follows that invoked producer path. Rust settings use signed i32 where Java uses int so negative setter values remain representable.
+
+Commands/results so far:
+- `cargo fmt --all`: passed.
+- `cargo test -p rocketmq-classic-producer --offline`: 6 tests passed after the Java fixture was checked in.
+- `cargo build -p rocketmq-classic --examples --locked`: passed before the fixture test dependency was added; rerun after lockfile update.
+- `cargo clippy -p rocketmq-classic-producer --all-targets --all-features --locked -- -D warnings`: passed before the fixture test was added; rerun after it.
+- Maven initially could not lock the read-only user cache. A temporary cache copy under `/private/tmp/rocketmq-classic-m2-phase7-20261011` allowed offline compilation and generation of `fixtures/producer/core.json`; the Java logging appender could not open its configured log outside the workspace, but Maven completed successfully.
+
+Status: producer send/routing/retry/compression/ID/batch/fault behavior and final phase gates remain pending. No live Broker contacted. Commit for this foundation slice: pending.
+
+Continuation 2026-10-11 02:28Z:
+- Read the complete Phase 7 plan and its parent Phase 7 section again. Kept the plan unchanged.
+- Added explicit-queue and selector future/oneway send paths, timeout parameters for Java-equivalent overloads, batch sync/future timeout and explicit-queue paths, and facade re-exports for SendResult/SendStatus. Direct queue/selector sends retain Java's one-attempt behavior.
+- Added a scripted two-Broker case that treats the first received request as stored, drops its acknowledgement, then verifies a retry carries the same body and unique ID. Documented the resulting duplicate-delivery risk and no exactly-once guarantee.
+- Added an executable owner-run loopback test script: scripts/phase7-producer-scripted-tests.sh.
+- Regenerated the Java producer fixture after compiling the changed generator. The initial regeneration used stale Maven classes and omitted compressionProperties; compile-before-generate fixed it. Dedicated fixture drift verification then passed.
+- Reordered topic validation to match pinned Java's length-before-character check; added an overlong-invalid-topic regression.
+
+Validation:
+- `cargo fmt --all`: passed; `cargo fmt --all -- --check` and `git diff --check`: passed.
+- `cargo test -p rocketmq-classic-producer --lib --test producer --locked --offline`: 29 unit tests and 3 fixture/integration tests passed.
+- `cargo test -p rocketmq-classic-producer --test scripted_send --no-run --locked --offline`: passed, including compilation of the lost-ack case.
+- `cargo test -p rocketmq-classic-producer --test scripted_send --locked --offline`: all 4 cases stop at TcpListener bind with PermissionDenied before exercising the test flow. Existing escalation was rejected by automatic review; do not bypass it. Run `scripts/phase7-producer-scripted-tests.sh` in a loopback-enabled environment.
+- `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`: passed.
+- `cargo build -p rocketmq-classic --examples --locked --offline`: passed.
+- Maven `compile exec:java@verify-java-producer-core-fixtures` regenerated the fixture successfully; dedicated `exec:java@verify-java-producer-core-fixtures` drift verification passed. Java logging still reports its configured external log path is not writable, without failing these commands.
+
+Status: P7-V01 is unit-verified. P7-U01 is implemented but execution-blocked by loopback permissions. P7-V02–V04 remain assigned to Phase 19. The pinned public Producer settings inventory still includes uncovered AutoBatch/accumulator and async backpressure/executor surfaces; Phase 7 acceptance remains incomplete. Full Maven verify's earlier loopback fixture blocker remains. No commit was created: `.git` is read-only in this sandbox and the earlier index-write escalation was rejected by automatic review.
+
+Continuation 2026-10-11 03:00Z:
+- Completed the pinned 5.5.1 `DefaultMQProducer`/`DefaultMQProducerImpl` public send/settings inventory and checked validation, batch, route, and fault source paths by exact commit. Added the source-to-Rust mapping and test evidence to `docs/compatibility/PHASE_7_PRODUCER_MATRIX.md`; Phase 14/15/16/17 surfaces remain assigned to their existing plans.
+- Reverse-export review found `CompressionType` was accepted by public producer config but not re-exported by the producer/facade crates. Re-exported it in both crates and updated the facade example to configure compression through `rocketmq-classic`.
+- Confirmed Java checkout HEAD is `2238256de1d227a4384ba969dfa31473187b4d08`; pinned-source audit used `efa1be59d6fc747ad220f036c86030f05f0419f9` via `git show`. Left unrelated untracked `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java` untouched.
+
+Post-audit validation:
+- `cargo fmt --all -- --check`: passed.
+- `git diff --check`: passed.
+- `cargo test -p rocketmq-classic-producer --lib --test producer --locked --offline`: 42 unit tests and 3 producer fixture tests passed.
+- `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`: passed.
+- `cargo build -p rocketmq-classic --examples --locked --offline`: passed, including the new facade `CompressionType` import.
+- `cargo test -p rocketmq-classic-producer --test scripted_send --no-run --locked --offline`: passed; executable loopback cases remain unrun because the sandbox denies `TcpListener::bind(127.0.0.1:0)` as recorded above.
+
+Status remains: P7-V01 unit-verified; P7-U01 scripted private transport decisions pass but loopback execution is blocked; P7-V02–V04 remain pending Phase 19. No Java or plan files were modified in this continuation. Commit status is pending final diff review and an allowed git write attempt.
+- Final review replaced the two production `expect` calls in auto-batch entry/removal with non-panicking map handling. The first entry-based draft hit a Rust mutable-borrow compile error; it was revised to use guarded `contains_key` plus `HashMap::entry`, then revalidated.
+- Final rerun passed: formatting, diff check, 42 unit + 3 fixture tests, workspace Clippy, facade example build, and scripted transport test compilation.
+- Attempted to stage the final audit slice for its separate commit with ordinary `git add`; Git could not create `.git/index.lock` (`Operation not permitted`). The `.git` directory is read-only in this workspace. A prior elevated index-write request was rejected because the automatic review model could not be loaded; no elevated retry or alternate Git metadata path was attempted. All phase changes remain uncommitted.
+
+Continuation 2026-10-11 03:05Z:
+- Rechecked the current branch/worktree and pinned Java checkout. Branch still points to Phase 6 base `f0626dc9`; Phase 7 changes are uncommitted. The separate Java checkout remains at `2238256d` with the unrelated untracked broker test file untouched.
+- Pinned `DefaultMQProducerImpl.start()` rejects repeated start, and `shutdown()` in CREATE_JUST is a no-op. Updated Rust lifecycle to return `AlreadyStarted` for repeated start and keep a Created producer startable after pre-start shutdown; shutdown after successful start remains idempotent and terminal. Added focused lifecycle tests and matrix coverage.
+- `cargo test -p rocketmq-classic-producer --lib --test producer --locked --offline`: 43 unit tests and 3 fixture tests passed. Workspace Clippy, facade examples, formatting and diff check passed.
+
+Continuation 2026-10-11 03:06Z:
+- Re-ran the restricted scripted transport test compile after lifecycle changes: passed. It does not execute the loopback peers.
+- Retried the loopback suite through `require_escalated`, the supported approval path. Automatic review failed before execution with `Invalid model name passed in model=codex-auto-review`; the tool states this is a review failure, not a safety determination, and says not to bypass approval. No network test ran.
+- Final `cargo fmt --all -- --check` and `git diff --check` passed. Ordinary `git add` still cannot create `.git/index.lock` (`Operation not permitted`); all Phase 7 changes remain uncommitted. No alternate Git metadata path was used.
+- Phase 7 remains incomplete pending loopback test execution and the requested separate commits. User guidance/external workspace changes are required to resolve the approval-review configuration and `.git` write restriction.
+
+Continuation 2026-10-11 06:22Z:
+- Current execution permissions are `danger-full-access` with approval policy `never`; no manual approval or escalation was needed. The prior loopback block came from the earlier restricted run and auto-reviewer configuration failure, not missing user approval.
+- Restored the original `js-sys`, `wasi`, `wasm-bindgen*`, and `web-sys` lock entries from the Phase 6 base while retaining Phase 7 compression and workspace packages. `cargo check --workspace --locked --offline` passed.
+- `scripts/phase7-producer-scripted-tests.sh` passed all 5 TCP loopback cases, including two-Broker retry, same body/ID preservation, explicit queue/selector/batch paths, one-way, and lost-ack duplicate delivery. No live Broker or NameServer was contacted.
+- Updated the compatibility ledger and producer matrix: P7-V01/U01 local checks are verified; P7-V02–V04 remain assigned to Phase 19. The full Phase 7 plan remains unchanged.
+- Pinned-source review found the Java 5.5.1 `totalBatchMaxBytes(value)` setter changes aggregate accumulator hold capacity, while `getTotalBatchMaxBytes()` returns per-batch `holdSize`. The Java fixture already captures both values; added a Rust fixture assertion and documented the naming mismatch in the matrix.
+- Final gates passed: `cargo fmt --all -- --check`, `git diff --check`, `cargo test --workspace --locked`, `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`, `cargo build -p rocketmq-classic --examples --locked`, `mvn -f compat/java-reference/pom.xml verify` (BUILD SUCCESS), and `python3 tests/differential/compare.py --self-test`. After the final fixture assertion, `cargo test -p rocketmq-classic-producer --locked --offline` passed (44 unit, 3 fixture, 5 loopback tests); formatting and diff checks passed again.
+- Reviewable commits created on `phase/08-phase-07-producer-core`: `cc212bda` common compression, `98623c1f` Java producer oracle, `b4025548` producer implementation, and `2b2e44ee` Java auto-batch getter regression. Compatibility documentation and this log are the remaining staged change.
+- No live Broker validation was run. P7-V02–V04 remain PENDING_PHASE_19; all Phase 7 local gates and in-scope implementation/reconciliation work are complete.

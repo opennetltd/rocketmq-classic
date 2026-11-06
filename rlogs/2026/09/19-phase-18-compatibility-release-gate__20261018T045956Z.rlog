@@ -1,0 +1,63 @@
+# Phase 18 P18-V01 `MqClientAdmin.getConsumerConnectionList` — 2026-10-18T04:59:56Z
+
+## Scope and implementation
+
+- Continued on `phase/19-phase-18-compatibility-release-gate`. The pinned Java
+  5.5.1 oracle at `/Users/bruce.tsai/Projects/3rd/rocketmq` remained read-only.
+  Existing Phase 19 worktree changes were not staged or modified.
+- Added `MQClientApi::get_consumer_connection_list` and the
+  `MqClientAdmin` adapter for asynchronous request code 203. Added typed
+  `Connection` and `ConsumerConnection` response DTOs with Java-compatible
+  enum names, nullable collection/body behavior, and `SubscriptionData`
+  decoding.
+- Added the `GetConsumerConnectionListRequestHeader` and the previously
+  started `GetConsumeStatsRequestHeader` to Java/Rust header inventory,
+  identity, validation, and bidirectional wire fixtures. The consume-stats
+  helper methods are checked against the generated Java header fixture.
+- Extended `MqClientAdminFixtures` with success, null body, and Broker-error
+  outcomes; the response contains one connection and a populated subscription.
+  Core scripted coverage compares request fields and decoded result, and rejects
+  malformed success bodies. Fixture SHA-256:
+  `63fedb0e501c7539fcbf9495a639c41ec59aa8e3e8db39a14a75674c1a1f2a05`.
+- Code commit: `eb627fcc` (`feat(admin): match consumer connection list adapter`).
+  Updated the Phase 17 admin matrix, `REQUEST_CODES.md`, and release checklist.
+
+## Validation
+
+- `mvn -q -f compat/java-reference/pom.xml -DskipTests compile` — passed.
+- Java header fixtures were generated through `compat.Main` into an absolute
+  temporary directory; Rust reverse frames were generated into a temporary
+  directory. Only the new fixture files were copied into the repository.
+- `cargo test --locked -p rocketmq-classic-protocol --all-features` — passed:
+  133 unit tests, all integration targets, and 49 doctests.
+- `cargo test --locked -p rocketmq-classic-core --test admin_rpc` — passed all
+  47 tests.
+- Strict Clippy passed for Protocol, Remoting, and Core with all targets and
+  features and warnings denied.
+- `mvn -q -f compat/java-reference/pom.xml verify` — passed 37 scenarios,
+  66 typed-header cross-decodes, and 14 typed-body cross-decodes.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+## Corrections during execution
+
+- The first Protocol inventory run found that both newly added request headers
+  needed rows in the public-header and header-validation matrices. Added both
+  Java fixtures and Rust reverse frames.
+- The next validation-matrix run found that inherited nullable `nsd`/`oway`
+  fields must be recorded as both optional and Boolean fields. Updated both
+  rows; the full Protocol test suite then passed.
+- Strict Clippy found two derivable `Default` implementations in `Connection`
+  decoding. Switched those implementations to derives; strict Clippy passed.
+
+## Remaining work
+
+- The source-backed `MqClientAdmin` count is now 16/19. The remaining methods
+  are `updateOrCreateSubscriptionGroup`, `getConsumeStats`, and
+  `getConsumerRunningInfo`.
+- Broad P18-V01 Java/Rust API, settings, input, error/control-flow, and
+  reverse-export reconciliation remains open. Refresh the full-workspace
+  P18-V02 gate after the remaining implementation work; current-revision
+  Ubuntu/native Windows evidence, final package/provenance checks, and Phase 19
+  locally runnable Docker/Broker profiles and scenarios remain open.
+- Owner-only production validation stays in the separate Phase 19 manual
+  handoff. No Broker or Docker validation was run in this slice.

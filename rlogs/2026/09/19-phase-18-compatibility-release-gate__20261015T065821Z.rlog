@@ -1,0 +1,8 @@
+Phase 18 compatibility release gate — 2026-10-15 UTC
+
+- Starting revision: `31810bbe` on `phase/19-phase-18-compatibility-release-gate`; Java oracle remains pinned to RocketMQ client 5.5.1 commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- P18-V01 inherited-trait correction: Java reflection in `ProtocolDtoIdentityFixtures` confirms `QueryAssignmentRequestBody`, `SetMessageRequestModeRequestBody`, `GetConsumerStatusBody`, `ResetOffsetBody`, and `ConsumeMessageDirectlyResult` inherit `equals/hashCode` from `java.lang.Object`; same-instance equality is true and distinct default instances compare false.
+- Removed structural `PartialEq`/`Eq` from the five Rust DTOs and added compile-fail doctests plus a Rust fixture differential. Added `fixtures/protocol/dto-identity.json`, Maven drift verification, and Phase 6 API/requirement and release-checklist records. Fixture SHA-256: `11f97e14fc3386c4ef61a6d82aa27f8e8b9b723a965fb3ddfb3b30233f0be0d9`.
+- PASS: `cargo test -p rocketmq-classic-protocol --all-features --locked` (115 unit tests, integration targets, 25 doctests); strict Protocol all-target/all-feature Clippy; `mvn -q -o -f compat/java-reference/pom.xml verify` (37 scenarios, fixture drift and Java/Rust cross-decodes); `cargo fmt --all -- --check`; `git diff --check`.
+- Implementation commit: `3c470a23 fix(compat): preserve protocol DTO identity semantics`.
+- This closes five inherited-trait discrepancies only. Broad P18-V01 remains open; a full-workspace P18-V02 rerun on the final P18 revision, current-revision GitHub Ubuntu address-profile evidence, Phase 19 Docker/Broker runner and scenarios, and release version/registry checks remain outstanding. No push, tag, publication, or live Broker was used.

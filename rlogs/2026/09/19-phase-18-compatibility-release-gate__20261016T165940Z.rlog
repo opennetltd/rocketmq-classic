@@ -1,0 +1,35 @@
+# Phase 18 current-revision server-free gate — 2026-10-16 16:59 UTC
+
+- Tested tree: `464fad73` (`docs(compat): record GO_AWAY retry disposition`),
+  with code change `bc970e10` and the preceding Phase 18 audit commits. The
+  subsequent checklist/log-only update does not change code.
+- `cargo test --workspace --locked -- --test-threads=1` — passed.
+- `cargo test --workspace --all-features --locked -- --test-threads=1` — passed.
+- `cargo check --workspace --all-targets --all-features --locked` — passed.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+  — passed.
+- `mvn -f compat/java-reference/pom.xml verify` — BUILD SUCCESS; validated 37
+  scenarios, Java 5.5.1 fixture drift/probes, and Java decoding of Rust-generated
+  Remoting, typed-header and typed-body fixtures.
+- `python3 tests/differential/compare.py --self-test` and
+  `python3 tests/differential/compare.py --validate-manifest` — passed; 37
+  scenarios validated.
+- `bash tests/stress/run-offline-smoke.sh` — passed 16 deterministic race/leak
+  cases × 3 repetitions.
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` —
+  passed: 105 frame seeds, 11 message seeds, 1,856 mutations, 146 frame decodes,
+  113 message decodes.
+- `cargo build -p rocketmq-classic --examples --release --locked` and
+  `cargo bench --workspace --no-run --locked` — passed.
+- `cargo metadata --format-version 1 --locked --all-features` resolved 215
+  packages, including 208 registry packages, all with license metadata;
+  `cargo package --workspace --list --locked --allow-dirty` listed all seven
+  packages with LICENSE and NOTICE. `scripts/check-workspace-metadata.py` passed.
+- UTC and Asia/Taipei Unique ID tests each passed (4 tests); format and diff
+  checks passed.
+- P18-V02 server-free gates now pass on this tested code. Broad P18-V01 remains
+  open. Current-revision GitHub Ubuntu/P18-V04 and native Windows runtime CI
+  evidence, Phase 19 Docker/Broker automation and scenario execution,
+  `docs/owner-validation.md`, and pre-publication version/dependency resolution
+  remain open. No Docker/Broker, push, tag, publication, deployment, or
+  compatibility claim was made.

@@ -1,0 +1,24 @@
+# Phase 18 MQClientAPIImpl tooling-only public methods
+
+- Recorded: 2026-10-23 15:53:15 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Java artifact: cached `org.apache.rocketmq:rocketmq-client:5.5.1`
+
+## Audit
+
+- `javap -public` on the cached 5.5.1 artifact inspected the declared public
+  surface of `MQClientAPIImpl`: 143 public method signatures across 132 names,
+  plus three public constructors.
+- Pinned `git grep` traced the remaining controller, replica, and RocksDB
+  methods to `DefaultMQAdminExt`, `DefaultMQAdminExtImpl`, and `tools` command
+  classes. No caller appeared in the pinned client facade, `MQAdmin`, Producer,
+  Push Consumer, or Pull Consumer source.
+- The eight Rust-unmapped methods are listed with their callers and the
+  `rocketmq-tools` scope disposition in
+  `docs/compatibility/PHASE_6_API_CONFIG_MAP.md`.
+
+This is a bounded scope audit, not behavior-equivalence evidence. No
+production code or tests changed, and no live Broker, Docker, remote CI, or
+push action was run. Broad P18-V01 and platform evidence remain open.

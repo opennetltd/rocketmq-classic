@@ -1,0 +1,23 @@
+# Phase 18 compatibility release gate — execution log
+
+- P18-V01 inherited-trait correction: the pinned Java 5.5.1
+  `TopicValidator.ValidateResult` does not declare `equals` or `hashCode`;
+  reflection resolves both methods to `java.lang.Object`. Java self-equality is
+  true, while two separately constructed results with the same fields compare
+  unequal. Rust had derived structural `PartialEq`/`Eq`, adding value equality
+  that Java does not provide. Removed those trait implementations and added a
+  compile-fail rustdoc guard.
+- Extended `TopicValidatorFixtures` with Java reflection and identity cases;
+  updated the invoked fixture and Rust differential. Fixture SHA-256:
+  `5f6b913ce7174c578fe069cd3d1b6badb44c971b8c16c164378ab6129dc23c55`.
+- Updated the Phase 6 API map, requirement audit, and release checklist. This
+  closes one inherited-trait discrepancy only; broad P18-V01 remains open.
+- Verification passed: `cargo test -p rocketmq-classic-common --all-features
+  --locked` (21 unit tests, 19 message-decoder integration tests, the Topic
+  Validator differential, and 15 doctests); `cargo clippy -p
+  rocketmq-classic-common --all-targets --all-features --locked -- -D warnings`;
+  `mvn -q -o -f compat/java-reference/pom.xml verify` (37 scenarios, fixture
+  drift and Java/Rust cross-decodes); `cargo fmt --all -- --check`; and
+  `git diff --check`.
+- The full workspace P18-V02 gate still needs rerunning on the revision that
+  includes this correction.

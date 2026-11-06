@@ -1,0 +1,43 @@
+# P18-V01 heartbeat request-header parity slice — 2026-10-17T22:38:27Z
+
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Java behavior oracle: RocketMQ client 5.5.1 source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; external Java checkout remained
+  read-only. Its pre-existing untracked `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java` was preserved.
+- Audited pinned `MQClientAPIImpl.sendHeartbeat` and `sendHeartbeatV2`: both
+  construct `HeartbeatRequestHeader`, an `RpcRequestHeader` subtype with
+  inherited nullable `ns`, `nsd`, `bname`, and `oway` fields. Rust had been
+  using the empty Lite subscription control header, which retained the default
+  empty wire map but omitted the public Java header surface.
+- Added/exported Rust `HeartbeatRequestHeader`, inherited RPC field encoding,
+  getters/setters (including deprecated bname aliases), Java equality/hash,
+  integer `hashCode` and `toString` behavior. Both heartbeat RPCs now use the
+  typed header. Added pinned Java typed frame and request-header identity data,
+  and registered the type in the Rust header inventory.
+- First `mvn verify` attempt stopped because the newly registered Rust fixture
+  generator ran before Maven's Java header-fixture generation. Generated the
+  Java 5.5.1 fixture first with `mvn compile exec:java`, then reran `verify`;
+  it completed the 37-scenario suite, fixture checks, 56 typed-header
+  cross-decodes and 14 typed-body cross-decodes without errors.
+- First focused Rust header-inventory compile found an incorrect relative path
+  to `request-header-identity.json`; corrected it and reran successfully.
+- Verification passed:
+  - `cargo test --locked -p rocketmq-classic-protocol --test header_inventory`
+    (3 tests).
+  - `cargo test --locked -p rocketmq-classic-protocol request_header_equality_and_hash_match_rpc_base_fields` (1 test).
+  - `cargo test --locked -p rocketmq-classic-core --test extensions` (14 tests).
+  - `cargo clippy --locked -p rocketmq-classic-protocol -p rocketmq-classic-core --all-targets --all-features -- -D warnings`.
+  - Maven `verify`: all 37 scenarios, fixture drift checks, Rust/Java header and
+    body cross-decodes.
+- Typed Java frame fixture SHA-256:
+  `d52b9cfbb0e640702e0eb6cea45430a237ac7120513854b36f677447fc3cfe46`.
+  Request-header identity fixture SHA-256:
+  `5de3a06f07f6451942b3acb951535a01f63be91f77d0e4d7ea1ad85b5070cd20`.
+- Full P18-V01 remains open for other Java/Rust API, overload, settings,
+  input/error/flow, inherited-surface and reverse-export rows. Current-revision
+  GitHub Ubuntu/native Windows P18-V04, 30 Phase 19 live cases and required
+  profiles, and pre-publication registry dependency resolution remain open.
+  Owner MAN-01–04 remain separate manual checks; MAN-05 awaits the local
+  Phase 19 matrix.
+- No plan, Java checkout, remote branch, tag, publication, Broker, or deployment
+  was changed.

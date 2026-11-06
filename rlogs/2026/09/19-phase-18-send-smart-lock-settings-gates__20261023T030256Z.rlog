@@ -1,0 +1,48 @@
+# Phase 18 compatibility gate log — sendSmartMsg and ProcessQueue lock fields
+# Recorded: 2026-10-23 03:02:56 UTC
+# Code revision: 9fdea903584f893158a4ab1d5622c36b27fbf910
+# Pinned Java client: efa1be59d6fc747ad220f036c86030f05f0419f9
+
+## Compatibility findings
+
+- Exposed Java `ProcessQueue.REBALANCE_LOCK_MAX_LIVE_TIME` and
+  `REBALANCE_LOCK_INTERVAL` through paired Rust accessors. Both values are
+  cached together on first queue access and reused by orderly scheduling and
+  expiration checks. The property parser accepts Java Unicode decimal digits.
+- Mapped private Java `MQClientAPIImpl.sendSmartMsg` to a process-wide Rust
+  selector. Producer sends now honor the default-true Java Boolean property;
+  normal, reply, and batch request codes follow Java branch order, including
+  `MSG_TYPE=reply`.
+- Pinned Java invocation fixtures exercise ordinary, reply, and batch request
+  selection with the switch both enabled and disabled. Isolated Rust processes
+  cover unset, false, uppercase true, whitespace, malformed values, and
+  first-access setting capture.
+- `ResponseFuture` source reverse audit confirms both declared constructors
+  and all 20 public methods are documented; no unmapped capability was found
+  in that slice.
+
+## Validation at code revision 9fdea903
+
+- `cargo fmt --all`, `cargo fmt --all -- --check`, `git diff --check` — PASS.
+- `cargo test --offline --workspace --locked --quiet` — PASS.
+- `cargo test --offline --workspace --all-features --locked --quiet` — PASS.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS: 37 scenarios,
+  106 typed headers, 19 typed bodies, and fixture drift checks.
+- `python3 tests/differential/compare.py --self-test` and
+  `--validate-manifest` — PASS: all 37 scenarios.
+- `cargo run --offline -p rocketmq-classic-remoting --example fuzz_smoke --locked`
+  — PASS: 163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame
+  decodes, and 192 message decodes.
+- `bash tests/stress/run-offline-smoke.sh` — PASS: 17 cases × 3 repetitions.
+- `cargo build --offline --workspace --examples --release --locked` — PASS.
+- `cargo bench --offline -p rocketmq-classic --bench offline --locked` — PASS;
+  current sample appended to `PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+
+## Remaining Phase 18 status
+
+Broad P18-V01 source/API/settings/input/error/control-flow and Rust
+reverse-export reconciliation remains PARTIAL. Current-revision remote Ubuntu
+CI, native Windows runtime execution, and Phase 19 Broker/Docker evidence remain
+open. The working tree's Phase 19 integration and differential files were not
+staged or committed.

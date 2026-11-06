@@ -1,0 +1,31 @@
+Phase 18 continuation — QueryResult API parity and release-gate evidence
+Session: 2026-10-14T18:40:38Z
+Branch: `phase/19-phase-18-compatibility-release-gate`
+Java oracle: `/Users/bruce.tsai/Projects/3rd/rocketmq`, source commit `efa1be59d6fc747ad220f036c86030f05f0419f9` (read-only).
+Plan files left unchanged.
+
+Changes
+- Aligned Rust `QueryResult` with the Java public DTO surface: private fields, constructor, getters, nullable list/elements, shared mutable list identity, and Java `toString` formatting.
+- Added an invoked Java reflection/behavior fixture and Rust differential test. Producer/Pull/Push namespace restoration now mutates message elements through shared handles, preserving the retained list alias.
+- Fixed the fixture verifier argument handling. The first standard Maven run exposed that the harness regenerated the fixture because it recognized only `--verify` while the pom supplied `true`; the harness now treats `true` and `--verify` as verification, and `false` as regeneration.
+- Updated the Phase 17 admin matrix, Phase 6 audit, and release checklist. No plan edits or Java oracle writes.
+
+Commits
+- `ba2589ec` fix(compat): align query result Java surface
+- `57fe1527` fix(compat): verify query result fixture in Maven
+- `c8a76aee` docs(compat): record query result API parity
+
+Validation
+- PASS: `cargo fmt --all` and `cargo fmt --all -- --check`.
+- PASS: `cargo check -p rocketmq-classic-core -p rocketmq-classic-producer -p rocketmq-classic-consumer --all-targets --all-features --locked`.
+- PASS: `cargo test -p rocketmq-classic-core -p rocketmq-classic-producer -p rocketmq-classic-consumer --locked`.
+- PASS: `cargo test --workspace --locked` and `cargo test --workspace --all-features --locked`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify`; validated 37 scenarios and reported the Java QueryResult fixture verified without modifying it.
+- PASS: Core, Producer, and Consumer Rustdoc JSON generation with nightly. Core `QueryResult` JSON has no public fields and marks fields stripped; public constructor/getter methods and Display implementation are present.
+- PASS: `git diff --check` before commits.
+- Rustdoc command attempts using unsupported `--workspace` and repeated `-p` arguments failed at Cargo argument parsing; reran each affected crate separately and all three completed successfully.
+
+Remaining gates
+- P18-V01 remains open for broad Java/Rust settings, source/overload/input/error/flow, inherited/trait, and reverse-export reconciliation; this session closes only the QueryResult DTO slice.
+- P18-V04 still needs a current GitHub Ubuntu result for the Java address profile. Phase 19 Broker/Docker execution and release-version/registry preparation remain separate open gates.

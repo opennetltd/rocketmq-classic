@@ -1,0 +1,5 @@
+# Phase 6 validation session — 2026-10-10T17:13Z
+
+- Extended verification for `47e85563`: the locked workspace/all-target test suite passed with local socket access, strict workspace/all-target/all-feature Clippy passed, and pinned offline Maven verify passed all 22 scenarios with Java cross-decodes.
+- Differential comparator self-test and manifest validation (22 scenarios), formatting, and diff checks passed.
+- Updated the runtime inventory and requirement audit with the full validation results while retaining the synthetic-row limitation: Windows IP Helper runtime enumeration, non-macOS Unix runtime ordering, real IPv6-only-host behavior, whole Phase 6 reconciliation, and P6-V04 remain open.

@@ -1,0 +1,44 @@
+# Phase 18 compatibility release gate — 2026-10-22 04:12:57 UTC
+
+Base revision: `7e0b0cb0`. This entry records the request 3004 `getUser`
+Broker RPC slice. Pinned Java source is
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Compatibility changes
+
+- Added nullable `GetUserRequestHeader` with Java's no-op `checkFields()`
+  behavior and included it in the typed-header inventory and Java/Rust frame
+  cross-decode.
+- Added `MQClientApi::get_user` for request 3004. It sends the nullable
+  username to the supplied Broker address with the caller timeout and returns
+  nullable `UserInfo` for both an absent body and JSON `null`.
+- Added invoked Java/Rust cases for populated/default/null/JSON-null responses,
+  null and empty usernames, success, Broker rejection, timeout, and
+  VIP-enabled unchanged-address behavior.
+- Updated the direct API and request-code audits. Five auth operations remain
+  open: `getAcl` and ACL create/update/delete/list.
+
+## Local verification
+
+- `cargo test -p rocketmq-classic-protocol --locked`: 155 unit tests, 57
+  integration tests, and 157 doctests passed.
+- `cargo test -p rocketmq-classic-core --test admin_rpc --locked`: 110 passed.
+- `cargo test -p rocketmq-classic-core --lib --locked`: 205 passed.
+- `cargo clippy -p rocketmq-classic-protocol -p rocketmq-classic-core -p rocketmq-classic-remoting --all-targets --all-features --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- `mvn -o -f compat/java-reference/pom.xml verify`: BUILD SUCCESS; Java
+  decoded 101 Rust typed-header fixtures and 19 Rust typed-body fixtures.
+- SHA-256 `fixtures/producer/core.json`:
+  `55281e77456d983df97c3c1f6eff01399c0297c617a41b26344a7fb3e54886a8`.
+- SHA-256 `fixtures/remoting/header-get-user-request.json`:
+  `ed9d78968c9515bb8073ee6606a08615c0869dc764904a7c8fae7ef20b45a824`.
+- SHA-256 `fixtures/remoting/header-get-user-request.bin`:
+  `44d53a8b3c7d1f5774cfb3f0039b299853d07a732cfec24321570358e3f18d88`.
+
+## Remaining work
+
+Request 3004 is closed for the nullable response states described above.
+`getAcl` and the four ACL management/list APIs remain unimplemented. Broader
+Phase 18 settings, input, error, control-flow, reverse-export, and platform
+reconciliation also remains open. No Broker, Docker, or remote CI was used.
+Pre-existing Phase 19 worktree paths remain unstaged and outside this slice.

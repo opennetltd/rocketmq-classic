@@ -1,0 +1,187 @@
+# Phase 18 continuation — 2026-10-20T03:45:07Z
+
+- Previous goal turn made progress: committed offset-filter/public status fixes
+  and verified both workspace configurations. Revalidated branch
+  `phase/18-phase-18-compatibility-closure` at `798c0073`; preserved the existing
+  unstaged Phase 19 files. No commands from the previous session remain live.
+- Read coding skill, Rust/testing references and the complete Phase 18 plan.
+  The external Java checkout HEAD is not the target tag, so source inspection
+  uses `git show rocketmq-all-5.5.1:<path>` (tag commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`). The Maven harness still invokes
+  pinned client 5.5.1. No external checkout files are modified.
+- Implementing direct runtime Running Info, direct-consume and offset-reset
+  API rows rather than treating existing inbound/owner handlers as proof of
+  the missing runtime public methods. Broad P18-V01 remains open.
+- Running Info uses the selected owner's snapshot, shared properties and Java
+  enrichment order. Null group, missing group, null properties/consume type
+  and partial mutations require direct Java comparisons before acceptance.
+- Added `ClientRuntime::consumer_running_info`, owner snapshot/type adapters,
+  and typed consumer-operation errors. The new direct Java probe records nine
+  missing/null/active/passive/list-order/error cases and is wired into Maven
+  verify. It confirms shared properties and the NameServer partial mutation
+  before a null consume-type failure. Core's fixture-backed regression passes.
+- Strict workspace/all-target/all-feature Clippy and focused Maven fixture
+  verification passed. The first real-consumer integration assertion expected
+  empty NameServer output for a configured empty-string address; that address
+  is an actual list element and correctly serializes as a semicolon. Changed
+  the setup to clear the live list explicitly so its empty-list assertion tests
+  the intended input; no production normalization was changed.
+- Real Pull/Push integration now passes, as do workspace formatting and diff
+  checks. Running Info code, Java probe/fixture, tests and the scoped mapping
+  are committed independently; direct reset/consume and the broad audit remain.
+- Running Info committed as `7f3bd2d9`.
+
+## Direct runtime consumption
+
+- Added async `ClientRuntime::consume_message_directly` and the Push owner
+  future adapter, preserving lookup-before-message validation, non-Push null
+  results, null group/message failures and unavailable-service errors.
+- Extended the direct Java oracle with 16 actual runtime/concurrent/orderly
+  service cases. The Rust public integration compares callback counts, status,
+  auto-commit, namespaces, broker/queue fields and offsets across the same cases.
+  Wall-clock duration and JVM/Rust exception text are the explicitly scoped
+  nondeterministic/diagnostic fields; nonnegative duration, error category and
+  remark presence remain checked. Fixture checkpoint SHA-256:
+  `ac828e506ea02848e9cacbe0e3ae02608dd1d189500a45d51b41e8d3a4208b22`.
+- Initial Rust integration compile required explicit context types on the
+  generic listener closures. Added the existing public context types; the
+  16-case integration then passed, including exception/null callback outcomes,
+  raw-registry unavailable service, and unchanged offset tables.
+- Direct-consume strict workspace/all-target/all-feature Clippy, focused Maven
+  fixture verification, formatting and diff checks passed. Committing this API
+  row independently before the reset-offset row.
+- Direct consumption committed as `4eee824f`.
+
+## Direct runtime offset reset
+
+- Added the shared nullable-key/nullable-offset `ConsumerOffsetTable` carrier,
+  public `ClientRuntime::reset_offset` and Push owner adapter. Inbound reset
+  and the owner's timestamp-reset helper now use this runtime entrypoint.
+- Source review found the old helper reused first-pass map values and queue
+  membership after its drain wait and returned a sibling queue's persistence
+  error. It now reads the current shared table and current queue table for the
+  second pass, logs/continues per-queue failures, and reads the current store.
+  A private finally guard restores pause/scheduler state even on cancellation.
+- The Java reset method shares synchronized(this) with lifecycle and
+  producer/consumer registry operations. Added the private runtime monitor to
+  reset, producer/consumer registration/removal and start; shutdown preserves
+  Java's active-user precheck before monitor acquisition. Raw map and admin
+  APIs continue to bypass that monitor like Java.
+- Added fifteen actual Java runtime/rebalance cases: missing/Pull/null groups,
+  empty/null topic/table/key/value branches, unassigned queues, successful and
+  per-queue-failed persistence, live map update, newly inserted queue and
+  orderly reset. The probe overrides resume to record the finally action
+  without an unrelated rebalance. Java's ignored sleep-interruption path bounds
+  the ordinary cases; the live cases use a clear latch and worker interrupt.
+  Per-queue events are grouped across unordered ConcurrentHashMap iteration;
+  status, ordering within each queue and data/ownership outcomes are preserved.
+- The initial existing-race run exposed a test harness discrepancy: manual
+  Started-state installation omitted the raw offset-store field that real
+  startup initializes. The new live-store read therefore found null. One case
+  failed and a second remained parked on its expected persist barrier. Confirmed
+  test PID 81467 was live, terminated only that test process, initialized the
+  harness field consistently with real startup and reran. All four existing
+  reset_offset cases passed; the broader reset filter then passed ten tests.
+- The first Java reset fixture serialized Integer event keys without quotes
+  under Fastjson defaults. Converted only the event-group map keys to Strings;
+  strict JSON and all semantic comparisons then passed. A Core monitor test
+  initially compiled before the new Java synchronization metadata was written;
+  after confirming generation finished, recompilation passed both Core tests.
+- Current reset fixture SHA-256:
+  `594e1e51bfd5f0d3598d309ae8932b9c596a83969ab6c6f8b43f0ac347daaf06`.
+  Core monitor/Running Info tests (2), Consumer reset tests (10), lifecycle
+  tests (5), strict workspace/all-target/all-feature Clippy, fmt/diff checks,
+  comparator self-tests, 37-scenario inventory and workspace metadata checks pass.
+- Full offline Maven verify (session 86772), locked workspace tests (98164)
+  and deterministic race/leak smoke (52107) are live; observe these handles
+  before starting dependent verification or claiming their results.
+- Those three runs completed successfully: provisional reset implementation
+  passed 1,665 workspace tests across 89 targets, offline Maven verify and
+  deterministic race/leak smoke (16 x 3). A subsequent source-read refinement
+  is described below, so those results are not the final current-source gate.
+
+## Offset-store callback handoff refinement
+
+- Java rereads `getOffsetStore()` at update, persist and remove boundaries.
+  Added an actual Java store-handoff case that changes the field in update
+  and persist callbacks: the first store retains 7, the second persists 60,
+  and the third removes its 70. Rust now rereads the field at each boundary.
+  Orderly second-persist exceptions preserve the registered queue rather than
+  silently treating them as an unsuccessful unlock result.
+- Moved custom remove_offset invocation outside the process-queue map write
+  lock; a private test hook inspects that map from the callback to detect a
+  reentrancy deadlock. Hooks remain cfg(test), not public client seams/settings.
+- Strengthened the Java live-map/new-queue probe to observe the actual drain
+  sleep stack frame after the clear latch before mutation/interrupt, avoiding
+  reliance on ConcurrentHashMap iterator prefetch. Regenerated fixture SHA-256:
+  `ed123fb25e329d0166329dea123add868ac9846ffc251e2469970493691b9665`.
+- After generation completed, Consumer reset filter passed 11 tests, including
+  all fifteen map/queue cases, callback/pull fences, orderly removal, cancelled
+  caller resume, and the new three-store handoff/lock regression.
+- Final current-source strict Clippy (38137), workspace tests (78838), and
+  offline Maven verify (10999) are being observed; do not replace or restart
+  live sessions due to an observation timeout.
+- Final current-source Clippy session 38137 exited 0. Formatting and diff
+  checks pass. Committing the reset API, shared monitor, map/store read timing,
+  callback lock fix, scoped fixtures/tests/docs as one reset-operation change;
+  the complete workspace/Maven processes remain live and will be recorded
+  after their actual completion.
+- Reset API committed as `4bf3e83c`. At that revision, final default and
+  all-feature workspace tests each passed 1,666 tests across 89 targets;
+  offline Maven verify, Clippy, release examples, fuzz smoke and 16 x 3
+  deterministic race/leak smoke also exited 0.
+
+## Runtime monitor cancellation ownership
+
+- Extended the existing scripted Broker unregister-cancellation test with a
+  reset started after caller cancellation but before the Broker reply. It
+  failed: a caller-owned monitor guard released admission while the actor's
+  unregister command was still running. The reset overtook that operation.
+- Added private monitored-command envelopes and one shared owned guard. The
+  caller retains it through post-processing; the actor retains it through
+  completion after caller cancellation. Abandoned registration replies carry
+  it into identity cleanup, including waits for the key's mutation gate.
+  No public knob, executor, worker or test seam was added.
+- The scripted cancellation case now passes. A focused internal regression
+  holds a raw key gate to keep abandoned-registration cleanup pending, proves
+  reset cannot enter early, releases the key and proves both identity cleanup
+  and reset complete. The test passes. Core lifecycle (5) and direct runtime
+  operations (2), strict workspace Clippy, fmt and diff checks also pass.
+- Committing this cancellation correction independently; final current-source
+  broad gates must be rerun after this control-flow refinement.
+- Monitor ownership correction committed as `6b5129f1`.
+
+## Current-source validation and completion audit at 6b5129f1
+
+- `cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked` both exited 0: each passed
+  1,667 tests across 89 result-bearing targets. The tests include public
+  runtime operations, live reset maps/stores, callback/offset fencing,
+  cancelled unregister ordering and abandoned-registration monitor ownership.
+- Strict workspace/all-target/all-feature Clippy, formatting and diff checks
+  passed. Offline Maven verify exited 0: pinned Java 5.5.1 fixtures, 37 offline
+  scenarios, 67 typed-header and 15 typed-body cross-decodes. New runtime
+  fixtures contain 9 Running Info, 16 direct-consume, 15 reset cases and the
+  additional three-store handoff. Fixture hash remains
+  `ed123fb25e329d0166329dea123add868ac9846ffc251e2469970493691b9665`.
+  Existing JDK/Netty Unsafe/final-field warnings remain warnings.
+- Current deterministic race/leak smoke passed all 16 cases x 3. Fixed-seed
+  fuzz passed 121 frame seeds, 11 message seeds, 2,112 bounded mutations,
+  170 frame decodes and 109 message decodes. Release facade examples built;
+  the Asia/Taipei unique-ID fixture regression passed (1 test).
+- Comparator self-tests, all 37 manifest scenarios and workspace metadata,
+  package-license/dependency-direction checks passed. No dependency, feature
+  flag or public tuning setting was added. Phase 18 and all earlier phase
+  branch refs remain separate; all changes here are on the Phase 18 branch.
+- Every command session started in this execution is terminal. Preserved the
+  pre-existing unstaged Phase 19 README/runner/log files. No live server,
+  Docker, production check, publication, push or external message was run.
+- Full goal completion remains unproven. The operation entries now have the
+  scoped evidence described above; P18-V01 still requires complete public,
+  inherited, DTO/configuration and reverse-export reconciliation. Concrete
+  next review areas include nullable/subclass-sensitive raw MessageExt
+  direct-consume inputs and reset resume/rebalance behavior outside the Java
+  probe's isolated resume override. Native platform/current-revision CI
+  evidence also remains outstanding. The full original-plan completion audit
+  has not passed, so no Phase 18 acceptance or final compatibility is claimed.
+  The original through-Phase-18 goal remains active.

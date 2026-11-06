@@ -83,11 +83,11 @@ Use Appendix B fixture names. Every .bin has a .json sibling with source version
 
 Write the failing check/oracle fixture before its implementation. The cases below must become runnable checks, not manual checklist-only claims. Run these checks without Docker or a live Broker; use Java fixtures, controlled clocks and scripted peers. Shared commands and evidence rules are in the execution index.
 
-- [ ] **P0-V01** — Run fixture generation twice; metadata hashes match raw files and normalized semantic results match.
-- [ ] **P0-V02** — Java decodes both codec families it produced; malformed fixtures fail; comparator self-test detects meaningful differences.
-- [ ] **P0-V04** — Changing the Maven client version causes verification to fail; no scenario with missing prerequisites reports PASS.
+- [x] **P0-V01** — Run fixture generation twice; metadata hashes match raw files and normalized semantic results match.
+- [x] **P0-V02** — Java decodes both codec families it produced; malformed fixtures fail; comparator self-test detects meaningful differences.
+- [x] **P0-V04** — Changing the Maven client version causes verification to fail; no scenario with missing prerequisites reports PASS.
 
-- [ ] **P0-U01** — Fixture construction covers route, heartbeat, send, pull, offsets and lock/unlock without a Broker; scenario metadata separates client/server versions and pending live evidence.
+- [x] **P0-U01** — Fixture construction covers route, heartbeat, send, pull, offsets and lock/unlock without a Broker; scenario metadata separates client/server versions and pending live evidence.
 
 ### 5.1 Local commands after implementation
 

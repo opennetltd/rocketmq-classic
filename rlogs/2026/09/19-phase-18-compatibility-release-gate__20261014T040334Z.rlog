@@ -1,0 +1,6 @@
+# Phase 18 Producer route-owner method crosswalk — 2026-10-14T04:03:34Z
+
+- Audited the pinned `DefaultMQProducerImpl` route-owner methods `getPublishTopicList`, `isPublishTopicNeedUpdate`, and `updateTopicPublishInfo` against their call sites in pinned `MQClientInstance` (topic enumeration, route-refresh decision, and accepted route publication).
+- Added exact Java signature assertions to the 82-method inventory regression and documented their mapping to `ProducerRuntime` plus Producer-owned publish-info state. Existing Rust tests cover configured/dynamic topic enumeration, namespace wrapping, empty-route state and route publication; this is a source crosswalk, not a new behavior change.
+- PASS: targeted `pinned_java_default_producer_impl_public_surface_is_recorded`; `cargo fmt --all -- --check`; `git diff --check`.
+- P18-V01 remains PARTIAL for per-overload branch/input mapping, broad source/input reconciliation and Java reverse-export/inherited-trait audit.

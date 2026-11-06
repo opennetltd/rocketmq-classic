@@ -1,0 +1,6 @@
+# Phase 3 parity continuation — 2026-09-26T15:16:52Z
+
+- Continued from `e50021c`; strict Java 5.5.1 parity remains required and Phase 4 remains gated. No phase plan changes.
+- Compared Java `getNameServerAddressList()` implementation (`AtomicReference<List<String>>`, initially null; empty updates ignored) with Rust. Changed the Rust getter to `Option<Vec<String>>`, preserving `None` until a non-empty list is configured and preserving existing state after empty updates. Updated internal callers and NameServer tests, including unset/empty-update assertions. Updated both compatibility inventory and top-level Phase 3 status.
+- Validation passed: `cargo fmt --all --check`; targeted `p3_nameserver_update_shuffles_changed_lists_and_preserves_duplicates`; `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`; `cargo test --workspace --locked --offline` (common 11, protocol 9 unit + 1 integration, remoting 29 unit + 4 codec + 63 transport); metadata and differential self-tests; `git diff --check`.
+- No Java Maven/Broker/Docker/cross-language live validation performed. Many parity gaps remain in the inventory, so Phase 3 is not accepted. This batch is pending commit at log creation.

@@ -73,11 +73,11 @@ Stop new pull/consume work, drop assignments, cancel long polls and wait a bound
 
 Write the failing check/oracle fixture before its implementation. The cases below must become runnable checks, not manual checklist-only claims. Run these checks without Docker or a live Broker; use Java fixtures, controlled clocks and scripted peers. Shared commands and evidence rules are in the execution index.
 
-- [ ] **P10-V01** — ProcessQueue duplicate/gap/out-of-order completion tests prove counters and no commit past unresolved offsets.
-- [ ] **P10-V02** — Paused-time scheduler tests prove bounded tasks, threshold behavior, dropped-generation rejection and retry retention on send-back failure.
-- [ ] **P10-V04** — Fault injection at every startup step and shutdown with slow callbacks leave no lost unacknowledged work or owned-task leaks.
+- [x] **P10-V01** — ProcessQueue duplicate/gap/out-of-order completion tests prove counters and no commit past unresolved offsets.
+- [x] **P10-V02** — Paused-time scheduler tests prove bounded tasks, threshold behavior, dropped-generation rejection and retry retention on send-back failure.
+- [x] **P10-V04** — Fault injection at every startup step and shutdown with slow callbacks leave no lost unacknowledged work or owned-task leaks.
 
-- [ ] **P10-U01** — Private fixed-assignment tests inject Java message fixtures and scripted send-back responses to verify listener success/partial/failure, retry and DLQ decisions.
+- [x] **P10-U01** — Private fixed-assignment tests inject Java message fixtures and scripted send-back responses to verify listener success/partial/failure, retry and DLQ decisions.
 
 ### 5.1 Local commands after implementation
 

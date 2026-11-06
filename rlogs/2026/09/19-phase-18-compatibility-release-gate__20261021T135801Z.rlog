@@ -1,0 +1,29 @@
+# Phase 18 POP retry assignment transition parity — 2026-10-21T13:58:01Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+- Audited `RebalanceImpl.updateMessageQueueAssignment`. On push-to-pop, Java
+  removes `%RETRY%{group}_{topic}` from `subscriptionInner` but leaves its
+  entry in `topicSubscribeInfoTable`; the previous Rust helper also deleted
+  the cached route.
+- Changed Rust unsubscribe behavior to remove only the subscription. Extracted
+  the assignment-mode reconciliation used by the broker-assignment path.
+- Added invoked Java fixture cases for pop-to-push, push-to-pop, mixed modes,
+  retry topics and empty assignments. Each case records assignment queue IDs,
+  retry subscription presence and cached-route presence. Added a Rust
+  fixture-driven comparison for all five cases.
+- Fixture SHA-256:
+  `104b9fd505b227abc8a8d1f5e35e036ba89989cbfbb4d9725deb13fc87889565`.
+
+Verification passed:
+- `cargo test -p rocketmq-classic-consumer --lib broker_assignment_modes_match_java_pop_retry_subscription_transitions --locked`
+- `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`
+- `mvn -f compat/java-reference/pom.xml verify` (37 scenarios, 83 Java-decoded
+  Rust typed-header frames, 16 typed-body frames).
+- `cargo fmt --all -- --check` and `git diff --check`.
+
+This closes the recorded retry-subscription assignment cases only. Broader
+P18-V01 source/API/settings/reverse-export review, final full-workspace P18-V02,
+current native platform CI evidence and Phase 19 live Broker/Docker scenarios
+remain open. Four preserved Phase 19 worktree paths remain untouched.

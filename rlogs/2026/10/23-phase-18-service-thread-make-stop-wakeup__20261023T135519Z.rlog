@@ -1,0 +1,32 @@
+# Phase 18 ServiceThread makeStop wake behavior
+
+- Recorded: 2026-10-23 13:55:19 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source revision: `4c74d38e` (`fix: wake rebalance worker on makeStop`)
+- Pinned Java source: RocketMQ 5.5.1,
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Change
+
+- Pinned `ServiceThread.makeStop()` sets the stop flag only after start and
+  calls `wakeup()` without joining. Rust now sends the Rebalance worker's
+  wake notification after changing that flag.
+- PullMessageService still waits on its request queue; Java's inherited
+  `LockSupport.unpark` does not release that blocking queue operation.
+- The invoked Java fixture blocks in `waitForRunning(60_000)` and captures its
+  prompt return after `makeStop()`. The Rust regression checks the owned
+  Rebalance worker exits after the public handle call.
+- `fixtures/runtime/client-config.json` SHA-256:
+  `aff5aa095941819f7cb3a1f419a66000e5b83177f7badd0d4625b85552e53387`.
+
+## Verification
+
+- `cargo test --offline --locked -p rocketmq-classic-core --all-features` — passed (247 unit tests, all integration targets, 21 doctests).
+- `cargo clippy --offline --locked -p rocketmq-classic-core --all-targets --all-features -- -D warnings` — passed.
+- Focused makeStop regression and Java runtime fixture comparison — passed.
+- `mvn -q -o -f compat/java-reference/pom.xml verify` — passed for all fixture families.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- No push or remote CI was run; Phase 19 user-owned paths were not staged.
+
+This closes the inherited wake branch only. Broad P18-V01 source/API/settings/
+input/error/control-flow reconciliation remains open.

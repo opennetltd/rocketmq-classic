@@ -1,0 +1,8 @@
+# Phase 6 execution session — 2026-10-10T16:35Z
+
+- Continued the platform portion of the Phase 6 acceptance audit on `07-phase-06-runtime-routing-heartbeat`. The requested Java checkout `/Users/nanashi07/Projects/3rd/rocketmq` remains absent; pinned 5.5.1 Maven artifacts remain available.
+- The installed Rust targets are macOS arm64 and Windows GNU. A full `cargo check -p rocketmq-classic-core --all-targets --target x86_64-pc-windows-gnu --locked` exits 101 before Rust checking because `aws-lc-sys` cannot find `x86_64-w64-mingw32-gcc`.
+- Isolated the actual repository `crates/rocketmq-classic-core/src/config/local_address.rs` through a temporary crate at `/private/tmp/p6-windows-address-check`. `cargo check --tests --target x86_64-pc-windows-gnu --offline` exits 0, compiling the Windows production branch and all Windows-gated helper tests. This does not execute the IP Helper FFI.
+- Logs: `/private/tmp/p6-windows-core-check.log` (cross-build tool missing) and `/private/tmp/p6-windows-address-module-check.log` (isolated module/test-code check exit 0).
+- Updated `PHASE_6_REQUIREMENT_AUDIT.md`. Windows runtime enumeration, non-macOS Unix runtime enumeration and actual IPv6-only-host behavior remain unverified. The Phase 6 objective remains active; this is platform evidence, not a completion claim.
+- Documentation/evidence commit: `0302acf5`.

@@ -1,0 +1,36 @@
+Goal: finish the current-revision local server-free P18-V02 validation after
+the cluster-topic header inventory commit `6441ca56`.
+
+Validation passed on code revision `6441ca56`:
+- `cargo test --workspace --locked`
+- `cargo test --workspace --all-features --locked`
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`
+- `mvn -q -f compat/java-reference/pom.xml verify` (37 invoked RPC scenarios,
+  68 typed Rust header frames, 15 typed body fixtures, and Java/Rust
+  cross-decodes)
+- `python3 tests/differential/compare.py --self-test` and
+  `python3 tests/differential/compare.py --validate-manifest`; all 37 rows
+  listed and validated
+- `bash tests/stress/run-offline-smoke.sh` (16 deterministic race/leak cases,
+  three repetitions each)
+- `cargo run --locked --offline -p rocketmq-classic-remoting --example
+  fuzz_smoke` (121 frame seeds, 11 message seeds, 2,112 mutations, 170 frame
+  decodes, 109 message decodes)
+- `cargo build -p rocketmq-classic --examples --release --locked`
+- `cargo bench --workspace --no-run --offline --locked`
+- `cargo bench -p rocketmq-classic --bench offline --locked`; environment and
+  measurements are recorded in `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`
+- Locked full Cargo metadata, `scripts/check-workspace-metadata.py`, and
+  `cargo package --workspace --list --locked --allow-dirty`; seven package
+  listings each contain `LICENSE` and `NOTICE`
+- `cargo test -p rocketmq-classic-core --locked
+  public_unique_id_helpers_match_the_pinned_java_fixture` under UTC and again
+  with `TZ=Asia/Taipei`
+- `cargo fmt --all -- --check` and `git diff --check`
+
+This closes the current-revision local P18-V02 server-free gate. Broad
+P18-V01 remains open. Current GitHub Ubuntu/native Windows evidence, the
+remaining Phase 19 Broker/Docker scenarios, and pre-publication registry
+resolution remain open. The four Phase 19 working-tree paths were left
+untouched and unstaged.

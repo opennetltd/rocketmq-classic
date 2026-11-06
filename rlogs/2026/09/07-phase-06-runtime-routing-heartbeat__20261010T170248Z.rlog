@@ -1,0 +1,5 @@
+# Phase 6 execution session — 2026-10-10T17:02Z
+
+- Added a private scheduler regression that compares the native schedule count for `namesrv_addr = Some("")` with the pinned Java `RuntimeStartMutationProbe` `configuredToEmpty` case.
+- The Java observation records four scheduled tasks and zero discovery calls; native `schedules()` now has a focused fixture-backed assertion for both values. The runtime-level integration test separately checks zero `TopAddressing` calls and retained constructor addresses.
+- Validation: the focused core unit test passes; strict core all-target Clippy, `cargo fmt --all -- --check`, and `git diff --check` pass. No production code changed.

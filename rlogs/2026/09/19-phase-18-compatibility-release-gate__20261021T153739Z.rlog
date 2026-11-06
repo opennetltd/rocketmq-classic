@@ -1,0 +1,40 @@
+# Phase 18 Push implementation factory setter slice — 2026-10-21T15:37:39Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Starting revision: `fe5de2f9` (`fix(consumer): expose rebalance factory replacement`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## P18-V01 source/API correction
+
+- Pinned `DefaultMQPushConsumerImpl` exposes `getmQClientFactory()` and
+  `setmQClientFactory(MQClientInstance)` separately from
+  `RebalanceImpl.getmQClientFactory/setmQClientFactory`. Its implementation
+  fixture already records initial null and assigned-object identity.
+- Added `get_implementation_client_runtime` and
+  `set_implementation_client_runtime` with a distinct nullable slot from the
+  rebalance factory. Startup initializes both slots with the manager-created
+  runtime; Push runtime contexts and task scheduling use an explicit
+  implementation override. Registration and lifecycle leases remain tied to
+  the startup `ClientRuntimeManager`.
+- Added `implementation_factory_setter_is_independent_of_rebalance_factory`
+  for initial null, identity replacement, explicit null, and slot independence.
+  Updated the Phase 10 and Phase 18 compatibility crosswalks and appended the
+  review record to `docs/release-checklist.md`.
+
+## Verification on this slice
+
+- PASS: focused implementation-factory setter and raw implementation accessor
+  tests.
+- PASS: `cargo test -p rocketmq-classic-consumer --lib` (244 passed).
+- PASS: strict consumer Clippy, `cargo fmt --all --check`, and `git diff --check`.
+- The final workspace P18-V02 gate must be refreshed after remaining code work.
+
+## Remaining status
+
+- Broad P18-V01 source/settings/input/error/control-flow and reverse-export
+  reconciliation remains open. The separate factory slots are mapped, while
+  manager-owned registration and shutdown semantics remain a documented Rust
+  ownership boundary.
+- Current-revision GitHub Ubuntu/native Windows P18-V04 evidence remains open;
+  no remote CI was triggered. Phase 19 Broker/Docker scenarios remain outside
+  this run. Preserved Phase 19 worktree paths were not touched or staged.

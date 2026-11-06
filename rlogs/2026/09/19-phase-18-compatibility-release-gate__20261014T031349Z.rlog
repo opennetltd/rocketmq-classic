@@ -1,0 +1,24 @@
+# Phase 18 Producer publish table nullable and full method coverage — 2026-10-14T03:13:49Z
+
+- Continued `phase/19-phase-18-compatibility-release-gate` from `ae807776`. The pinned RocketMQ Java client source/artifact remains 5.5.1 at `efa1be59d6fc747ad220f036c86030f05f0419f9`; the external checkout remains read-only.
+- Completed the invoked-fixture mapping for `TopicPublishInfoTable` methods and retained views: nullable key/value/callback/result branches, special conditional-remove/value-view-remove null outcomes, null `putAll` map and partial row failure, compute/merge null-result effects, `replaceAll` null-result failure, null view collections/predicates, entry `setValue(null)`, and view `removeIf`. Added valid `getOrDefault`, `putIfAbsent`, `containsValue`, conditional remove, and `forEach` outcomes. Code/test/fixture commit: `10f38de5` (`feat(producer): map nullable publish table methods`).
+- Fixture SHA-256: `410c2e3a5e18eb3cb7ed36842f7e4a889bdf1ee01ea09f8cbd41522c410750d9`.
+- The first Maven fixture-generation compile failed because two Java lambda parameters shadowed the local `entry`; renamed them to `candidate` and reran successfully. After a user pause, the prior Maven session handle was no longer live; process inspection found no Maven process, and the current fixture-drift verification was rerun successfully.
+- Updated the Phase 7 Producer matrix and release checklist. These docs and this log are committed separately.
+
+## Verification
+
+- PASS: `cargo fmt --all`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `cargo clippy -p rocketmq-classic-producer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo test -p rocketmq-classic-producer --locked` (119 unit tests, 45 integration tests, and doc targets).
+- PASS: focused Producer table differential tests (3 tests).
+- PASS: `mvn -q -f compat/java-reference/pom.xml -Dproducer.core.fixture.verify=false verify` (fixture generation, Java reference checks, and 37 scenarios).
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (latest fixture drift checks, cross-decodes, and 37 scenarios).
+- PASS: `python3 tests/differential/compare.py --self-test`; `python3 tests/differential/compare.py --validate-manifest` (37 scenarios).
+
+## Remaining work
+
+- P18-V01 remains PARTIAL: returned client-factory surface, nested `MQFaultStrategy` helpers, per-overload input/branch crosswalks, Java reverse-export, inherited/trait API, and broad source/input reconciliation remain open.
+- Re-run the full workspace P18-V02 gate after the remaining P18-V01 implementation/audit slices; the current evidence above is Producer-scoped plus pinned Java verification.
+- No current GitHub Ubuntu workflow result exists for the Linux-specific Java address profile. Phase 19 Docker/Broker scenarios have not run. Confirming the `0.1.0` release version and registry dependency resolution remains open; packages stay unpublished.
+- Final owner-run platform checks remain separate: Windows IP Helper runtime enumeration, non-macOS BSD runtime enumeration, and an IPv6-only host. No Broker was contacted and no push, publication, or tag was performed.

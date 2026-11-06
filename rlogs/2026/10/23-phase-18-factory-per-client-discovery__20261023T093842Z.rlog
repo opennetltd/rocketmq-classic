@@ -1,0 +1,42 @@
+# Phase 18 factory per-client NameServer discovery parity
+
+- Recorded: 2026-10-23 09:38:42 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Implementation revision: `df87b7b2`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: `MQClientAPIFactory` domain discovery and refresh address ownership
+
+## Finding and change
+
+Pinned Java `MQClientAPIFactory.createAndStart` calls `fetchNameServerAddr`
+on each newly created API client. `MQClientAPIImpl` stores the discovered
+string in its own `nameSrvAddr`, and scheduled refresh calls that same API
+instance. Rust previously stored one factory-wide current string and
+broadcast every slot's discovery response to all started clients. The factory
+now tracks one current address per pool index; startup and refresh responses
+update only that slot. Explicit factory address-change calls continue to
+update every client.
+
+The invoked Java fixture starts two domain clients against a bounded local HTTP
+responder. Its responses are `127.0.0.11:9876` and `127.0.0.12:9876`; the
+observed client address lists preserve those separate values. The Rust
+`factory_domain_discovery_keeps_each_clients_address_independent` regression
+consumes the same fixture.
+
+## Verification
+
+- `cargo test --offline -p rocketmq-classic-core --lib --all-features --locked` — passed, 238 tests.
+- Focused `factory_domain_discovery_keeps_each_clients_address_independent` test — passed.
+- `cargo clippy --offline -p rocketmq-classic-core --all-targets --all-features --locked -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- `mvn -o -f compat/java-reference/pom.xml verify` — passed (BUILD SUCCESS, 37 scenarios); the expanded invoked factory fixture verified.
+- Invoked Java fixture generation used `mvn -o -f compat/java-reference/pom.xml compile`, `mvn -o -f compat/java-reference/pom.xml dependency:build-classpath -Dmdep.outputFile=/tmp/rocketmq-java-reference-phase18.cp -Dmdep.includeScope=test`, and `compat.RuntimeApiFactoryFixtures` with the resulting classpath.
+
+## Acceptance boundary
+
+This closes the per-client factory domain discovery behavior slice only. Broad
+P18-V01 source/API/settings/input/error/control-flow/reverse-export
+reconciliation remains open. Native Windows runtime, current-revision remote
+Ubuntu CI, and Phase 19 Broker/Docker evidence remain pending. No push or
+remote CI was run; existing Phase 19 worktree files remain untouched and
+unstaged.

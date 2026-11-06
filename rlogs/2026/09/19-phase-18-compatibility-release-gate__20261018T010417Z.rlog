@@ -1,0 +1,52 @@
+# P18-V01 Query/admin header reflection decoding — 2026-10-18T01:04:17Z
+
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Pinned Java oracle: RocketMQ client 5.5.1 at
+  `efa1be59d6fc747ad220f036c86030f05f0419f9` in the read-only checkout
+  `/Users/bruce.tsai/Projects/3rd/rocketmq`.
+- Java source inspection confirmed `QueryMessageRequestHeader`,
+  `QueryMessageResponseHeader`, and `ViewMessageRequestHeader` do not implement
+  `FastCodesHeader`; both `useFastEncode` hints use reflective field conversion.
+  Missing or invalid boxed values are retained as null because conversion errors
+  are caught per field. `ViewMessageRequestHeader` inherits identity-based
+  `Object.equals`/`hashCode`.
+- Rust now models Java nullable fields with `Option`, decodes these header types
+  through the reflection-compatible path for both hints, preserves per-field
+  malformed numeric outcomes, and removes value equality from
+  `ViewMessageRequestHeader`. The Core `QUERY_MESSAGE` path reports a missing or
+  invalid index timestamp at the result boundary where Java unboxes it. The
+  invoked Java fixture and Rust differential cover both hints, valid/missing/
+  malformed values, and the identity-equality boundary. Fixture SHA-256:
+  `abc37ff23edd774910af9093b96fce95ce5e2270c5db7996fb0607df1ef3cc68`.
+- Implementation commit: `66334aa9 fix(protocol): match query admin header reflection decode`.
+
+## Verification
+
+- Maven `verify`: PASS; new fixture, 37 offline scenarios, fixture drift,
+  56 typed-header cross-decodes, and 14 typed-body cross-decodes.
+- Protocol all-feature tests: PASS (128 unit tests, header matrix/inventory,
+  44 doctests).
+- Remoting all-feature tests: PASS (137 unit, 8 codec, 1 fuzz regression,
+  7 security, 107 transport, 18 doctests).
+- Core `admin_rpc` tests (19), Producer admin tests (11), and Consumer admin
+  tests (9): PASS.
+- Strict all-target/all-feature Clippy: PASS for Protocol, Remoting, Core,
+  Producer, and Consumer.
+- `cargo fmt --all -- --check` and `git diff --check`: PASS.
+
+## Remaining scope
+
+- This closes only the query/admin header decoder and result-boundary slice.
+  Broad bidirectional P18-V01 API/settings/input/error/flow and Rust
+  reverse-export reconciliation remains open.
+- Full-workspace P18-V02 must be rerun after the latest code slice. Current-
+  revision Ubuntu/native Windows P18-V04 evidence and final P18-V03
+  package/provenance review remain open.
+- Phase 19 still has 30 of 37 local scenarios without runners, required
+  two-Broker/TLS/ACL/feature profiles pending, and no passing `run-local.sh
+  --all` reconciliation. Release-version confirmation and registry dependency
+  checks remain pending.
+- The Phase 19 runner changes remain unstaged and uncommitted. No Broker was
+  contacted in this verification; the Java oracle and plans were not modified.
+  No remote branch updates, tags, publication, or deployment occurred.

@@ -1,0 +1,39 @@
+Session: 2026-10-16T01:50:40Z
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Branch: phase/19-phase-18-compatibility-release-gate
+Base code revision: b49befc2
+
+P18-V01 request/reply helper behavior evidence:
+- Confirmed the configured Java checkout is at `2238256d`, not the required
+  baseline; read-only `git show efa1be59d6fc747ad220f036c86030f05f0419f9:<path>`
+  confirmed the pinned `RequestResponseFuture` API and callback guard. One
+  initial fixture compile referenced a newer checkout-only method and failed;
+  removed that call and used only methods present in the pinned 5.5.1 artifact.
+- Extended `RequestReplyFixtures` and `request-reply.json` to invoke future
+  getters/setters, latch replacement/countdown/wait, negative timeout behavior,
+  send/cause branches, callback at-most-once behavior, null callback behavior,
+  singleton holder identity and live-map insert/remove visibility. Rust fixture
+  assertions lock those observations.
+- Updated the Phase 15 matrix: Java uses a private `AtomicBoolean` to guard
+  callback execution; the public mutable future state and live holder table
+  remain unmapped in Rust and P18-V01 stays open.
+- `cargo test -p rocketmq-classic --test request_reply_public_api --locked` —
+  PASS (3 tests).
+- `mvn -q -f compat/java-reference/pom.xml verify` — PASS; all 37 scenarios,
+  fixture drift and Java/Rust cross-decodes. Standard Unsafe/final-field notices
+  were emitted by existing reference fixtures.
+- No Docker, live Broker, publication, tag, push or plan edits.
+- Final fixture generation/Java compilation passed after import cleanup;
+  `cargo fmt --all -- --check`, `git diff --check`, and strict facade Clippy
+  (`cargo clippy -p rocketmq-classic --all-targets --all-features --locked --
+  -D warnings`) pass. The focused facade integration test passes 3/3 against the
+  regenerated fixture.
+- Full Maven verify passed on the same fixture behavior before an import-order
+  only cleanup; the final Java compile and invoked fixture generation passed
+  after that cleanup.
+- The known gap is now behavior-backed but not implemented: public mutable
+  future/table API and integration with the runtime-owned correlation store
+  remain P18-V01 work. Commit status: pending.
+- Fixture, matrix, and focused test evidence commit: `8ca6a205 test(compat):
+  cover request future mutable behavior`. The commit leaves the implementation
+  gap explicitly open for the next P18-V01 change.

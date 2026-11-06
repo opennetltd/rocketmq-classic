@@ -1,0 +1,35 @@
+# Recorded: 2026-10-23 01:30:08 UTC
+# Code revision: 9be7efed
+
+## Oracle finding
+
+Pinned Java `ProcessQueue.makeMessageToConsumeAgain([message, null])` moves
+the valid prefix from its consuming map into the ready map, then propagates
+`NullPointerException`. The requeue does not change counters or the dispatch
+flag. Rust's `make_message_to_consume_again_items_nullable` requeues the prefix,
+removes its in-flight ownership, retains count/size/dispatch state, and returns
+a typed null-element error.
+
+The invoked Java facade fixture and Rust comparison check the error, requeued
+prefix, counters, and dispatch result of a following insertion. Fixture
+SHA-256: `2b1daf803430969e4b7bd57f4bc54e9794b3d107b7cc0a1fd5fb1062764efdb7`.
+
+## Commits
+
+- `9be7efed fix(consumer): preserve ProcessQueue requeue prefix`.
+- Compatibility/API audit records and this execution log are in the following
+docs-only commit.
+
+## Validation on code revision 9be7efed
+
+- Focused `process_queue_public_methods_match_pinned_java_behavior` facade test — PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml exec:java@verify-consumer-facade-api-fixture` — PASS.
+- Strict Consumer all-target/all-feature Clippy — PASS.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+
+## Remaining Phase 18 status
+
+Broad P18-V01 Java source/API/settings/input/error/control-flow and Rust
+reverse-export reconciliation remains PARTIAL. Thirty live handoff scenarios
+remain `PENDING_PHASE_19`; current-revision remote Ubuntu CI, native Windows
+runtime, and Phase 19 Broker/Docker evidence remain open.

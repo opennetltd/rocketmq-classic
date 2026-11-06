@@ -1,0 +1,47 @@
+# Phase 18 compatibility release gate — ProcessQueue parity closure slice
+# Recorded: 2026-10-22 23:15:00 UTC
+# Code revision: aa3cec73
+
+## Compatibility finding and change
+
+Pinned Java 5.5.1 `ProcessQueue.removeMessage` mutates only the ready
+`msgTreeMap`. A message returned by `takeMessages` is held in the separate
+orderly in-flight map, so removal by offset must leave its count/size intact
+for a later `commit`. Java also leaves `consuming` unchanged when the final
+ready message is removed. Rust now follows both flows while preserving its
+internal batch ownership.
+
+The invoked Java `ConsumerFacadeApiFixtures` comparison adds `removeInFlight`
+and `dispatchAfterRemove` cases. Updated fixture SHA-256:
+`67aac16425d8ac98e2d2cde4ff53a91e68b080b429711852979eb302d173dc5e`.
+The focused regressions are
+`remove_message_matches_java_for_in_flight_entries` and
+`remove_message_preserves_dispatch_state_until_empty_take`.
+
+## Verification on this revision
+
+- `cargo test --offline --workspace --locked --quiet` — PASS.
+- `cargo test --offline --workspace --all-features --locked --quiet` — PASS.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — PASS.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+- Pinned offline Maven `verify` — PASS: 37 differential scenarios, 11 message fixtures/runtime cases, 106 typed Java header cross-decodes and 19 typed Java body cross-decodes.
+- Java facade fixture generation and `--verify` — PASS against the pinned 5.5.1 source/artifact.
+- Differential comparator `--self-test` — PASS; `--validate-manifest` — PASS, 37 scenarios.
+- Fuzz smoke — PASS: 163 frame seeds, 11 message seeds, 2,784 bounded mutations, 245 frame decodes and 192 message decodes.
+- Offline race/leak smoke — PASS: 17 cases repeated three times.
+- Release facade examples and offline benchmark build/run — PASS.
+- Offline benchmark observations are appended to `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`; they set no performance threshold.
+
+## Remaining acceptance work
+
+P18-V01's broad Java source/API/settings/input/error/control-flow and Rust
+reverse-export reconciliation remains PARTIAL. Thirty live handoff scenarios
+remain `PENDING_PHASE_19`. The prior Windows GNU Consumer cross-check passed at
+revision `60238931`; native Windows runtime and current-revision remote Ubuntu
+CI remain unverified. The MSVC retry remains blocked by missing local Windows
+SDK headers. Phase 19 Broker/Docker evidence is outstanding.
+
+The external Java checkout at RocketMQ 5.3.3 and its pre-existing untracked
+`broker/src/test/java/org/apache/rocketmq/broker/aaaa.java` were left
+untouched. This change uses the pinned Java 5.5.1 source commit
+`efa1be59d6fc747ad220f036c86030f05f0419f9` and pinned 5.5.1 Maven artifact.

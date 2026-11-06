@@ -1,0 +1,1 @@
+{"case":"batch-ack-0-normal","family":"batch-ack","mode":"ASYNC","outcome":"status=OK","provenance":{"client":"org.apache.rocketmq:rocketmq-client:5.5.1","entrypoint":"MQClientAPIImpl","serverBaselineContacted":false,"transport":"mock RemotingClient"},"request":{"bodyBase64":"eyJhY2tzIjpbXSwiYnJva2VyTmFtZSI6ImJyb2tlciJ9","code":200151,"ext":{}},"response":{"code":0,"ext":{}}}

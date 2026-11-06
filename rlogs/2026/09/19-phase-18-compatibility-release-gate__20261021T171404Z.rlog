@@ -1,0 +1,66 @@
+# Phase 18 consumer stats manager API/sharing closure and current-revision P18-V02 refresh — 2026-10-21T17:14:04Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `0a927661` (`fix(consumer): share stats manager by runtime`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `880825d176dae84dd0f9fdcb5354261a3cc6b160350e222722c4c8978cb234fd`.
+
+## Source audit and change
+
+- Java `DefaultMQPushConsumerImpl.getConsumerStatsManager()` returns the
+  `MQClientInstance` manager. Multiple Push implementations sharing one
+  factory share that manager; distinct `MQClientInstance`s own distinct
+  managers, even with the same client ID.
+- Moved the public Rust `ConsumerStatsManager` into Core runtime ownership and
+  re-exported it through the Consumer and facade crates. Push/POP metric
+  recording and Running Info use the same runtime manager. Getter behavior
+  retains Java's unavailable state before factory binding and after nulling the
+  implementation factory.
+- Exposed the Java lifecycle, metric-update and status methods. The invoked
+  Java fixture inventories the public constructor and all eight public
+  methods, and checks shared factory identity.
+- Compared `ConsumerStatsManager`, `StatsItemSet`, `StatsItem` and `RTStatsItem`
+  with the pinned source. Rust uses Java's `topic@group` key construction and
+  integer narrowing; it keeps the 10-second/10-minute sampling windows and
+  does not automatically expire client stats entries. The consumer-side
+  `cleanResource` call sites are broker stats only.
+- Added regressions for same-runtime sharing, distinct-runtime isolation,
+  metric group partitioning, Java key collisions, and each mapped public
+  manager method. Updated the Phase 6, 10 and 17 compatibility records.
+
+## Verification
+
+- PASS: focused Core stats tests (4), Consumer stats tests (6), Java method/API
+  fixture test, facade export test and `cargo fmt --all -- --check`.
+- PASS: `cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify`; 37 scenarios, fixture
+  drift checks, Java/Rust cross-decodes, 83 typed headers and 16 typed bodies.
+  The run emitted existing JDK Unsafe and reflective-final-field warnings.
+- PASS: `python3 tests/differential/compare.py --self-test` and
+  `--validate-manifest` (37 scenarios).
+- PASS: offline deterministic stress smoke (16 cases × 3 repetitions).
+- PASS: release fuzz smoke (137 frame seeds, 11 message seeds, 2,368 bounded
+  mutations, 201 frame decodes and 118 message decodes).
+- PASS: release workspace examples, `cargo bench --workspace --no-run
+  --locked`, and offline benchmark on Apple M5 Max, macOS aarch64, rustc
+  1.85.0: frame encode/decode 2,253.0 ns/iteration, message zstd decode
+  1,134.6 ns, producer request construction 1,224.0 ns, 128-entry route
+  lookup 14.0 ns, and loopback pending completion 62,863.9 ns.
+- PASS: workspace metadata/license/dependency validation and all seven
+  publishable crate package listings, including the moved stats source in
+  Core and `LICENSE`/`NOTICE` in every crate. Package listing used
+  `--allow-dirty` for this pre-commit source revision.
+- PASS: `git diff --check`.
+
+## Remaining status
+
+Broad P18-V01 remains open: raw `ConsumeMessageService` replacement, arbitrary
+application-defined Java `MessageExt` subclasses, and the remaining
+source/settings/input/error/control-flow/reverse-export audit. P18-V04
+current-revision GitHub Ubuntu and native Windows runtime evidence remain
+absent. Phase 19 live Broker/Docker validation remains separate. No remote CI
+or push was performed; protected Phase 19 working-tree paths were left
+unstaged and untouched.

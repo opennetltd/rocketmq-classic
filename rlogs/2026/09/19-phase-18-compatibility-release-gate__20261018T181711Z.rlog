@@ -1,0 +1,36 @@
+# Phase 18 query/admin header field visibility — 2026-10-18 18:17 UTC
+
+- Branch: `phase/18-phase-18-compatibility-closure`.
+- Pinned Java 5.5.1 inventories show no public fields on
+  `QueryTopicsByConsumerRequestHeader`,
+  `QuerySubscriptionByConsumerRequestHeader`, or
+  `QueryTopicConsumeByWhoRequestHeader`. Rust fields are crate-private; Java-
+  mapped getters/setters expose the owned fields and inherited RPC/topic values.
+- The invoked query-admin fixture records each class's public constructors,
+  fields, declared methods, and callable methods. Rust remoting differential
+  compares both decode modes and asserts empty Java public-field lists.
+  Fixture SHA-256:
+  `1a526e62792d4207d3d0455ff47d9ba86e23a162a368255b59656701eb1f8e1b`.
+- Code commit: `78ac649f fix(protocol): align query admin header visibility`.
+
+## Validation
+
+- PASS: workspace all-target/all-feature `cargo check`.
+- PASS: Remoting query-admin reflection-mode fixture differential.
+- PASS: all 50 Core `admin_rpc` integration tests and the Core query-topics API
+  test.
+- PASS: Protocol doctests (83, including field-visibility compile-fail cases).
+- PASS: strict all-target/all-feature Clippy for Protocol, Remoting and Core.
+- PASS: offline Maven `verify`; 37 scenarios, fixture drift, 66 typed-header
+  and 15 typed-body cross-decodes.
+- PASS: `cargo fmt --all -- --check` and `git diff --check`.
+
+## Remaining work
+
+- Broad P18-V01 Java/Rust source/API/settings/input/error/flow and reverse-
+  export reconciliation remains open.
+- Re-run the full server-free P18-V02 gate after final code changes.
+- Current-revision GitHub Ubuntu address-profile evidence and native Windows
+  stack-runtime evidence are still absent for P18-V04.
+- Phase 19 still needs 30 of 37 local Broker/Docker scenario runners and
+  required profiles; owner-environment checks remain a separate handoff.

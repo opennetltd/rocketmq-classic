@@ -1,0 +1,191 @@
+2026-10-15 21:21 UTC — added a direct regression for the initial
+`tls.config.file` system-property snapshot.
+
+Pinned Java client: 5.5.1, source commit
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+The invoked Java oracle initializes `TlsSystemConfig.tlsConfigFile` from a
+first properties file, changes the JVM system property to a second file with
+the opposite `tls.test.mode.enable` value, then builds a TLS context. The
+fixture records that Java still uses the first file. The Rust integration case
+re-enters itself in a fresh test process so the process-wide property `OnceLock`
+captures the first path, then supplies the second path and verifies the first
+file remains effective.
+
+Fixture SHA-256:
+
+- `fixtures/security/tls-settings-defaults.json`:
+  `0bfdd291c36efbab3f66f7943cc484ad6a1c441f9853db0e1f9ee4fc08b35b9d`
+- `fixtures/security/tls-settings-system-properties.json`:
+  `70877c872888015cf00e6957bdc3eeea3152abda835b64d384a9d0021b24c91a`
+
+Validation passed:
+
+- `cargo test -p rocketmq-classic-remoting --test security tls_config_file_path_uses_initial_system_property_snapshot --locked`
+- `cargo fmt --all -- --check`
+- `mvn -q -f compat/java-reference/pom.xml verify` — 37 scenarios and cross-decodes
+- `git diff --check`
+
+Code/fixture commit: `886c5095`. The broad P18-V01 bidirectional source/API,
+settings, input/error/control-flow, inherited API, and reverse-export audit
+remains open. Current-revision Ubuntu CI evidence, Phase 19 Docker/Broker
+automation, and pre-publication version/registry resolution also remain open.
+Owner-run production topology, organization credentials/CA, approved fault
+injection, capacity/soak, and platform-specific runtime checks remain manual
+items. No push, tag, publication, deployment, Docker, or live Broker action
+occurred.
+
+2026-10-15 UTC — recorded Remoting reverse-name scan dispositions for
+`ProcessorLease`, `register_owned_processor[_with_executor]`, and
+`TimeoutPhase` in the Phase 3 inventory and Phase 6 audit. Pinned Java source
+confirms registration maps to `RemotingClient.registerProcessor` and the live
+processor table; Java timeout exceptions have no phase enum. Existing Rust
+regression `owned_processor_cleanup_preserves_replacement_even_for_same_handle`
+covers lease replacement/drop behavior. Documentation-only change; no tests
+were run. `git diff --check` passed. Broad P18-V01 remains open.
+
+2026-10-15 UTC — extended the P18-V01 reverse-name audit to Core request/reply
+carriers. Pinned Java `RequestResponseFuture` exposes mutable pending state and
+`RequestFutureHolder.getRequestFutureTable()` exposes the live correlation map;
+Rust `PendingReplyRequest`, `PendingReplyControl`, and
+`PendingReplyCompletion` map to those flows through identity-bound ownership.
+Recorded that dropped-future cancellation and the lower-level `ProducerShutdown`
+completion still need a P18-V01 API/flow disposition. Documentation-only change;
+no tests were run. Broad P18-V01 remains open.
+
+2026-10-15 21:45 UTC — closed the request/reply producer-unregister disposition
+from the Phase 15 matrix. Pinned Java `MQClientInstance.unregisterProducer`
+removes the producer table entry and unregisters it with brokers; it does not
+remove entries from `RequestFutureHolder.getRequestFutureTable()`. Rust
+lease-based unregister previously removed that producer's pending correlations
+and returned `ProducerShutdown`, unlike Java and the existing group-based Rust
+path. Lease unregister now preserves correlations so late replies still
+complete them. Request-future drop cancellation maps to Java's synchronous
+request `finally` cleanup after interruption; direct `control.cancel` maps to
+removal from Java's public live correlation table. Updated the Phase 15 matrix
+and release checklist; broad P18-V01 remains open.
+
+Validation passed:
+
+- `cargo fmt --all -- --check`
+- `cargo test -p rocketmq-classic-core --locked` — 159 unit tests, all
+  integration targets and 13 doctests passed, including the lease-unregister
+  pending-reply and full inbound late-reply regressions.
+- `cargo test -p rocketmq-classic-producer --locked` — 142 unit tests, all
+  integration targets and 6 doctests passed, including Producer shutdown and
+  request/reply lifecycle coverage.
+- `cargo clippy -p rocketmq-classic-core --all-targets --all-features --locked
+  -- -D warnings`
+- `git diff --check`
+
+Follow-up disposition: `GroupRegistry::clear()` can still send
+`PendingReplyCompletion::ProducerShutdown` for a request registered directly
+against a Rust `ClientRuntime` before startup fails. The public Java Producer
+API has no matching pre-start registration path. This Rust-only lifecycle case
+remains explicitly open for the broad reverse/API audit; the request/reply
+matrix status remains PARTIAL.
+
+2026-10-15 UTC — P18-V01 oneway completion-boundary follow-up, code commit
+19989176, against pinned Java source
+efa1be59d6fc747ad220f036c86030f05f0419f9. Rust invoke_oneway now returns
+only call-boundary TransportErrors and keeps scheduled transmission
+client-owned; connection, admission, and socket-write completion are not
+returned to the caller. Updated Core call sites, transport tests, and the
+Phase 3 inventory, transport ADR, and Java compatibility overview.
+
+Validation passed:
+- cargo test -p rocketmq-classic-remoting --locked (100 transport tests and
+  7 doctests reported; package command exited successfully).
+- cargo test -p rocketmq-classic-core --locked (159 unit tests, all
+  integration targets, and 13 doctests).
+- cargo clippy -p rocketmq-classic-remoting -p rocketmq-classic-core
+  --all-targets --all-features --locked -- -D warnings.
+- cargo fmt --all -- --check and git diff --check.
+
+This closes only the oneway completion-result difference. Broad P18-V01 remains
+open, including GroupRegistry::clear() producing ProducerShutdown for a
+directly registered pending reply when runtime startup fails. The final
+revision's complete P18-V02 workspace rerun and current-revision GitHub Ubuntu
+address-profile result remain outstanding. P18-V03 is complete; Phase 19's
+Docker/Broker scenarios and pre-publication version/registry checks remain
+separate future work.
+
+2026-10-15 UTC — P15 request/reply startup rollback follow-up, code commit
+182f8f69, against pinned Java client source
+efa1be59d6fc747ad220f036c86030f05f0419f9. ClientRuntime reply registration
+now requires Running. Failed startup rollback drops internal reply senders;
+the Rust-only ProducerShutdown completion and ProducerError::RequestReplyShutdown
+public variant were removed. Added regression checks to every injected initial
+startup failure and registry-clear handling; updated the Phase 15 matrix and
+Phase 6 reverse audit.
+
+Validation passed:
+- cargo test -p rocketmq-classic-core -p rocketmq-classic-producer --locked:
+  Core 160 unit tests, all integration targets, and 13 doctests; Producer 142
+  unit tests, all integration targets, and 6 doctests.
+- cargo clippy -p rocketmq-classic-core -p rocketmq-classic-producer
+  --all-targets --all-features --locked -- -D warnings.
+- cargo fmt --all -- --check and git diff --check.
+
+This closes the identified P15 startup-failure completion path. P18-V01 remains
+open for the full bidirectional public API/settings/flow audit. P18-V02 still
+requires a full workspace rerun on the final P18 revision.
+
+2026-10-15 UTC — completed the current-revision server-free P18-V02 gate on
+code revision `182f8f69` after the oneway and request/reply lifecycle changes.
+The subsequent `dfe08aa6` commit only records the request/reply disposition.
+
+Passed:
+- UTC default and all-feature locked workspace suites.
+- `cargo check --workspace --all-targets --all-features --locked` and strict
+  all-target/all-feature workspace Clippy.
+- Pinned Maven `verify` (37 differential scenarios and Java/Rust cross-decodes),
+  comparator self-test, and 37-scenario manifest validation.
+- `bash tests/stress/run-offline-smoke.sh`: 16 race/leak cases × 3.
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`:
+  105 frame seeds, 11 message seeds, 1,856 mutations, 146 frame decodes, and
+  113 message decodes.
+- `cargo build -p rocketmq-classic --examples --release --locked` and
+  `cargo bench --workspace --no-run --locked`.
+- Locked Cargo metadata, workspace metadata/license/dependency checks, and all
+  seven `cargo package --workspace --list --locked --allow-dirty` listings;
+  every package listing includes LICENSE and NOTICE.
+- Java-backed Unique ID fixture under `TZ=Asia/Taipei`, rustfmt, and
+  `git diff --check`.
+
+This closes the server-free P18-V02 gate on `182f8f69`. Broad P18-V01,
+current-revision GitHub Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker
+automation, and pre-publication version/registry resolution remain open.
+Owner-run production topology and platform checks remain manual. No push, tag,
+publication, deployment, Docker, or live Broker action occurred.
+
+2026-10-15 UTC — Linux `jstack` signal fallback follow-up, code commit
+`4c142334`. Pinned Java client source `efa1be59d6fc747ad220f036c86030f05f0419f9`
+uses `Thread.getAllStackTraces()` in `ClientRemotingProcessor`; the previous
+GitHub Ubuntu run (`38686280678`, source revision `cc79eb6e`) failed the Rust
+all-thread stack test because neither `SIGWINCH` nor `SIGURG` was usable. Added
+default-ignore `SIGCHLD` as a fallback, factored candidate filtering, and added
+tests for fallback selection and the case where every candidate is blocked.
+The Phase 17 matrix records this finding.
+
+Validation on the code tree for `4c142334`:
+- `TZ=UTC cargo test --workspace --locked` and
+  `TZ=UTC cargo test --workspace --all-features --locked` pass on macOS ARM64.
+- All-target/all-feature workspace check and strict Clippy pass.
+- Pinned Maven verify (37 scenarios and Java/Rust cross-decodes), comparator
+  self-test, and 37-scenario manifest validation pass.
+- Race/leak smoke passes (16 cases × 3); fuzz smoke passes 105 frame seeds,
+  11 message seeds, and 1,856 bounded mutations.
+- Release examples and workspace benchmarks compile; locked metadata,
+  metadata/license/dependency checks, and all seven package listings pass.
+- Asia/Taipei Unique ID fixture, rustfmt, and `git diff --check` pass.
+- The exact Linux module and tests pass `cargo check --tests` in an isolated
+  x86_64 Linux target harness. Full workspace cross-check was attempted but
+  the Mac host lacks the Linux C sysroot/compiler required by AWS-LC and zstd;
+  no Linux runtime test was possible here.
+
+This records macOS P18-V02 server-free evidence only. Current-revision GitHub
+Ubuntu/runtime evidence remains absent; the inspected old run is a failure and
+does not validate the fix. Broad P18-V01, Phase 19 local Docker/Broker
+automation, and version/registry resolution also remain open. No push or
+deployment was performed.

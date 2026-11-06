@@ -1,0 +1,124 @@
+# Phase 18 compatibility release gate — 2026-10-17T00:28:53Z
+
+- Resumed on branch `phase/19-phase-18-compatibility-release-gate` at code
+  revision `5f08a240`; Java comparison repository remains read-only.
+- Reviewed the `WriteEnumUsingOrdinal` documentation diff and current phase
+  checklist. Recorded 16/48 mapped writer features and the latest Protocol and
+  Maven verification evidence in compatibility/release docs.
+- Latest Protocol evidence from the implementation session: 125 unit tests,
+  all integration targets, 42 doctests, strict Protocol Clippy, formatting,
+  Maven verify (37 scenarios), and diff checks pass on `5f08a240`. Latest full
+  workspace P18-V02 evidence remains on parent code revision `bc5642df` and
+  must be rerun after Phase 18 code work is complete.
+- Outstanding: broad P18-V01 bidirectional API/settings/input/error/flow and
+  reverse-export reconciliation; 32 unmapped JSON writer features; current
+  Ubuntu/Windows CI evidence; P18-V03 package/provenance/documentation review;
+  P18-V04 live-handoff registration; Phase 19 Docker/Broker automation and
+  local scenario execution; owner-validation handoff; pre-publication version
+  and registry dependency resolution.
+- No test commands were run in this documentation/status session.
+- P18-V01 `BrowserCompatible` implementation committed as `8c22e355`. The
+  pinned Fastjson2 2.0.63 `TypeUtils.isJavaScriptSupport(long)` boundary is
+  `[-9007199254740991, 9007199254740991]`; Java/Rust fixtures cover both
+  boundaries, adjacent out-of-range values, and route numeric map keys. The
+  lookup fixture SHA-256 is
+  `2df184afd48b41bd26d8d0c6d7109ee294bc9e041e33a3d93a62fc639d6ebdc9`.
+- Validation: Protocol all-feature suite passed (125 unit tests, all
+  integration targets, 42 doctests); the final CheckClient BrowserCompatible
+  fixture assertion passed as a focused rerun; strict all-target/all-feature
+  Protocol Clippy, pinned Maven verify (37 scenarios), formatting, and diff
+  checks passed.
+- Iteration notes: an initial Protocol compile exposed three call sites missing
+  the new feature flag; they were updated. The first strict Clippy run found
+  identical number-stringification branches; they were merged. The first
+  `mvn test-compile exec:java -Dexec.mainClass=...` invocation used the POM's
+  fixed `compat.Main` and stopped at its usage check; fixture regeneration was
+  rerun by invoking the compiled `RuntimeLookupFixtures` class directly with
+  the Maven dependency classpath. The subsequent full Maven verify passed.
+- Current mapping count: 17/48 writer features. The broad P18-V01 audit,
+  current-revision full-workspace P18-V02, Ubuntu/Windows CI, P18-V03/V04,
+  owner-validation handoff, pre-publication resolution, and Phase 19 local
+  Docker/Broker execution remain outstanding.
+- P18-V01 `OptimizedForAscii` implementation committed as `8a9939b9`. Pinned
+  Fastjson2 2.0.63 selects a UTF-8 writer path for this flag; Rust already emits
+  UTF-8 JSON. CheckClient, BatchAck, all mapped body adapters, both route DTOs,
+  and HeartbeatData compare byte-for-byte against the fixtures, including
+  ASCII and Unicode values. No Java fixture change was required.
+- Validation on `8a9939b9`: Protocol all-feature suite passed (125 unit tests,
+  all integration targets, 42 doctests); strict all-target/all-feature
+  Protocol Clippy, Maven verify (37 scenarios), formatting, and diff checks
+  passed. Mapping count is now 18/48; 30 writer features remain unmapped.
+
+- P18-V01 Fastjson `WriteNameAsSymbol` mapping (code commit `4d07ad5a`,
+  2026-10-17): pinned RocketMQ 5.5.1 `RemotingSerializable.encode(Feature...)`
+  calls Fastjson2 `JSON.toJSONBytes` with UTF-8; Fastjson 2.0.63 implements
+  symbol emission in JSONB type-name paths, so this UTF-8 text JSON feature is
+  output-preserving. Existing invoked Java feature fixtures cover mapped body
+  DTOs, both route DTOs, and HeartbeatData. Rust now accepts the feature and
+  compares its output with the Java baseline in those fixture tests. No fixture
+  or Java oracle source change was needed.
+- Validation on `4d07ad5a`: `cargo test -p rocketmq-classic-protocol
+  --all-features --locked` passed (125 unit tests, all integration targets,
+  42 doctests); strict all-target/all-feature Protocol Clippy, formatter check,
+  and `mvn -f compat/java-reference/pom.xml verify` passed (37 scenarios with
+  fixture drift and cross-decodes). Mapping count is 19/48; 29 writer features
+  remain unmapped. Current-revision full-workspace P18-V02, Ubuntu/Windows CI,
+  broad P18-V01 audit, P18-V03/V04, and Phase 19 Docker/Broker execution
+  remain open.
+
+- P18-V01 Fastjson class-name suppression flags (code commit `812a3ff9`,
+  2026-10-17): pinned Fastjson 2.0.63 source gates root/container/numeric type
+  metadata on `WriteClassName`; the standalone `NotWrite*ClassName` modifiers
+  therefore preserve UTF-8 RemotingSerializable output. `NotWriteSetClassName`
+  has no writer callsite in this pinned version. Rust accepts all four modifier
+  flags and compares their output with the existing invoked Java feature
+  fixtures across body DTOs, route DTOs, and HeartbeatData. Combinations with
+  the unmapped `WriteClassName` remain explicitly unsupported. No fixture or
+  Java oracle source change was needed.
+- Validation on `812a3ff9`: `cargo test -p rocketmq-classic-protocol
+  --all-features --locked` passed (125 unit tests, all integration targets,
+  42 doctests); strict all-target/all-feature Protocol Clippy, formatter check,
+  `git diff --check`, and `mvn -f compat/java-reference/pom.xml verify` passed
+  (37 scenarios, fixture drift and cross-decodes). Mapping count is 23/48; 25
+  writer features remain unmapped. Current-revision full-workspace P18-V02,
+  Ubuntu/Windows CI, broad P18-V01 audit, P18-V03/V04, and Phase 19 Docker/
+  Broker execution remain open.
+
+- P18-V01 CheckClient/BatchAck writer-flag test follow-up (`4ae3735a`,
+  2026-10-17): the dedicated inherited-serialization tests now compare Java
+  fixture baselines for `WriteNameAsSymbol` and all four `NotWrite*ClassName`
+  flags across default, explicit-null, and populated cases. The Java oracle
+  probes every pinned writer feature and records changed output or exceptions;
+  absent override entries therefore represent unchanged output. Focused
+  validation passed: three matching Protocol tests (including both dedicated
+  DTO tests), `cargo fmt --all -- --check`, and `git diff --check`. No Java
+  fixture regeneration was needed. Full-workspace P18-V02 remains pending
+  after Phase 18 code work is complete. Current mapping count remains 23/48;
+  25 writer features remain unmapped.
+
+- P18-V01 inert DTO writer-feature mapping (`b627c15e`, 2026-10-17):
+  `WriteByteArrayAsBase64`, `WritePairAsJavaBean`,
+  `WriteThrowableClassName`, and `WriterUtilDateAsMillis` preserve output for
+  the mapped body, route, and heartbeat DTO graph. Pinned Fastjson2 sources
+  restrict these options to byte arrays, Apache Pair values, Throwable values,
+  and `java.util.Date`; the mapped graph has no such fields. BatchAck's BitSet
+  uses RocketMQ's custom serializer, and QueueTimeSpan uses long fields plus
+  derived date strings. Invoked Java fixtures show no output changes; Rust now
+  accepts and compares all four flags for each mapped adapter. Validation on
+  `b627c15e`: Protocol all-feature tests (125 unit tests, all integration
+  targets, 42 doctests), strict Protocol Clippy, formatting, `git diff --check`,
+  and Maven verify (37 scenarios, fixture checks and cross-decodes) passed.
+  The mapping count is 27/48; 21 remain unmapped. Full-workspace P18-V02 is
+  pending after remaining Phase 18 code work.
+
+- P18-V01 numeric writer-format mapping (`b25f6a79`, 2026-10-17):
+  `WriteBigDecimalAsPlain` and `WriteFloatSpecialAsString` preserve output for
+  the mapped body, route, and heartbeat DTO graph. Pinned Fastjson2 applies
+  these options to BigDecimal, Float, and Double values; those types are absent
+  from this mapped graph. Invoked Java fixture cases record no output changes,
+  and Rust now compares every mapped adapter against the Java baseline.
+  Validation on `b25f6a79`: Protocol all-feature tests (125 unit tests, all
+  integration targets, 42 doctests), strict all-target/all-feature Protocol
+  Clippy, formatting, and `git diff --check` passed. Mapping count is now
+  29/48; 19 remain unmapped. Full-workspace P18-V02 remains due after the
+  remaining Phase 18 code work.

@@ -1,0 +1,25 @@
+Phase 18 continuation — live nullable Push consumer-group parity
+Session: 2026-10-14T21:07Z onward
+Branch: `phase/19-phase-18-compatibility-release-gate`
+Code revision: `bd869fae`
+Java oracle: `/Users/bruce.tsai/Projects/3rd/rocketmq`, pinned source commit `efa1be59d6fc747ad220f036c86030f05f0419f9` (read-only).
+Plan files left unchanged.
+
+Change
+- Reconciled the retained Push facade group with pinned Java: nullable/live getter and setter, Java default group constructor, namespace write-back during start, current-group heartbeat preparation, and shutdown unregister by the current group.
+- Made the public consume-hook context preserve a nullable consumer group. Added Java fixture evidence for a null context group and for the old registration remaining after unregister by a mutated current group.
+- Rust lifecycle regression exercises post-start group mutation through shutdown and checks the Java-recorded registry result.
+- Fixture SHA-256: heartbeat `effdc84f92a337ccfe59762290857c62b53c8ec1ce6ef656bc89fb6197a890b8`; Push implementation accessor `4d2e2c8973ad8f1bd27574d029a297f1ceffb115143d3b8f09b3563fb081ade1`.
+
+Validation
+- PASS: `cargo test -p rocketmq-classic-consumer --all-features --locked` (209 unit tests, all Consumer integration targets, and doctests).
+- PASS: `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, Java fixture verification, and Java/Rust cross-decodes).
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- Initial test listener construction and strict Clippy found a test-only trait-object construction issue and a needless borrow; both were corrected before the passing run. A Maven command-line main-class override ran the default harness and returned usage; the compiled fixture was then invoked directly and generated the checked-in oracle successfully.
+
+Remaining
+- P18-V01 remains open for the full bidirectional Java/Rust API, settings, overload/input/error/control-flow, inherited API, and reverse-export audit. Nullable group call paths beyond the hook context, heartbeat, and shutdown still require source-by-source reconciliation.
+- The complete workspace P18-V02 server-free suite has not been rerun on this code revision; the Consumer-scoped gates above are not a substitute.
+- P18-V04 still lacks the current-revision GitHub Ubuntu address-profile result.
+- Phase 19 automated Broker/Docker scenarios, platform runtime evidence, and pre-publication checks remain later gates. No push, publication, or tag action was taken.

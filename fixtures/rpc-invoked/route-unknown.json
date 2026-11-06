@@ -1,0 +1,1 @@
+{"provenance":{"client":"org.apache.rocketmq:rocketmq-client:5.5.1","entrypoint":"MQClientAPIImpl","transport":"mock RemotingClient","serverBaselineContacted":false},"case":"route-unknown","mode":"SYNC","request":{"code":105,"ext":{"topic":"oracle-topic"},"bodyBase64":null},"response":{"code":987654,"ext":{},"bodyBase64":null},"outcome":"MQClientException;code=987654"}

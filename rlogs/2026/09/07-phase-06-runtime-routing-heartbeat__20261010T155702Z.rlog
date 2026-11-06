@@ -1,0 +1,9 @@
+# Phase 6 execution session — 2026-10-10T15:57Z
+
+- Continued public runtime API boundary reconciliation on `07-phase-06-runtime-routing-heartbeat`; the requested Java source checkout is absent here, so the oracle uses pinned RocketMQ 5.5.1 artifacts.
+- Actual pinned `MQClientInstance.selectProducer(null)` and `selectConsumer(null)` calls both throw `NullPointerException` at their `ConcurrentHashMap` lookups. Java oracle/fixture commit: `cb5c4b80`.
+- Rust exposes `select_producer_nullable` and `select_consumer_nullable`. Null groups map to typed `InvalidRoute`; non-null missing groups remain `None`. `nullable_runtime_selectors_match_invoked_java_null_key_failures` compares the Java fixture, verifies both error mappings and missing-key outcomes, and confirms no runtime start. Implementation/test commit: `4394a4c5`.
+- `fixtures/runtime/client-config.json` SHA-256: `408db9671aeb2731146244e105f0e76efc21fdef01ad772ce55bd9131d3e035f`.
+- Validation passed: focused selector regression; `cargo test --workspace --all-targets --locked`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; pinned offline Maven verify (22 scenarios, fixture drift and Java cross-decodes); comparator self-test; manifest validation (22 scenarios); `cargo fmt --all -- --check`; `git diff --check`.
+- Updated the Phase 6 API map and requirement audit. This closes the null-key behavior for these two selectors only; broader Phase 6 source/API/input/reverse-export reconciliation remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+- Documentation/log commit: pending.

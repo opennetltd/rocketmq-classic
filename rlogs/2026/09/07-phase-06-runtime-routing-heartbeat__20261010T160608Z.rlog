@@ -1,0 +1,9 @@
+# Phase 6 execution session — 2026-10-10T16:06Z
+
+- Continued public manager-table boundary reconciliation on `07-phase-06-runtime-routing-heartbeat`; the requested Java source checkout is absent here, so the oracle uses pinned RocketMQ 5.5.1 artifacts.
+- Direct Java `MQClientManager.getFactoryTable().get(null)` throws `NullPointerException`. Java oracle/fixture commit: `83cb6584`.
+- Rust adds `FactoryTable::get_nullable(Option<&str>)`; null maps to typed `InvalidRoute`, and an absent non-null key remains `None`. `nullable_factory_table_get_matches_invoked_java_null_key_failure` checks the actual fixture and both Rust outcomes. Implementation/test commit: `e927ab94`.
+- `fixtures/runtime/client-config.json` SHA-256: `876a923aa55f58d249e62e19286b9e80926ead6593c00cad22a51357306a3c1c`.
+- Validation passed: focused factory-table regression; `cargo test --workspace --all-targets --locked`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; pinned offline Maven verify (22 scenarios, fixture drift and Java cross-decodes); comparator self-test; manifest validation (22 scenarios); formatting and diff checks.
+- Updated the Phase 6 API map and requirement audit. This closes null-key `get` only; broader Phase 6 source/API/input/reverse-export reconciliation remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+- Documentation/log commit: pending.

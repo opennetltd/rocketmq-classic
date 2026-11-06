@@ -1,0 +1,37 @@
+# Phase 18 MessageDecoder.decodeProperties record-input parity
+
+- Recorded: 2026-10-22 19:25:07 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source revision: `67d0d049`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Change
+
+Pinned Java `MessageDecoder.decodeProperties(ByteBuffer)` reads record fields
+directly and does not validate the declared total store size. Rust previously
+delegated to full record decoding, which rejected a zero store size before
+property extraction. The Rust helper now follows Java's field offsets and
+signed body/topic lengths. It also preserves Java's empty-map result when a
+positive-length malformed property string parses no entries. Nonpositive
+property lengths still return `None`.
+
+The invoked Java fixture adds a zero-store-size record with `key=value` and a
+positive-length malformed property record. `fixtures/messages/records.json`
+SHA-256:
+`e2fab00b22e5954f54095fe7215848e4e317d6f62461cea166b5cd8be715b317`.
+
+## Verification
+
+- Focused Common differential `message_decoder_property_map_methods_match_java_551` — passed.
+- `cargo test --offline -p rocketmq-classic-common --locked` — passed.
+- `cargo test --offline --workspace --locked` — passed.
+- `cargo test --offline --workspace --all-features --locked` — passed.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — passed; 37 scenarios, 36 route/VIP cases, 106 typed headers and 19 typed bodies.
+
+This closes only the `decodeProperties` record-position and positive-length
+empty-map slice. Broad P18-V01 source/API/settings/input/error/control-flow
+and reverse-export reconciliation, current-revision remote Ubuntu CI, native
+Windows execution, and Phase 19 Broker/Docker validation remain open. No push,
+publish, or external CI was run.

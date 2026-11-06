@@ -1,0 +1,37 @@
+P18-V01 body-skip malformed-tail fixture and verification refresh —
+2026-10-22 21:16 UTC
+
+Environment: macOS AArch64, Apple M5 Max (18 logical CPUs), Rust 1.85.0.
+Branch: `phase/18-phase-18-compatibility-closure`. Pinned RocketMQ Java
+client/source: 5.5.1, commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Test/fixture commit: `608fe801 test(common): cover Java decode prefixes without
+body`. Crosswalk review found that malformed-tail evidence had previously
+compared `readBody=true` only. The Java fixture now invokes `decodes(...,
+false)` and `decodesBatch(..., readBody=false, isClient=true/false)` in
+addition to the existing body-reading calls. Rust assertions compare valid
+prefix counts, verify Java's input reaches its limit, retain `MessageClientExt`
+for client decoding, keep generic `MessageExt` for non-client decoding, and
+verify body omission. Rust's byte-slice APIs expose no mutable cursor.
+Refreshed `fixtures/messages/records.json` SHA-256:
+`039d8dba7a268b43bc7e171f4f84bd739a0a3695c357e4ef7be35ded29c71a53`.
+
+Validation on the implementation tree:
+- Java fixture generation (`mvn -o ... compile exec:java`) — PASS; 11 message
+  decoder fixtures written.
+- Focused Common malformed-tail regression — PASS.
+- `cargo test --offline --workspace --locked --quiet` and
+  `cargo test --offline --workspace --all-features --locked --quiet` — PASS.
+- Strict all-target/all-feature Clippy, workspace format check, and
+  `git diff --check` — PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS; 37 scenarios,
+  11 message decoder fixtures, 36 route/VIP cases, 106 typed headers, and 19
+  typed bodies.
+
+This closes the `readBody=false` dimension of the malformed-tail decoder slice
+only. Broad P18-V01 API/settings/source/input/error/control-flow and
+reverse-export reconciliation, current-revision remote Ubuntu CI, native
+Windows execution, and Phase 19 Broker/Docker evidence remain open. The
+differential manifest still has 30 Phase 19 live-runner cases pending. No
+external CI, push, publication, or release action was performed. Protected
+Phase 19 working-tree paths remain unstaged.

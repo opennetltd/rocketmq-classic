@@ -1,0 +1,57 @@
+# Phase 18 ConsumerStatsManager sampling cadence gate
+
+- Recorded: 2026-10-22 19:01:17 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Implementation commit: `782a9cdba540796da034c1975355c52ba681979a`
+- Consumer accessor fixture SHA-256: `57b6f19d68fb3460e7fa86bd6b08bf16f43a03d28cce2558716f88c110ccb369`
+
+## Finding and change
+
+Pinned Java `ConsumerStatsManager` owns five `StatsItemSet`s. They register
+10-second and 10-minute scheduled sample tasks, and `StatsItemSet` does not
+initialize a new item's snapshot lists when the item is created. Before the
+first scheduled visit, `consumeStatus` therefore returns zero for its metrics.
+The first sample adds a zero baseline and a current snapshot; hourly failed
+message totals remain zero until the first 10-minute sample.
+
+Rust previously initialized and refreshed snapshots as part of metric updates,
+making values visible immediately. The manager now anchors sample ticks at its
+construction time and evaluates due 10-second and 10-minute ticks lazily on
+updates and status reads. Metric updates do not mutate an already sampled
+snapshot. The public API remains unchanged. Consumer tests that assert a
+positive sample wait for the first tick; the Running Info test now expects no
+failed-message total before the hourly window has sampled.
+
+The Java fixture captures the five 10-second `Runnable`s through a
+`ScheduledExecutorService` proxy and records pull TPS as `0.0` before the
+sample, `2.0` after sampling 20 messages, and `2.0` after recording another 5
+messages before the next sample.
+
+## Verification
+
+- `cargo test --offline -p rocketmq-classic-core runtime::stats::tests --lib --locked` — passed (5 tests).
+- `cargo test --offline -p rocketmq-classic-consumer --test facade_api_surface consumer_stats_manager_exposes_the_pinned_java_methods --locked` — passed.
+- `cargo test --offline -p rocketmq-classic-consumer pull_result_stats_use_the_request_group_snapshot --lib --locked` — passed.
+- `cargo test --offline -p rocketmq-classic-consumer broker_assignment_error_preserves_worker_until_empty_assignment --lib --locked` — passed.
+- `cargo test --offline --workspace --locked` — passed.
+- `cargo test --offline --workspace --all-features --locked` — passed.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — passed.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — passed, including Push accessor fixture verification; 37 scenarios, 36 route/VIP cases, 106 typed-header cross-decodes, and 19 typed-body cross-decodes.
+- `python3 scripts/check-workspace-metadata.py` — passed.
+- Seven product `cargo package --list --locked` checks — passed; each listing includes `Cargo.toml`, `LICENSE`, `NOTICE`, and `src/lib.rs`.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+The first workspace run exposed four tests that expected unsampled metrics to
+be immediately visible. The affected consumer tests were aligned with the
+Java sampling schedule; the subsequent full default and all-feature suites
+passed.
+
+## Scope and remaining evidence
+
+This closes only the tested ConsumerStatsManager sampling-cadence slice.
+Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export
+reconciliation remains open. Current-revision remote Ubuntu CI, native
+Windows runtime evidence, and Phase 19 Broker/Docker validation remain open.
+No push, external CI, or Broker was used. The protected Phase 19 worktree
+paths and protected Phase 18 plan were left unchanged and unstaged.

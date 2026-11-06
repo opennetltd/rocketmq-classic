@@ -1,0 +1,32 @@
+# Phase 18 RemotingCommand factory and local gate follow-up — 2026-10-17T08:34:04Z
+
+- Continued on `phase/19-phase-18-compatibility-release-gate`; Java source at
+  `/Users/bruce.tsai/Projects/3rd/rocketmq` remained read-only at pinned commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`. The Phase 18 plan was not edited.
+- Added Rust request/response/error command factories, typed-header overloads,
+  class-header `Default` forms, version-property handling, and request-ID
+  sequencing. Added eight invoked Java fixture cases and updated the API
+  crosswalk. Code/test commit: `a0fe9c3e`.
+- The first full Remoting test invocation passed 111 unit tests but stalled
+  while starting the codec integration binary. A focused `--test codec` run
+  later passed all eight tests; a subsequent full all-feature run passed.
+- The first all-feature library-only rerun exposed an unrelated host dependency
+  in `java_tls_property_file_is_reloaded_for_each_client_context`: native CA
+  loading returned `no system trust roots available`. The property-reload test
+  now supplies the repository's pinned local certificate as its trust anchor,
+  without changing production TLS behavior. Test commit: `48482b49`.
+- Final Remoting validation passed: `cargo test -p
+  rocketmq-classic-remoting --all-features --locked` (111 unit, 8 codec, 1 fuzz
+  regression, 7 security, 107 transport, and 15 doctests); strict all-target,
+  all-feature Clippy; `cargo fmt --all -- --check`; and `git diff --check`.
+  `mvn -o -q -f compat/java-reference/pom.xml verify` exited 0 with 37
+  scenarios, Java fixture checks, and Java/Rust cross-decodes.
+- Still open: Java-equivalent `Default` opaque/language initialization, custom
+  header object/accessor/decode behavior, process timer and callback-list APIs,
+  long-poll metric emission, `toString()` ordering for multiple ext-fields,
+  and the broad P18-V01 source/API/settings/input/error/control-flow and
+  reverse-export audit. The final full-workspace P18-V02 rerun and current
+  Ubuntu/Windows CI evidence remain due after subsequent Phase 18 changes.
+  Phase 19 still has 30 of 37 live scenarios plus required multi-Broker,
+  TLS/ACL/feature profiles and pre-publication registry checks outstanding.
+  Owner-only manual validation remains separately tracked.

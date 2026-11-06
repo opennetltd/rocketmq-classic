@@ -1,0 +1,50 @@
+Phase 18 decoder cursor parity and local gate refresh — 2026-10-22 19:48 UTC
+
+Environment: macOS AArch64, Apple M5 Max (18 logical CPUs), Rust 1.85.0.
+Workspace branch: `phase/18-phase-18-compatibility-closure`. Pinned RocketMQ
+Java source: 5.5.1 release commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Java checkout HEAD differs from the pinned commit and contains an unrelated
+untracked broker test; it was left unchanged.
+
+P18-V01 slice committed as `2e1122cf fix(common): preserve Java decoder buffer
+position`. The invoked Java `MessageDecoder.decodeProperties(ByteBuffer)`
+fixture captures final positions for normal records, zero declared store size,
+positive malformed properties, zero/negative property lengths, and truncated
+positive property bytes. Rust now returns decoded properties with bytes
+consumed, matching Java's null versus empty result, cursor positions, and
+truncation location. The fixture SHA-256 is
+`699dfaae816b753105119193e3b268fe16fb2b83ad0199473a5665a7d6b76436`.
+This closes the tested decoder slice only; broad P18-V01 reconciliation stays
+open.
+
+Local gates on code revision `2e1122cf`:
+- `cargo test --offline -p rocketmq-classic-common --locked` — PASS.
+- `cargo test --offline --workspace --locked` and
+  `cargo test --offline --workspace --all-features --locked` — PASS.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked
+  -- -D warnings`, `cargo fmt --all -- --check`, and `git diff --check` — PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS; 37 scenarios,
+  11 Java message-decoder fixtures, 106 typed headers, and 19 typed bodies.
+- Differential comparator self-test and 37-scenario manifest — PASS.
+- Bounded fuzz smoke — PASS (163 frame seeds, 11 message seeds, 2,784
+  mutations, 245 frame decodes, 112 message decodes); offline race/leak smoke
+  — PASS (16 cases x 3).
+- Release facade examples and benchmark compilation/execution — PASS.
+- Workspace metadata and all seven product package/license listings — PASS.
+- Four Core Unique ID tests under UTC and Asia/Taipei — PASS.
+- Windows GNU Core all-target check and Consumer stack-capture test
+  `--no-run` cross-compilation — PASS; native Windows runtime is unverified.
+
+Offline benchmark sample (macOS AArch64, Apple M5 Max, Rust 1.85.0):
+Remoting encode/decode 2,306.4 ns (40 allocations / 4,676 bytes); Zstd message
+decode 1,137.3 ns (17 / 197,493 bytes); Producer request construction
+1,334.5 ns (54 / 3,665 bytes); route lookup 14.9 ns (0 / 0 bytes); loopback
+pending completion 64,807.2 ns (81 / 9,546 bytes). No threshold is defined;
+timing is machine- and run-specific.
+
+Broad P18-V01 API/settings/source/input/error/control-flow/reverse-export
+reconciliation, current-revision remote Ubuntu CI, native Windows execution,
+and Phase 19 Broker/Docker evidence remain open. The 30 scenarios requiring
+Phase 19 live runners remain pending. No push, external CI, publication, or
+release action was performed. Protected Phase 19 worktree paths remain
+unstaged.

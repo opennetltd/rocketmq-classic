@@ -1,0 +1,27 @@
+# Phase 3 remoting transport work log — 2026-09-28 00:54:20 UTC
+
+## Scope and gate
+Continued the Java RocketMQ 5.5.1 API/behavior audit. Phase 3 remains unaccepted; do not start Phase 4. P3-V04 remains deferred to Phase 19.
+
+## Changes and findings
+- Source-reviewed the Java `RemotingClient` public interface and Rust `RemotingClient` API, including the default future-returning `invoke` adapter and callback surface. The full bidirectional public API and all `PARTIAL`-inventory dispositions remain open; no new missing transport operation was established by this pass. Source-reviewed `RPCHook` and `NettyRemotingAbstract`'s exact inbound hook handling to establish the behavior above.
+- Confirmed against the pinned Java client control flow that successful processor return with a null response still calls `doAfterRpcHooks` and passes the null response through. Changed Rust `RpcHook::after_response` and `after_response_result` to accept `Option<&RemotingCommand>`, removed the redundant optional-only hook method, and made inbound processor completion invoke the normal after-hook path with `response.as_ref()`.
+- A deeper hook-failure branch audit found that Java continues through the request pipeline and after-hooks after a before-hook exception, passing an intermediate SYSTEM_ERROR response with null remark; only after after-hooks does it surface the captured exception as the final response. Rust previously put the exception message on the intermediate response. Rust now preserves Java's intermediate code/null remark and final error ordering; the existing before-hook failure loopback test additionally asserts the after-hook observed null remark.
+- Added/updated `p3_after_hook_runs_when_processor_returns_no_response` and adjusted hook implementations to the nullable signature. Updated `docs/compatibility/PHASE_3_REMOTING_INVENTORY.md` to record nullable responses and the before-hook intermediate response behavior, and remove the retired method from the Rust-only API inventory.
+- Read both Phase 3 plans from start to finish. No plan files were modified. Acceptance is still blocked by the unclosed API/behavior audit, remaining `PARTIAL` rows, and P3-V04 handoff.
+- Preserved the historical untracked `rlogs/2026/09/04/phase-03-remoting-transport__20260927T085045Z.rlog` unchanged.
+
+## Validation
+- Targeted `p3_before_hook_failure_runs_pipeline_and_after_hook_but_skips_processor` — passed after asserting the intermediate response remark is absent.
+- `cargo test --workspace --offline -- --test-threads=1` — passed (common 11, protocol 9, Phase 1 fixture 1, remoting unit 50, codec 4, transport 77; doc tests passed).
+- `cargo clippy --workspace --all-targets --offline -- -D warnings` — passed.
+- `cargo fmt --all --check` — passed.
+- `git diff --check` — passed.
+- `python3 scripts/check-workspace-metadata.py` — passed.
+- `python3 tests/differential/compare.py --self-test` — passed.
+
+## Remaining work / blockers
+- Complete bidirectional Java/Rust public API, hook, and processor collection audit; individually review and disposition each remaining `PARTIAL` inventory item, including scheduling/executor lifecycle, callback/event lifecycle, watermarks, TLS loading timing, processor remarks, and error taxonomy/cause/remark paths.
+- Continue GO_AWAY/replacement/close/shutdown interleaving source review and add reproducible tests for any uncovered behavior.
+- Reconcile all documentation/dispositions and verify the Phase 3 plan requirements and deliverables without editing the plans. Commit only reviewed batches.
+- P3-V04 live Broker/TLS validation remains a Phase 19 gate. Phase 3 acceptance and Phase 4 remain blocked.

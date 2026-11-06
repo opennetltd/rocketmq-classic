@@ -1,0 +1,1 @@
+{"java_client_version":"5.5.1","server_baseline_not_contacted":"5.3.4","scenario_id":"P5-RPC-PULL-MALFORMED","request_code":11,"response_code":0,"response":true,"ext_fields":{},"body_hex":"","frame_sha256":"b68bbb9d7df346a9db49b37a8b604ccadf50d887f290ad87014be22ab5bc9866","java_outcome":"MALFORMED_SUCCESS"}

@@ -1,0 +1,5 @@
+# Phase 6 execution session — 2026-10-10T17:00Z
+
+- Extended the forked pinned-Java `RuntimeStartMutationProbe` with `configuredToEmpty`: a runtime constructed with `configured-at-construction:9876` has its retained `namesrvAddr` set to the empty string before `start()`.
+- Java records zero discovery calls, four scheduled tasks, successful start/shutdown, and the constructor-time active address list unchanged. The native config differential uses a counting `TopAddressing` provider and matches each observation. `start.json` SHA-256: `89c41d361d878842cd59128cd197a8b59790080e2aeaa43b30868d8b5b22a364`.
+- Validation: pinned offline Maven verify generated the fixture, then passed drift verification and the 22-scenario Java gate; all three native `start_*` config tests pass; strict config-test Clippy, formatter, and diff checks pass. No production code changed.

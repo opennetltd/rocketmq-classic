@@ -1,0 +1,17 @@
+# Phase 3 remoting transport — execution log (20260927T041500Z)
+
+## Scope and implementation
+- Added built-in pure-Rust decryption of encrypted PKCS#8 client key PEM when `tls.client.keyPassword` is provided. Kept custom `PrivateKeyDecryptionStrategy` precedence and the existing unencrypted-key path.
+- Supports RocketMQ Java 5.5.1's `pbeWithMD5AndDES-CBC` PBES1 encoding and PBES2 algorithms exposed by the enabled `pkcs8`/RustCrypto features. Encrypted keys without a password and unsupported PEM/algorithm forms now produce TLS errors.
+- Uses zeroizing buffers for PBES1 derived key material, CBC ciphertext/plaintext intermediates, and decrypted DER. Validates decrypted DER as PKCS#8 and converts RSA to PKCS#1 PEM for rustls; non-RSA keys retain PKCS#8 PEM.
+- Added the original Java 5.5.1 encrypted key fixture (password `1234`), a separate 2048-bit PBES1 fixture for rustls key-provider testing, and a PBES2 AES-256 fixture. The original Java key is only 512-bit RSA: it decrypts and parses, but the selected rustls provider intentionally refuses to load it. The 2048-bit fixture verifies full property-load-to-connector setup.
+- Updated `KNOWN_DIFFERENCES.md` and the Phase 3 inventory. Phase 3 remains in progress and Phase 4 has not started.
+
+## Validation
+- Focused `cargo test -p rocketmq-classic-remoting --offline client::tls::tests` — passed (10 TLS unit tests). Tests cover original Java PBES1 ciphertext/password, wrong/missing passwords, PBES1 2048-bit loading, PBES2 AES-256 decryption and connector setup, custom strategy metadata, test-mode ignore, and unencrypted-key preservation.
+- `cargo fmt --all --check`, `cargo test --workspace --offline` (11 common, 9 protocol, 1 protocol fixture, 39 remoting unit, 4 codec, 66 transport), `cargo clippy --workspace --all-targets --offline -- -D warnings`, `python3 scripts/check-workspace-metadata.py`, `python3 tests/differential/compare.py --self-test`, and `git diff --check` — passed.
+- OpenSSL 3.6.4 was used only to generate deterministic local encrypted fixture keys; no TLS connection to Broker/server was attempted.
+
+## Remaining scope / blockers
+- Phase 3 remains unaccepted. The public API/config inventory and remaining lifecycle/order parity review are still in progress. No Phase 19 live validation was performed; Phase 4 has not started.
+- The RustCrypto PBES2 enabled feature surface is bounded by library-supported encryption/KDF algorithms; legacy PEM encryption headers and unsupported schemes remain out of scope and fail explicitly.

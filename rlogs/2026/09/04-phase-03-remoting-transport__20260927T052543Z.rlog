@@ -1,0 +1,26 @@
+# Phase 3 remoting transport parity review — 2026-09-27T05:25:43Z
+
+## Scope and decisions
+- Continued the Java 5.5.1 vs Rust pending-invoke error taxonomy audit; did not modify either Phase 3 plan.
+- Compared Java `NettyRemotingAbstract.invoke0`, `requestFail`, `failFast`, and `processResponseCommand` with Rust `fail_generation`/`connection_closed`.
+- Malformed frames received while invokes are pending close their connection generation; Java `exceptionCaught` closes the channel and `failFast` completes those futures through `requestFail`, yielding send-request failure with no cause. Kept timeout distinct because timeout scheduler/response deadlines complete as timeout rather than `requestFail`.
+- Updated inventory wording to name this now-verified malformed-frame branch. No phase completion claim; Phase 3 remains open, Phase 4 not started.
+
+## Changes
+- `crates/rocketmq-classic-remoting/tests/transport.rs`: strengthened `p3_malformed_frame_notifies_exception_then_close` to assert exact `SendRequest { remote_addr, cause: None }`, rather than merely any error.
+- `crates/rocketmq-classic-remoting/src/client/mod.rs`: `fail_generation` now maps generation-terminating `Closed`, write, codec, and malformed-frame failures for pending invokes to Java-compatible send-request error classification; timeout and shutdown retain their categories.
+- `docs/compatibility/PHASE_3_REMOTING_INVENTORY.md`: records the tested malformed-frame pending completion classification.
+
+## Validation
+- Verified regression oracle before implementation: strengthened targeted test failed when old `fail_generation` behavior returned the malformed-frame error.
+- `cargo test -p rocketmq-classic-remoting --offline` — pass (39 unit, 4 codec, 69 transport; docs pass).
+- `cargo test --workspace --offline` — pass (11 common, 9 protocol, 1 protocol fixture, 39 remoting unit, 4 codec, 69 transport; docs pass).
+- `cargo clippy --workspace --all-targets --offline -- -D warnings` — pass.
+- `cargo fmt --all --check` — pass.
+- `python3 scripts/check-workspace-metadata.py` — pass.
+- `python3 tests/differential/compare.py --self-test` — pass.
+- `git diff --check` — pass.
+
+## Status
+- Changes are not committed yet; review and commit still required.
+- Pending work: continue branch-by-branch transport/error and API/config review, resolve or document remaining partial differences, update relevant compatibility docs/rlogs, re-read both Phase 3 plans in full and check each criterion. P3-V04 remains Phase 19 live validation; it is not implied by offline test success.

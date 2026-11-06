@@ -1,0 +1,110 @@
+# Phase 18 Common Message API inventory slice — 2026-10-16T11:25:45Z
+
+- Started on branch `phase/19-phase-18-compatibility-release-gate`, source
+  revision `261b0782`; the worktree contained the Message API audit slice from
+  the preceding continuation and no unrelated files.
+- Confirmed the source oracle is pinned Java client 5.5.1 commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`. Its fixture now records all five
+  public `Message` constructors, 34 declared public methods, and 20 declared
+  public `MessageAccessor` methods. The Rust integration test pins those
+  inventories and compares `MessageAccessor.setLiteTopic` via
+  `PROPERTY_LITE_TOPIC`.
+- Updated the message fixture and SHA-256 inventory; refreshed the Phase 6 and
+  Phase 8 API evidence and release checklist. Fixture SHA-256:
+  `d11f8c88e44711cffbd574beab5946943b00a8d350fe05ec40ff1b744320f321`.
+- Validation completed for this slice: `mvn -o -f
+  compat/java-reference/pom.xml verify` (37 scenarios); focused
+  `cargo test -p rocketmq-classic-common --test message_decode --locked
+  message_public_api_matches_java_551_fixture`; `cargo fmt --all -- --check`;
+  `cargo clippy -p rocketmq-classic-common --all-targets --all-features
+  --locked -- -D warnings`; fixture checksum and `git diff --check`.
+- Review status: this closes one bounded P18-V01 inventory slice only. Broad
+  Java/Rust source/API/input/error/flow and reverse-export reconciliation
+  remains open. The full P18-V02 gate must run on the eventual final revision;
+  current-revision GitHub Ubuntu/P18-V04 evidence and Phase 19 local
+  Docker/Broker automation remain open. Windows/BSD runtime and real IPv6-only
+  host checks remain owner manual validation where not locally reproducible.
+- No plan was edited; no Docker/Broker, push, publication, tag, or deployment
+  action was taken. The audit slice is ready for its own commit after final
+  diff review.
+
+- Reverse-export follow-up on `d6495994`: found that the Common source exported
+  `From<MessageExt>` and `From<&MessageExt>` even though the release checklist
+  said inbound conversion was internal and Java exposes inheritance through
+  `MessageExt extends Message`. Removed both trait impls, changed Core's
+  response-future copy to clone the inherited `Message` via `Deref`, replaced
+  the conversion unit test with a deref-inheritance test, and added two
+  compile-fail doctests.
+- Validation passed: `cargo fmt --all -- --check`; `cargo test
+  -p rocketmq-classic-common --all-features --locked` (23 unit tests, all
+  integration targets and 24 doctests); `cargo test -p rocketmq-classic-core
+  --all-features --locked` (168 unit tests, all integration targets and 13
+  doctests); `cargo clippy -p rocketmq-classic-common
+  -p rocketmq-classic-core --all-targets --all-features --locked -- -D
+  warnings`; and `git diff --check`.
+- This closes one reverse-export discrepancy only. The broader P18-V01 audit,
+  final-revision P18-V02, current-revision GitHub Ubuntu/P18-V04 evidence, and
+  Phase 19 local Docker/Broker automation remain open.
+
+- P18-V01 Common inherited `Object.equals/hashCode` follow-up (2026-10-16):
+  Rust `Message`, `MessageExt`, and `MessageClientExt` now share a hidden base
+  identity token across equality/hash and dereferenced base/subclass views;
+  clone, decode, and serde deserialization each create a distinct identity.
+  Java reflection/behavior fixture and Rust differentials cover declaring
+  classes, self/distinct objects, base views, and hash stability across
+  mutation. Fixture SHA-256: `5158dad83a14f0de57ba842134466e82331716f2c171b963e31ae227d9d66890`.
+- Validation passed: offline Maven `test-compile`, Java message fixture
+  generation, and `mvn -o -f compat/java-reference/pom.xml verify` (37
+  scenarios); Common all-feature tests (23 unit, 21 `message_decode`, six
+  other integration, 24 doctests); Core all-feature tests (168 unit, all
+  integration targets, 13 doctests); strict Common/Core all-target/all-feature
+  Clippy; `cargo fmt --all -- --check`; fixture checksum and `git diff --check`.
+- This closes one inherited-trait slice only. Broad P18-V01, final-revision
+  P18-V02, current-revision GitHub Ubuntu/P18-V04 evidence, and Phase 19 local
+  Docker/Broker automation remain open. No plan, Docker/Broker, push,
+  publication, tag, or deployment action was performed.
+
+- P18-V01 Common `MessageExt`/`MessageClientExt` declared method inventory
+  (2026-10-16): pinned Java fixtures record the 44 declared public
+  `MessageExt` signatures and all four declared public `MessageClientExt`
+  signatures; Rust fixture tests pin both inventories and the mapped scalar,
+  host-buffer, constructor, and client-ID behavior. Fixture SHA-256:
+  `2118277b7aad68e1077d92371d5ec14bd8cb77535e272dca406bc3e716d85792`.
+- Validation passed: focused Common API tests; Common all-feature tests (23
+  unit, 21 `message_decode`, six other integration, 24 doctests); strict Common
+  all-target/all-feature Clippy; offline Maven `verify` (37 scenarios and Java
+  message fixture drift); formatting, fixture checksum, and `git diff --check`.
+- This closes the inherited class method inventory slice only. Broad P18-V01,
+  final-revision P18-V02, current-revision GitHub Ubuntu/P18-V04 evidence, and
+  Phase 19 automation remain open.
+
+- P18-V01 identity-handle correction (2026-10-16): the first workspace default
+  test run after removing the base conversions exposed a stale Producer
+  `.into()` conversion. Replaced it with a clone through the inherited
+  `Message` dereference. The subsequent Consumer test run exposed that
+  `MessageExt::clone()` is used to snapshot references to the same Java object
+  before filter hooks; `Message` Rust `Clone` now preserves the shared identity
+  token, while the explicit Java `MessageAccessor.cloneMessage` projection
+  keeps its distinct token. Tests and current API documentation were corrected.
+- Initial validation: Producer all-feature tests and strict Producer Clippy
+  passed; the focused Consumer filter-hook regression and Common identity test
+  pass. The full workspace rerun after both corrections is pending. The initial
+  workspace failures are retained here rather than marked as passing evidence.
+
+- Full server-free P18-V02 follow-up after the identity-handle corrections:
+  `cargo test --workspace --locked` and `cargo test --workspace --all-features
+  --locked` pass; strict all-target/all-feature workspace Clippy, workspace
+  formatting, and `git diff --check` pass. Offline Maven `verify` passes all 37
+  scenarios, fixture-drift checks, Java/Rust cross-decodes, and message fixtures.
+  Differential self-test and 37-scenario manifest validation pass. The offline
+  deterministic race/leak script passes 16 cases × 3; fuzz smoke passes 105
+  frame seeds, 11 message seeds, and 1,856 bounded mutations. Release examples
+  and the offline benchmark compile. Locked metadata reports 7 workspace
+  packages and 215 total packages; workspace metadata/license/dependency checks,
+  seven `cargo package --workspace --list --locked --allow-dirty` results, and
+  the Asia/Taipei Unique ID differential pass. Maven reported only upstream
+  `sun.misc.Unsafe` deprecation/reflection warnings. This clears P18-V02's
+  server-free gates on the validated worktree; broad P18-V01, current GitHub
+  Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker automation and owner
+  handoff, and release preflight remain open. No Docker/Broker, push, registry,
+  publication, tag, or deployment action was taken.

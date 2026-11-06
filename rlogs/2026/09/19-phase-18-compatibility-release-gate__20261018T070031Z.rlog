@@ -1,0 +1,11 @@
+# Phase 18 remaining-gates status — 2026-10-18T07:00:31Z
+
+## Current status review
+
+- The broad P18-V01 Java 5.5.1 source/API/settings/input/error/control-flow and reverse-export reconciliation remains local parity work and is not complete.
+- The current-revision P18-V02 workspace run `cargo test --workspace --locked` passed the suites emitted through Remoting unit tests, then stalled before `rocketmq-classic-remoting/tests/codec.rs` began. `sample` and `vmmap` showed the test process still at `_dyld_start`, marked launched-suspended. Running the same test binary directly behaved the same. Sent SIGTERM to the stalled processes; Cargo exited 143. This is an environment-blocked run, not a test pass or assertion failure. The all-feature workspace run and strict workspace Clippy are still outstanding on the current revision.
+- The latest focused Java `mvn verify` evidence recorded in the preceding Phase 18 session passed 37 scenarios, 66 typed-header cross-decodes, and 15 typed-body cross-decodes. It does not replace the current-revision workspace gates.
+- `cargo tree --workspace --locked --depth 1` resolved the workspace's internal path edges and direct Tokio dependency. `cargo metadata --locked --format-version 1 --no-deps` listed eight workspace packages, all at 0.1.0 (seven library/binary packages plus the integration package). This was a quick graph/version check, not the final package-content/provenance review; unpublished registry resolution remains a pre-publication check under Phase 19.
+- `gh run list` for `phase/19-phase-18-compatibility-release-gate-resume` returned no runs. Current-revision Ubuntu and native Windows CI evidence therefore remain absent for P18-V04.
+- Phase 19's local Docker/Broker runner and scenario matrix remain automatable work. The plan explicitly says synthetic TLS/auth, ordinary restart/failure, mixed-client, and bounded stress cases stay automatic; only proven non-local owner checks belong in the manual handoff.
+- Existing uncommitted Phase 19 worktree files were left untouched. No plan files or source files were changed in this status session.

@@ -1,0 +1,6 @@
+# Phase 6 API compatibility session — 2026-10-10T18:35Z
+
+- Pinned Java 5.5.1 probes confirm `putAll(null)`, `forEach(null)`, and `replaceAll(null)` each throw `NullPointerException` on factory, producer, and consumer tables.
+- Code/fixture commit: `dbd2920d` (`Match nullable live table bulk inputs`). Rust adds `put_all_nullable`, `for_each_nullable`, and `replace_all_nullable`; regressions cover typed null-input failures, unchanged mappings, and forwarding of valid maps/callbacks. Fixture SHA-256: `ee369565a2fab6abb99261cc46f74f442fd4ddaf7c69a3f92316f19fbc79d66a`.
+- Validation passed: manager-table 14/14, registry-table 16/16, locked workspace/all-target tests with local socket access, strict workspace/all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture drift, and Java cross-decodes), comparator self-test/manifest22, formatting, and diff checks.
+- API map and requirement audit updated. Null rows within non-null source maps and broader Phase 6 source/API/input/reverse-export reconciliation remain open; P6-V04 is a Phase 19 handoff.

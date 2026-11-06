@@ -1,0 +1,49 @@
+# Phase 18 compatibility release gate — 2026-10-23 19:39:45 UTC
+
+Base revision: `a2eb40c2` on `phase/18-phase-18-compatibility-closure`.
+This record documents a narrow P18-V01 inbound remoting correction.
+
+## P18-V01 finding
+
+- Pinned RocketMQ 5.5.1 `NettyRemotingAbstract.java` source SHA-256:
+  `f4c5daa4a9a560df4bf92c5b8d0e058accc54a84ef491e530559280ef0457d7e`.
+  `processRequestCommand` first resolves a specific/default processor. If one
+  exists and `isShuttingDown` is true, requests newer than
+  `MQVersion.Version.V5_3_1.ordinal()` receive `GO_AWAY` (1500, `please go
+  away`) before `rejectRequest()` or executor submission. Unsupported request
+  codes remain ahead of this check.
+- Pinned `MQVersion.java` source SHA-256:
+  `8b9a6a4b728f6b74d41f8ab19aac5cb5a39665cd0c05bf227ccba8d571ae5f82`;
+  `V5_3_1` is ordinal 475.
+- Rust `process_one` applies that cutoff after processor lookup and before
+  rejection. The Java fixture invokes four cases: shutdown at 475, shutdown at
+  476, running at 476, and unsupported code during shutdown. It records
+  response code/remark/opaque and reject/processor counts. Rust tests check the
+  boundary response and dispatch ordering.
+
+## Verification
+
+- `cargo test --workspace --locked --quiet` — passed sequentially.
+- `cargo test --workspace --all-features --locked --quiet` — passed
+  sequentially.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings` — passed.
+- Windows GNU all-target/all-feature workspace check and strict Clippy —
+  passed as compile-only evidence.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- Dedicated offline Java fixture verification passed:
+  `mvn -o -q -f compat/java-reference/pom.xml exec:java -Dexec.args='runtime-remoting-shutdown-fixtures fixtures/runtime/remoting-shutdown.json --verify'`.
+- Full `mvn -o -q -f compat/java-reference/pom.xml verify` did not complete.
+  The existing `ConsumerLifecycleFixtures.failedLitePullMetadataSchedule`
+  case invoked Java's default NameServer address lookup and blocked in DNS.
+  The process was stopped after the shutdown fixture and preceding fixture
+  executions passed; no shutdown fixture failure was reported.
+
+## Remaining scope
+
+This closes the inbound shutdown version-gate discrepancy only. Broad P18-V01
+source/API/settings/input/error/control-flow and reverse-export reconciliation
+remains PARTIAL. Native Windows runtime, current-revision remote CI, and Phase
+19 live Broker/Docker scenarios were not run. No plan was edited, no push or
+remote CI was run, and the four pre-existing Phase 19 worktree paths remain
+untouched and unstaged.

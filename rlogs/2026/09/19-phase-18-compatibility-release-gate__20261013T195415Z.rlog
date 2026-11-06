@@ -1,0 +1,63 @@
+# Phase 18 producer total-batch getter parity — 2026-10-13T19:54:15Z
+
+- Corrected `ProducerConfig::total_batch_max_bytes()` to mirror pinned Java `getTotalBatchMaxBytes()`, which returns the per-batch hold size even though `setTotalBatchMaxBytes()` configures the aggregate accumulator cap. The fixture assertion now reads the Java getter value and separately verifies the aggregate cap.
+- Updated `PHASE_7_PRODUCER_MATRIX.md` to document the getter/setter asymmetry. No plan changed.
+- PASS: `cargo test -p rocketmq-classic-producer --locked` (92 unit tests and 34 integration tests); strict producer Clippy; focused getter fixture regression after the final lint annotation; `cargo fmt --all -- --check`; `git diff --check`.
+- Strict Clippy initially flagged the source-backed getter/setter asymmetry as `misnamed_getters`; added a narrowly scoped lint allowance with the Java behavior documented at the accessor. The final strict Clippy run passed.
+- P18-V01 remains partial for the broad bidirectional Java source/API/input/reverse-export audit. The new accessor correction is complete and locally verified; current-revision GitHub Ubuntu evidence, Phase 19 local Broker/Docker scenarios, registry resolution, and release-version confirmation remain open.
+
+# Phase 18 latest-revision server-free gate rerun — 2026-10-13T20:00:54Z
+
+- Revision under test: `8d700cd3` on `phase/19-phase-18-compatibility-release-gate`.
+- PASS: default and all-features locked workspace tests; strict all-target/all-feature workspace Clippy; fmt/diff checks; Java reference `mvn verify` (37 scenarios and fixture drift); comparator self-test; scenario manifest validation (37 scenarios); workspace metadata/package-content checks; fuzz smoke (1824 bounded mutations); offline deterministic race/leak smoke (16 cases × 3); facade release examples; offline benchmark compilation.
+- Read-only GitHub review found no run for `8d700cd3`. The latest prior Ubuntu workflow (`38099328502`, 2026-10-11) failed strict Clippy on Linux-only unused imports in `core/src/config/local_address.rs`; the current source cfg-gates those imports and the full local strict Clippy gate passes. No push or workflow dispatch was performed.
+- This rerun closes the latest-revision server-free gates. P18-V01's bidirectional source/API/input/reverse-export audit, a current GitHub Ubuntu result, Phase 19 Docker/Broker infrastructure and scenarios, and registry dependency/version confirmation remain open.
+
+# Phase 18 public API reverse-scan refinement — 2026-10-13T20:05:35Z
+
+- Generated public docs with `cargo doc -p rocketmq-classic-producer -p rocketmq-classic-consumer -p rocketmq-classic --no-deps --locked` and parsed locally sourced inherent methods from rustdoc pages, filtering out declarations in private modules that are not actually exported.
+- Candidate evidence: 203 producer method/type occurrences across 8 public type pages, 437 consumer method/type occurrences across 23 pages; respectively 137 and 157 method occurrences lack an exact Rust identifier token in compatibility Markdown. These are not confirmed parity defects because several compatibility rows intentionally map by Java name or behavior family.
+- Appended the scope, method, counts, and caveat to `PHASE_6_REQUIREMENT_AUDIT.md`. Common/protocol/core/remoting reexports remain covered by their prior bounded inventories. P18-V01 remains PARTIAL; the next audit action is to resolve the candidates against Java owners and existing test IDs, beginning with configuration and facade methods.
+
+# Producer route-refresh inventory parity — 2026-10-13T20:24:39Z
+
+- Pinned Java 5.5.1 `MQProducerInner.getPublishTopicList()` returns every `DefaultMQProducerImpl.topicPublishInfoTable` key, including entries retained after a failed lookup. Rust previously listed only constructor `topics`, missing dynamic topics and failed first lookups from periodic refresh.
+- Updated the producer owner inventory to combine namespaced constructor topics, cached/published topics, and every topic recorded before a send/fetch-queues/recall route attempt. Added `topic_without_route_stays_in_producer_refresh_inventory` using a scripted NameServer returning no route for both the requested topic and `TBW102`.
+- PASS: `cargo test -p rocketmq-classic-producer --locked` (93 unit, 35 integration, 0 doc-test failures); `cargo clippy -p rocketmq-classic-producer --all-targets --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- No Broker was contacted. The broader P18-V01 bidirectional audit remains PARTIAL; consumer public-method crosswalk candidates remain under review. Existing P18-V02 server-free gate evidence is recorded above; no current-revision GitHub workflow run or Phase 19 Broker/Docker run is available.
+
+# Phase 18 consumer Rustdoc method crosswalk — 2026-10-13T20:29:22Z
+
+- Rechecked generated public Consumer Rustdoc pages after updating the Phase 9, 10, 11, and 13 matrices. The bounded scan covered 27 public type pages, 457 inherent method occurrences, and 287 distinct method identifiers. The compatibility Markdown now contains an exact Rust identifier mapping or explicit Rust-only disposition for every method in that scan; a repeat token scan found zero unmatched identifiers.
+- Added exact crosswalks for Pull facade selectors, batch offset persistence, route refresh/registration removal, the raw Pull implementation owner alias, offset helper boundaries, allocation-strategy settings, concurrent-consume context accessors, POP result/receipt methods, and the Lite heartbeat subscription handle.
+- This closes only the consumer Rust method-name reverse inventory. It does not close P18-V01's Java-to-Rust behavioral/source/input audit, Java reverse-export scan, inherited/Deref/trait coverage, or any unsupported-input/branch review. P18-V01 remains PARTIAL.
+- PASS: `git diff --check`. This documentation-only pass did not run tests or contact a Broker.
+
+# Phase 18 producer/consumer Rustdoc method crosswalk refinement — 2026-10-13T20:31:34Z
+
+- Refined the reverse scan to include re-exported public type pages as well as locally owned types. The generated Producer pages contain 183 inherent method occurrences across 13 pages (156 distinct names); Consumer pages contain 457 occurrences across 27 pages (287 distinct names). Exact-identifier comparison against compatibility Markdown now finds zero unmatched method names on either surface.
+- Added the re-exported common `CompressionType::find_by_value` / `get_compression_flag` mappings to the Producer matrix; their Java enum behavior and evidence remain owned by the Phase 6 compression API entry.
+- This closes the bounded Rust inherent-method name crosswalk only. It does not close Java-side reverse-export reconciliation, inherited/Deref/trait APIs, source branch/input equivalence, or the full P18-V01 acceptance audit.
+- PASS: `git diff --check`. This documentation-only pass did not run tests or contact a Broker.
+
+# Phase 18 latest-revision server-free gate and benchmark rerun — 2026-10-13
+
+- Revision under test: `a8c510d1cbc7` on `phase/19-phase-18-compatibility-release-gate`.
+- PASS: `cargo test --workspace --locked`; `cargo test --workspace --all-features --locked`; strict all-target/all-feature workspace Clippy; formatting and `git diff --check`; offline Java reference Maven verify; comparator self-test; 37-scenario manifest validation; workspace metadata/package checks; offline stress smoke (16 cases × 3); fuzz smoke (1,824 bounded mutations); facade examples build; offline release benchmark; and benchmark-target strict Clippy.
+- Latest local benchmark observations are recorded in `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`. Allocation counts and byte totals matched the prior capture; timing is host-specific and is not an acceptance threshold.
+- P18-V01 remains PARTIAL for the full Java↔Rust source, branch/input behavior, and Java reverse-export audit. No current-revision GitHub Ubuntu result is available without a pushed/triggered workflow. Phase 19 Broker/Docker runner and scenario execution remain outstanding; `0.1.0` release intent and crates.io dependency resolution remain unconfirmed. The final Windows IP Helper, non-macOS BSD address enumeration, and actual IPv6-only host checks remain manual validation.
+
+# Phase 18 cross-phase status audit correction — 2026-10-13
+
+- Read the current Phase 11 and Phase 12 matrices during the P18-V01 cross-phase audit. Phase 11 still described orderly assignment as PARTIAL until Phase 12, although Phase 12 now has Java-mapped lock renewal, expiry, queue serialization, callback and shutdown evidence. Replaced the stale statement with the current state and retained live mixed-client Broker contention as the Phase 19 handoff.
+- No implementation or plan change. Validation: `git diff --check`.
+
+# Phase 18 PullAPIWrapper reverse method inventory — 2026-10-13
+
+- Scanned pinned Java 5.5.1 `PullAPIWrapper.java` at `efa1be59d6fc747ad220f036c86030f05f0419f9`: 14 declared public method signatures across 13 names, plus the public constructor. The Phase 9 matrix already mapped the result/state methods, both `pullKernelImpl` overloads to Pull/Push/Lite owners, and `popAsync` to the Phase 13 Push POP owner. No declared public method name was unmapped.
+- Updated the Phase 9 matrix to remove its stale open-method-inventory statement and recorded the bounded result in the Phase 6 audit. The broad source/input/branch P18-V01 remains open. Validation: `git diff --check`; no tests run because this change only records a source declaration inventory and existing evidence.
+
+# Phase 18 NamespaceUtil reverse API inventory — 2026-10-13
+
+- Reverse-scanned pinned Java `NamespaceUtil.java`: four public constants and nine declared method signatures (nine names, including two `withoutNamespace` overloads). All map to Rust `NamespaceUtil` constants/methods, and the existing invoked-fixture differential calls each declared method.
+- Updated the Phase 16 matrix and Phase 6 audit with the bounded scan. This does not close the broader source/input/branch audit. Validation: `git diff --check`; no tests run because the change records declarations already covered by the existing fixture test.

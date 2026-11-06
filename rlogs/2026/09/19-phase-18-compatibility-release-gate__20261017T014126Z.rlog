@@ -1,0 +1,29 @@
+# Phase 18 compatibility release gate — execution log
+
+- 2026-10-17: Continued the inherited `BrowserSecure` Fastjson writer-feature
+  change on branch `phase/19-phase-18-compatibility-release-gate`. The Java
+  reference repository at `/Users/bruce.tsai/Projects/3rd/rocketmq` was only
+  inspected for status; it was not modified.
+- Reproduced `route::tests::inherited_remoting_serialization_matches_invoked_java`
+  failing on `route-browser-secure` with `UnquoteFieldName`. The pinned
+  Fastjson2 fixture emits arbitrary string map keys raw under this option;
+  Rust only unquoted identifier-shaped names. Updated the shared field-name
+  writer so map keys follow Java while bean-property identifier checks remain.
+- Added `BrowserSecure` escaping coverage for body, route and heartbeat DTOs.
+  Java fixtures pin standalone output and the `BrowserSecure+UnquoteFieldName`
+  combination, including the raw arbitrary map key and escaped string values.
+  Generated and verified the three affected Java 5.5.1 fixture families.
+- `cargo test -p rocketmq-classic-protocol --all-features --locked`: passed,
+  126 unit tests, all Protocol integration targets, and 42 doctests.
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features
+  --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- `mvn -f compat/java-reference/pom.xml verify`: passed on code revision
+  `02ae239d`; validated 37 scenarios, Java fixture drift, and Java/Rust
+  cross-decodes. Build time was 1m48s.
+- Code/test/fixture commit: `02ae239d feat(protocol): map BrowserSecure writer
+  feature`. Current mapping count is 30/48; 18 writer features remain unmapped.
+- Remaining Phase 18 work includes the other writer features, full bidirectional
+  P18-V01 API/settings/flow audit, final full-workspace P18-V02 gates, current
+  platform CI/P18-V04 evidence, and subsequent Phase 19 local Docker/Broker
+  automation. This log records a bounded feature closure, not phase acceptance.

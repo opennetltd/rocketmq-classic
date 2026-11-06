@@ -1,0 +1,148 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package compat;
+
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.TreeMap;
+import org.apache.rocketmq.remoting.CommandCustomHeader;
+import org.apache.rocketmq.remoting.protocol.RemotingCommand;
+import org.apache.rocketmq.remoting.protocol.header.EndTransactionRequestHeader;
+
+/** Invokes Java 5.5.1 EndTransactionRequestHeader decoding through both mode hints. */
+public final class EndTransactionHeaderDecodeModeFixtures {
+    private EndTransactionHeaderDecodeModeFixtures() { }
+
+    public static void main(String[] args) throws Exception {
+        Map<String, Object> fixture = new TreeMap<>();
+        fixture.put("client", "org.apache.rocketmq:rocketmq-client:5.5.1");
+
+        Map<String, Object> cases = new TreeMap<>();
+        cases.put("valid", decodeModes(validFields()));
+
+        Map<String, String> invalidOffset = validFields();
+        invalidOffset.put("tranStateTableOffset", "not-a-long");
+        cases.put("invalid-state-table-offset", decodeModes(invalidOffset));
+
+        Map<String, String> missingStateTableOffset = validFields();
+        missingStateTableOffset.remove("tranStateTableOffset");
+        cases.put("missing-state-table-offset", decodeModes(missingStateTableOffset));
+
+        Map<String, String> invalidCommitLogOffset = validFields();
+        invalidCommitLogOffset.put("commitLogOffset", "not-a-long");
+        cases.put("invalid-commit-log-offset", decodeModes(invalidCommitLogOffset));
+
+        Map<String, String> missingOffset = validFields();
+        missingOffset.remove("commitLogOffset");
+        cases.put("missing-commit-log-offset", decodeModes(missingOffset));
+
+        Map<String, String> missingProducerGroup = validFields();
+        missingProducerGroup.remove("producerGroup");
+        cases.put("missing-producer-group", decodeModes(missingProducerGroup));
+
+        Map<String, String> missingMessageId = validFields();
+        missingMessageId.remove("msgId");
+        cases.put("missing-message-id", decodeModes(missingMessageId));
+
+        Map<String, String> missingFromTransactionCheck = validFields();
+        missingFromTransactionCheck.remove("fromTransactionCheck");
+        cases.put("missing-from-transaction-check", decodeModes(missingFromTransactionCheck));
+
+        Map<String, String> invalidBoolean = validFields();
+        invalidBoolean.put("fromTransactionCheck", "not-a-boolean");
+        cases.put("invalid-from-transaction-check", decodeModes(invalidBoolean));
+
+        Map<String, String> invalidInheritedBooleans = validFields();
+        invalidInheritedBooleans.put("nsd", "not-a-boolean");
+        invalidInheritedBooleans.put("oway", "not-a-boolean");
+        cases.put("invalid-inherited-booleans", decodeModes(invalidInheritedBooleans));
+
+        Map<String, String> invalidCommitType = validFields();
+        invalidCommitType.put("commitOrRollback", "not-an-integer");
+        cases.put("invalid-commit-type", decodeModes(invalidCommitType));
+
+        Map<String, String> missingCommitType = validFields();
+        missingCommitType.remove("commitOrRollback");
+        cases.put("missing-commit-type", decodeModes(missingCommitType));
+
+        Map<String, String> unknownCommitType = validFields();
+        unknownCommitType.put("commitOrRollback", "7");
+        cases.put("unknown-commit-type", decodeModes(unknownCommitType));
+
+        fixture.put("cases", cases);
+        String json = JSON.toJSONString(fixture, JSONWriter.Feature.WriteMapNullValue) + "\n";
+        Path file = Path.of(args[0]);
+        if (args.length > 1 && "--verify".equals(args[1])) {
+            if (!json.equals(Files.readString(file))) {
+                throw new IllegalStateException("fixture drift: " + file);
+            }
+        } else {
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, json);
+        }
+        System.out.println("End-transaction header decode fixtures verified");
+    }
+
+    private static Map<String, Object> decodeModes(Map<String, String> fields) {
+        Map<String, Object> result = new TreeMap<>();
+        result.put("fields", new TreeMap<>(fields));
+        result.put("fast", decode(fields, true));
+        result.put("reflection", decode(fields, false));
+        return result;
+    }
+
+    private static Map<String, Object> decode(Map<String, String> fields, boolean useFastEncode) {
+        Map<String, Object> result = new TreeMap<>();
+        RemotingCommand command = RemotingCommand.createRequestCommand(37, null);
+        command.setExtFields(new HashMap<>(fields));
+        try {
+            CommandCustomHeader header = command.decodeCommandCustomHeaderDirectly(
+                EndTransactionRequestHeader.class, useFastEncode);
+            result.put("outcome", "OK");
+            RemotingCommand encoded = RemotingCommand.createRequestCommand(37, null);
+            encoded.setExtFields(new HashMap<>());
+            encoded.writeCustomHeader(header);
+            encoded.makeCustomHeaderToNet();
+            result.put("encodedFields", new TreeMap<>(encoded.getExtFields()));
+        } catch (Throwable error) {
+            result.put("outcome", error.getClass().getSimpleName());
+        }
+        return result;
+    }
+
+    private static Map<String, String> validFields() {
+        Map<String, String> fields = new TreeMap<>();
+        fields.put("topic", "orders");
+        fields.put("producerGroup", "producers");
+        fields.put("tranStateTableOffset", "3");
+        fields.put("commitLogOffset", "9");
+        fields.put("commitOrRollback", "8");
+        fields.put("fromTransactionCheck", "false");
+        fields.put("msgId", "message-1");
+        fields.put("transactionId", "transaction-1");
+        fields.put("ns", "tenant");
+        fields.put("nsd", "true");
+        fields.put("bname", "broker-a");
+        fields.put("oway", "false");
+        return fields;
+    }
+}

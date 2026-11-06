@@ -1,0 +1,6 @@
+# Phase 6 API compatibility session — 2026-10-10T18:59Z
+
+- Pinned Java 5.5.1 confirms both `MQClientManager.getOrCreateMQClientInstance` overloads throw `NullPointerException` for a null config, including the overload with a null hook; no factory entry is created.
+- Code/fixture commit: `5ec79e92` (`Match nullable runtime creation inputs`). Rust adds `get_or_create_nullable` and `get_or_create_with_hook_nullable`, returning typed `InvalidRoute` for a null config and forwarding valid configurations. Fixture SHA-256: `72749d6fb0b3a3a28a2d78ba70eaab17135012831d38b9e230a5c3f8d1bd034c`.
+- Validation passed: manager-table 16/16, registry-table 18/18, full locked workspace/all-target tests, strict workspace/all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture drift, and Java cross-decodes), comparator self-test/manifest22, formatting, and diff checks.
+- API map and requirement audit updated. Broader Phase 6 source/API/input/reverse-export reconciliation remains open; P6-V04 is a Phase 19 handoff.

@@ -1,0 +1,21 @@
+P18-V01 direct Broker maintenance RPCs on 2026-10-21:
+- Added MQClientApi::clean_expired_consume_queue,
+  delete_expired_commit_log, and clean_unused_topic_by_addr for pinned Java
+  MQClientAPIImpl requests 306, 329, and 316.
+- Each operation sends an empty synchronous request to the configured
+  VIP-transformed Broker address, returns true on SUCCESS, and preserves
+  non-success response errors.
+- The invoked Java fixture records all three signatures and six success/error
+  cases. Rust differential coverage compares request codes, Java language,
+  empty headers/body, and results. A VIP-enabled TCP loopback confirms address
+  conversion. Producer core fixture SHA-256:
+  212642c83a082b267df62d23621105ae2826266993e07e5778bf24179d96ae8f.
+- Focused Rust filters pass: one VIP unit test and one differential test across
+  six Java fixture cases. Strict locked all-target/all-feature workspace
+  Clippy, cargo fmt check, and git diff check pass. Pinned Maven verify passes;
+  it validates 37 manifest scenarios and Java decodes 72 Rust typed header
+  frames and 15 Rust typed body frames.
+- This closes these three direct RPC mappings only. The broad P18-V01 audit,
+  current-revision Ubuntu/native Windows P18-V04 evidence, and Phase 19 live
+  Broker scenarios remain open.
+- The four pre-existing Phase 19 worktree paths remain unstaged and untouched.

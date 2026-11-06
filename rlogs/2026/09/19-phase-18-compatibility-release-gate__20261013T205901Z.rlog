@@ -1,0 +1,43 @@
+# Phase 18 TopicValidator.ValidateResult constructor parity — 2026-10-13T20:59:01Z
+
+- Starting revision: `c75d1471` on `phase/19-phase-18-compatibility-release-gate`; worktree was clean. Java behavior was checked against pinned RocketMQ 5.5.1 source commit `efa1be59d6fc747ad220f036c86030f05f0419f9`; the separate Java checkout was not modified.
+- Confirmed the public Java `TopicValidator.ValidateResult(boolean, String)` constructor preserves nullable remarks. Rust now provides `ValidateResult::new(bool, Option<String>)` and `remark() -> Option<&str>`; TopicValidator-created results continue to use non-null remarks. Consumer admin error mapping handles the nullable accessor.
+- Added six direct Java constructor fixture cases: valid/invalid results each with null, empty, and non-empty remarks. Added Rust differential assertions and regenerated `fixtures/namespace/topic-validator.json`. SHA-256: `7ea74b6b60b54f60c1b32de5b770474c849f143f4794b4f3aee05c48305dd5ce`.
+- Fixture generation first failed when attempting to override Maven's configured `compat.Main`; the plugin kept `compat.Main` and printed usage. The corrected `topic-validator-fixture` dispatch via `compile exec:java` succeeded; the failed command changed no fixture.
+- PASS: `cargo test -p rocketmq-classic-common --locked --test topic_validator`; `cargo test -p rocketmq-classic-common --locked`; `cargo test -p rocketmq-classic-consumer --locked`; `cargo clippy -p rocketmq-classic-common -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, fixture drift and Java cross-decodes); `git diff --check`.
+- Implementation and tests committed separately as `9f2b0da6` (`fix(common): preserve nullable topic validation result API`). Updated the Phase 16 matrix, Phase 6 API map/audit, and release checklist; those docs and this log are staged for a separate documentation commit. No plan was modified.
+- This closes only the `ValidateResult` constructor/nullability gap. P18-V01/P6-V04 broad bidirectional reconciliation, full current-revision workspace gates, required Ubuntu/platform evidence, Phase 19 local Broker/Docker scenarios, registry dependency resolution and release-version confirmation remain open.
+- Follow-up: compatibility documentation and this execution record were committed as `ae98bf26` (`docs(compat): record nullable topic result API parity`); the commit contains no code changes, so no additional tests were run.
+
+## TopicValidator nullable inputs and live-set members
+
+- Rechecked pinned Java 5.5.1 behavior at `efa1be59d6fc747ad220f036c86030f05f0419f9`: `isTopicOrGroupIllegal(null)` throws `NullPointerException`; `isSystemTopic(null)` throws until null is in the live system set, then returns true; the send-block set accepts and matches null.
+- Added `TopicValidatorError::NullString`, nullable adapters for the affected entrypoints, and `HashSet<Option<String>>` live sets. Added invoked Java fixture cases and Rust differential assertions. Fixture SHA-256: `33a3617cca49b8803a457b28990529abdcb2f32888d35e585138251964bcfef1`.
+- Updated the Phase 6 API map, audit, Phase 16 matrix and release checklist. Broad P18-V01/P6-V04 source/API/input/reverse-export reconciliation remains open.
+- Focused locked TopicValidator differential and `mvn -q -f compat/java-reference/pom.xml verify` passed after the final fixture assertions. Full current-revision workspace tests and Clippy still need a final rerun before claiming P18-V02.
+
+## Final current-revision gates
+
+- `cargo fmt --all -- --check`: PASS.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`: PASS.
+- `cargo test --workspace --locked`: PASS.
+- `cargo test --workspace --all-features --locked`: PASS.
+- `mvn -q -f compat/java-reference/pom.xml verify`: PASS; 37 scenarios and Java cross-decodes completed. The Java runtime emitted existing JDK `Unsafe` and reflective-final-field warnings; the command exited successfully.
+- `git diff --check`: PASS. These gates verify the current local revision only; broad P18-V01 reconciliation, Ubuntu CI, Phase 19 Broker/Docker validation, and release registry/version checks remain open.
+
+## Remaining server-free Phase 18 gates
+
+- `python3 tests/differential/compare.py --self-test`: PASS; `--validate-manifest`: PASS with 37 scenarios.
+- `python3 scripts/check-workspace-metadata.py`: PASS.
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`: PASS (1,824 bounded mutations).
+- `bash tests/stress/run-offline-smoke.sh`: PASS (16 race/leak cases × 3 repetitions).
+- `cargo build -p rocketmq-classic --examples --release --locked`: PASS.
+- `cargo bench -p rocketmq-classic --bench offline --locked --no-run`: PASS; the benchmark executable also ran successfully. The current-revision measurements were appended to `PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`; `cargo clippy -p rocketmq-classic --bench offline --all-features --locked -- -D warnings` passed.
+- `cargo package --workspace --list --locked --allow-dirty`: PASS; all seven unpublished package contents include `LICENSE` and `NOTICE`. Registry resolution remains unverified and was not attempted.
+- The remaining checklist gaps are P18-V01's full bidirectional source/input/branch audit and Java reverse-export reconciliation, current GitHub Ubuntu evidence, Phase 19 local Broker/Docker scenarios, and registry dependency/version resolution. Non-local owner validation remains a later manual handoff.
+
+## Rustdoc method crosswalk status correction
+
+- Reconciled the audit chronology: the earlier token-only scan's 137/157 unmatched producer/consumer counts were superseded by a re-export-aware scan recorded in the preceding execution log. The refined scan found zero unmatched inherent method names across 183 Producer method occurrences/13 public pages and 457 Consumer occurrences/27 pages.
+- Updated the Phase 6 requirement audit and release checklist to make that bounded closure explicit. Java-side reverse-export coverage, inherited/Deref/trait APIs, and source/input branch equivalence remain open under P18-V01.
+- `git diff --check`: PASS. Documentation-only update.

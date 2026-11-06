@@ -1,0 +1,1 @@
+{"case":"nameserver-refresh-present","inputNamesrvAddr":"namesrv-a:9876;namesrv-b:9876","mode":"LOCAL","provenance":{"client":"org.apache.rocketmq:rocketmq-client:5.5.1","entrypoint":"MQClientAPIExt.updateNameServerAddressList","serverBaselineContacted":false,"transport":"mock RemotingClient"},"resultingAddresses":["namesrv-a:9876","namesrv-b:9876"],"returnValue":true}

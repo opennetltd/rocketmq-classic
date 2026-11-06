@@ -1,0 +1,37 @@
+# Phase 18 paginated timeout fixture determinism
+
+- Recorded: 2026-10-25 00:22:16 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Base revision: `e0257dbb54cbb67964e719fb81d572e74697523e`
+- Pinned Java reference: RocketMQ client 5.5.1.
+
+## Finding
+
+GitHub Actions run 40143142994 failed during Maven `verify` in
+`verify-java-producer-core-fixtures`. The Java fixture expected a page timeout
+of 2345 ms while the invocation received 2344 ms. The pinned
+`MQClientAPIImpl.getAllTopicConfig` and `getAllSubscriptionGroup` methods
+recompute remaining time from `System.nanoTime()` for each page, so exact
+millisecond observations depend on execution timing. The failure did not
+involve a changed Rust API or production implementation.
+
+## Resolution
+
+- `ProducerCoreFixtures` records whether each paginated topic-config and
+  subscription-group request has a positive remaining timeout budget instead
+  of capturing the timing-dependent millisecond value.
+- The fixture's configured input timeout remains exact. The delayed 20 ms
+  timeout cases still verify that expiration prevents a later page request.
+- `fixtures/producer/core.json` was regenerated. Changes are limited to the
+  request timeout observations for the two paginated APIs.
+
+## Verification
+
+- `mvn -f compat/java-reference/pom.xml -Dproducer.core.fixture.verify=false verify` — PASS; regenerated the producer fixture.
+- `mvn -f compat/java-reference/pom.xml verify` — PASS in default fixture verification mode.
+- `cargo test -p rocketmq-classic-core --test admin_rpc get_all_topic_config_matches_java_pagination_and_version_fixtures --locked` — PASS (1 test).
+- `git diff --check` — PASS.
+- Current-head remote CI must run after this fix is pushed.
+
+The four pre-existing Phase 19 worktree paths remained unchanged and unstaged.

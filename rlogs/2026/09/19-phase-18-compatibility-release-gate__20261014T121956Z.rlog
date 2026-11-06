@@ -1,0 +1,80 @@
+Phase 18 continuation — CheckForbidden async fault-update evidence — 2026-10-14 UTC
+
+Starting state
+- Branch `phase/19-phase-18-compatibility-release-gate`; initial HEAD `39afef818629e1e0b9f92140587b4092f0a60260`.
+- The prior uncommitted code change only strengthened an existing Producer ASYNC CheckForbidden test. Four compatibility/release documents also had pending Phase 18 updates.
+- The Java reference repository remains read-only. Phase plans were not modified.
+
+Changes
+- `f314116a` — `test(producer): assert async hook fault update parity`. The default-route ASYNC hook-error test now enables latency fault detection and asserts one reachable Broker entry is due for detection after the rejected attempt.
+- `20365fed` — `docs(compat): record CheckForbidden release gate`. Records the benchmark observation, source/API matrix update, release-checklist disposition, and the scope of the incremental verification.
+
+Validation on the updated Producer test worktree
+- PASS: `cargo test -p rocketmq-classic-producer --locked` — 138 unit tests, 55 integration/doc targets.
+- PASS: `cargo clippy -p rocketmq-classic-producer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all -- --check`.
+- PASS: `git diff --check`.
+- Existing full-workspace/default+all-feature, Maven, differential, manifest, race/leak, fuzz, examples, benchmark, metadata and package gates were run on parent revision `39afef81` as already recorded in the checklist; they were not rerun for this test-only assertion.
+
+Plan audit findings
+- P18-V01 remains open: broad Java/Rust overload input/error/control-flow, inherited/trait API and reverse-export reconciliation remains local work.
+- P18-V04 still lacks a current GitHub Ubuntu result for the Java address profile.
+- Phase 19 Docker/Broker automation remains unbuilt and unrun; deployment-only owner checks are distinct from these local requirements.
+- `0.1.0` release-version intent and registry dependency resolution remain unconfirmed. Publication/tagging is not part of this work.
+- The Phase 15–17 plans still contain unchecked verification boxes. Their matrices/logs need a requirement-by-requirement evidence reconciliation before claiming the overall Phase 15–18 goal complete; Phase 17 plan lists local query/error and reset-race criteria that must be verified against current artifacts.
+
+Current status
+- CheckForbidden test and documentation changes are committed separately. Execution log is a separate append-only commit.
+- No push, publication, tag, or Java repository changes were made.
+
+Continuation — prior-phase local acceptance spot checks
+- PASS: `cargo test -p rocketmq-classic-core --test admin_rpc query_fanout --locked` — 6 query fan-out tests.
+- PASS: `cargo test -p rocketmq-classic-consumer reset_offset_fences --locked` — slow-callback and late-pull reset-fencing tests.
+- PASS: `cargo test -p rocketmq-classic-consumer direct_consume --locked` — direct-consume offset-isolation and status-responsiveness tests.
+- PASS: reran `consumer_status_stays_responsive_during_a_slow_direct_consume_callback` by its exact name.
+- Phase 17 matrix independently records P17-V01/V03/U01 local coverage; P17-V02 remains the Phase 19 Broker query case. Phase 15 and Phase 16 matrices record their local fixture/race/TLS/auth/trace gates as verified, with live Broker checks separated into Phase 19.
+- Re-read pinned Java `AllocateMessageQueueConsistentHash` source at `efa1be59d6fc747ad220f036c86030f05f0419f9`; its public `(int, HashFunction)` constructor corresponds to the Rust `with_hash_function` API already mapped in the Phase 11 matrix. External Java checkout is unchanged; its pre-existing untracked broker test file remains untouched.
+
+Continuation — missing Broker publish-address Producer parity — 2026-10-14 UTC
+
+Starting state
+- Branch `phase/19-phase-18-compatibility-release-gate`; HEAD `b722c5f8`.
+- The two committed regressions were red: default send returned `NoRoute("orders")`; explicit queue did not return Java's missing-Broker error text.
+- Pinned source was read with `git show` at Java client commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`. `tryToFindTopicPublishInfo`
+  returns a cached nonempty publish route without another NameServer fetch;
+  `sendKernelImpl` then throws `MQClientException("The broker[...]
+  not exist", null)` when its Broker address lookup is empty.
+
+Changes
+- `e48fb323` — `fix(producer): match missing broker address errors`. Added the
+  typed Rust error with Java's message, applied it to explicit queue/selector
+  sends, and made the default retry path preserve Java's response-code-10003
+  wrapper, attempt count, Broker list, and reachable-fault update. The scripted
+  route uses a retained master-ID key with a null address so its writable
+  queues survive as in Java's separate publish-info and address tables.
+- `28d28377` — `test(producer): cover selector broker address errors`.
+- `1528ef06` — `docs(compat): record missing broker address parity`.
+
+Validation
+- PASS after implementation: `cargo test -p rocketmq-classic-producer
+  --test scripted_send missing_broker_address --locked` (2 cases); after the
+  selector regression, all 3 matching cases pass.
+- PASS after the selector case: `cargo test -p rocketmq-classic-producer
+  --locked` (138 unit tests, 55 integration/doc targets; scripted_send has 16
+  cases).
+- PASS on implementation revision `e48fb323`: default and all-feature locked
+  workspace tests; strict all-target/all-feature workspace Clippy; formatting
+  and diff checks; pinned Maven verify (37 scenarios, fixture drift and
+  cross-decodes); comparator self-test and manifest validation (37 scenarios);
+  deterministic race/leak smoke (16 cases x 3); fuzz smoke (104 frame seeds,
+  10 message seeds, 1,824 mutations); facade release examples; workspace bench
+  compilation; `cargo metadata`; workspace metadata/license/dependency checks;
+  and seven package-content listings.
+- Producer tests and fmt/diff pass after the test-only follow-up commit. Fixture
+  SHA-256: `725af3b3887f7a4ec6f6d72a23188e4fb80206e50c98b113b015d76917fedfd8`.
+
+Remaining phase work is unchanged: broad P18-V01 reconciliation, current
+GitHub Ubuntu CI evidence, release-version/registry confirmation, and P19 local
+Broker/Docker execution. No plan files or Java checkout files were changed; no
+push, publication, or tag was made.

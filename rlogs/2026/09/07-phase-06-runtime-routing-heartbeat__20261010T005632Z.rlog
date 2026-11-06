@@ -1,0 +1,7 @@
+Session: 2026-10-10T00:56:32Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Latest workspace verification for the ServiceThread and MessageQueue API work: `cargo test --workspace --all-targets --locked` passes all crates/integration targets when local socket access is enabled. The first sandboxed run failed only the three scripted runtime binds with `Operation not permitted`. Strict `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`, offline Maven `verify`, differential comparator self-test, manifest validation (22 scenarios), `cargo fmt --all -- --check`, and `git diff --check` pass. Focused MessageQueue method/constructor tests pass, and the Java fixture verify reports 25 route cases, 73 ClientConfig identity/default cases, and ten standard plus seven nullable offset cases.
+
+This confirms the existing commits `5ce83461`, `0ccfcaf4`, `7de5b64b`, `34be8aa1`, `d750448c`, `388e9e7e`, `48cca772`, `c2fcc812`, `08bad076`, and `8f1a4a9f`; no fixture or production behavior changed in this validation turn. Full Phase 6 source/input/reverse-export audit and non-macOS/IPv6-only host evidence remain open; P6-V04 stays `PENDING_PHASE_19`.

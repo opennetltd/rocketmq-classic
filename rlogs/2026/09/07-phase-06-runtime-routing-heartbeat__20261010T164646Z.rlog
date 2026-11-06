@@ -1,0 +1,7 @@
+# Phase 6 execution session — 2026-10-10T16:46Z
+
+- Continued public API reconciliation against locally pinned RocketMQ 5.5.1 jars; the named Java checkout remains absent.
+- Ran `javap -public` on `MQClientInstance`, `MQClientManager`, `ClientConfig`, `ClientRemotingProcessor`, `TopicPublishInfo`, `RebalanceService`, `PullMessageService`, and inherited `ServiceThread`; saved complete signatures at `/private/tmp/p6-javap-public-signatures.txt`.
+- Inventory totals 187 declarations: 53 MQClientInstance, 7 MQClientManager, 78 ClientConfig, 6 ClientRemotingProcessor, 18 TopicPublishInfo, 3 RebalanceService, 11 PullMessageService, 11 ServiceThread. Overload groups match the current API/config map, and a text scan finds every declaration name in that map.
+- Updated the API map and requirement audit with declaration counts/overload groups. This closes the declaration inventory only, not every input/source branch or reverse Rust export.
+- Validation: `git diff --check`; no production code changed. Phase 6 remains PARTIAL and P6-V04 remains `PENDING_PHASE_19`.

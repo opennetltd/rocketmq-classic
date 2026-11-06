@@ -4,7 +4,7 @@
 
 This directory expands [the master plan](00-rocketmq-classic-plan.md) into **20 sequential phase plans (Phase 0–19)**, each with an English primary and equivalent Traditional Chinese translation. Numbered filenames `01`–`20` are document numbers; the `phase-00`–`phase-19` components preserve the original phase numbers. The September 2026 directory is intentionally retained from the requested parent plan.
 
-Repository inspection found only the master plan and its SVG diagrams. There is no Cargo workspace, Java harness, source code, dependency lockfile or test suite yet. All source paths, signatures, test targets and commands in the child plans are proposed implementation contracts, not claims about existing code. This planning work did not download/verify the Java release or run client tests. Phase 0 must verify the requested tag `rocketmq-all-5.5.1`, commit `efa1be59d6fc747ad220f036c86030f05f0419f9` and Maven artifact `org.apache.rocketmq:rocketmq-client:5.5.1` before generating authoritative fixtures. Stop for review if they disagree; never silently switch baselines.
+Implementation-state update (2026-10-12): the repository now contains the Cargo workspace, pinned Java 5.5.1 fixture harness, compatibility matrices, and executable Rust/Java checks. The original repository inspection below this plan's creation is historical; it no longer describes the current tree. Phase status and remaining gaps are recorded in each phase's compatibility matrix and append-only execution log. The pinned source baseline remains `rocketmq-all-5.5.1`, commit `efa1be59d6fc747ad220f036c86030f05f0419f9`; server 5.3.4 live scenarios remain owned by Phase 19.
 
 The master plan retains overall scope and compatibility definitions. Child plans add task order, concrete mechanics and acceptance evidence; they do not authorize silently dropping features. Original Pn-NN task IDs are preserved, sometimes grouped under one implementation step. Added IDs fill bootstrap/testing/lifecycle gaps. Phase 16–18 task IDs map to the master’s numbered feature sections.
 
@@ -13,6 +13,8 @@ Java client **5.5.1** is the source/behavior baseline; server **V5_3_4 (5.3.4)**
 ## 2. Sequential reading and implementation order
 
 Read the English primary as authoritative; use its paired Chinese file for the same requirements. Finish the current phase’s gate before the next, with the explicit cumulative Push gate described in section 3.
+
+Use a separate branch to distinguish each implementation phase. Commits record incremental work within that phase's branch; a commit is not a phase boundary or proof of phase acceptance. Work may be committed before the phase gate passes, provided its remaining gaps and verification status are stated accurately. Do not mark a phase complete or hand off to the next phase until its acceptance gate passes.
 
 | Order | Phase | English primary | 繁體中文 |
 | ---: | ---: | --- | --- |
@@ -78,7 +80,7 @@ Use built-in Rust tests and small table-driven fixtures; a new testing framework
 
 ### 4.3 Evidence and test commands
 
-Phase-local commands are **to be implemented and run during coding**, not runnable in today’s documentation-only tree. Paths without a leading slash are repository-root-relative.
+Phase-local commands are required implementation gates and are run as each phase is implemented. Their current outcomes are recorded in the corresponding compatibility matrix and execution log. Paths without a leading slash are repository-root-relative.
 
 From Phase 1 onward, run these local gates after every completed phase:
 

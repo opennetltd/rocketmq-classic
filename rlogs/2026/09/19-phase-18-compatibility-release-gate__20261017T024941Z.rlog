@@ -1,0 +1,60 @@
+# Phase 18 continuation — 2026-10-17T02:49:41Z
+
+- Confirmed the working tree is clean on `phase/19-phase-18-compatibility-release-gate` at `f59fc8b5`; no repository-local `AGENTS.md` applies. Read the Phase 18 plan and coding/Rust workflow; the plan remains unmodified.
+- The Java checkout path is read-only and currently on 5.3.3 with a pre-existing untracked `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java`; kept it untouched. The compatibility harness pins `rocketmq-client:5.5.1` and Fastjson2 2.0.63 source artifacts are available in the local Maven cache.
+- Current writer feature inventory is 39/48. Existing pinned fixtures already invoke all flags for 41 body, 8 route, and 3 heartbeat serialization cases; `BeanToArray` changes every sampled object and is the next feature to map.
+- Implemented a first BeanToArray transform and added fixture comparisons for all mapped body, route, and heartbeat serialization tests. The initial Protocol all-feature test run built successfully but five feature comparisons failed: skipped null root fields were lost when converting the serde Value tree to arrays. Captured failures at the body, route, and heartbeat default DTO cases; correcting the schema-preserving conversion before accepting the feature.
+- Completed Fastjson `BeanToArray` for the mapped body, route, and heartbeat DTOs. The schema transform retains Java bean field order and omitted/null properties, converts nested DTOs in collections and typed maps, and preserves user maps as maps; enum ordinal/name combinations and queue-table key encoding are covered by the invoked Java comparisons. Added `BeanToArray` to the body, route, and heartbeat feature loops. Code commit: `acd40aff`.
+- Validation passed on `acd40aff`: `cargo test -p rocketmq-classic-protocol --all-features --locked` (126 unit tests, all Protocol integration targets, 42 doctests); `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`; and `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, fixture checks, and Java/Rust cross-decodes). Strict Clippy initially found too many arguments in the two recursive writers; writer state was grouped into context structs and all gates were rerun successfully. Inventory is now 40/48; eight flags remain unmapped: `WriteNulls`, `WriteMapNullValue`, `NullAsDefaultValue`, `WriteClassName`, `ReferenceDetection`, `WriteNullListAsEmpty`, `WriteNullStringAsEmpty`, and `WriteNullNumberAsZero`. Broad P18-V01, final full-workspace P18-V02, current-revision Ubuntu/Windows CI evidence, P18-V04 handoff, and Phase 19 Docker/Broker automation remain open.
+- Mapped Fastjson `WriteNulls` across the body, route, and heartbeat DTO adapters. A schema-backed transform restores omitted nullable fields in nested typed DTOs as JSON `null`; body/route/heartbeat fixture loops compare the feature output with the invoked Java 5.5.1 oracle. Code commit: `e7b0acde`. Validation passed: Protocol all-feature tests (126 unit tests, all integration targets, 42 doctests), strict all-target/all-feature Protocol Clippy, formatting, diff checks, and Maven verify (37 scenarios, fixture checks, and Java/Rust cross-decodes). Writer-feature inventory is now 41/48; seven flags remain unmapped: `WriteMapNullValue`, `NullAsDefaultValue`, `WriteClassName`, `ReferenceDetection`, `WriteNullListAsEmpty`, `WriteNullStringAsEmpty`, and `WriteNullNumberAsZero`.
+- Mapped Fastjson `WriteMapNullValue` using the schema-backed nullable-field transform; the pinned Java writer records the same null-field output as `WriteNulls`, while the Rust JSON value tree retains map null entries. Body, route, and heartbeat writer-feature fixture loops pass. Code commit: `af0baada`. Validation passed: Protocol all-feature tests (126 unit tests, all integration targets, 42 doctests), strict all-target/all-feature Protocol Clippy, formatting, and diff checks. Writer-feature inventory is now 42/48; six flags remain unmapped: `NullAsDefaultValue`, `WriteClassName`, `ReferenceDetection`, `WriteNullListAsEmpty`, `WriteNullStringAsEmpty`, and `WriteNullNumberAsZero`.
+- Mapped Fastjson `WriteNullListAsEmpty` with a DTO-schema traversal that turns only nullable collection fields into empty arrays, including collection fields in nested typed beans and map values; unrelated nullable fields remain omitted. The first differential run exposed that the traversal also emitted other absent nullable properties. Narrowed it to collection fields, then Protocol all-feature tests passed (126 unit tests, all integration targets, 42 doctests), as did strict Protocol Clippy, formatting, and diff checks. Code commit: `038bf5f8`. Inventory is now 43/48; five flags remain unmapped: `NullAsDefaultValue`, `WriteClassName`, `ReferenceDetection`, `WriteNullStringAsEmpty`, and `WriteNullNumberAsZero`.
+- Mapped Fastjson `WriteNullStringAsEmpty` for schema-identified nullable String fields and nullable String members in typed collections. The first fixture run exposed a null `consumerIdList` member that Java writes as `""`; the transform now handles nullable string collection members as well as fields. Protocol all-feature tests passed (126 unit tests, all integration targets, 42 doctests), along with strict Protocol Clippy, formatting, and diff checks. Code commit: `68941489`. Inventory is now 44/48; four flags remain unmapped: `NullAsDefaultValue`, `WriteClassName`, `ReferenceDetection`, and `WriteNullNumberAsZero`.
+- Mapped Fastjson `WriteNullNumberAsZero` for the current DTO graph as output-preserving. The mapped bean schemas contain no nullable numeric bean fields; pinned Fastjson2 `ObjectWriterImplMap` and `ObjectWriterImplCollection` write null map/collection entries with `writeNull()` directly, without applying the number-null feature. The Java writer fixture outputs record no overrides, and body, route, and heartbeat feature loops compare against those baselines. Code commit: `63a90423`. Protocol all-feature tests passed (126 unit tests, all integration targets, and 42 doctests), along with strict Protocol Clippy, formatting, and diff checks. Inventory is now 45/48; `NullAsDefaultValue`, `WriteClassName`, and `ReferenceDetection` remain unmapped.
+- Mapped Fastjson `NullAsDefaultValue` through DTO-schema traversal: nullable String fields and String collection members become empty strings, nullable collections become empty arrays, and nullable maps/nested DTO references become empty objects; nullable enum fields remain null. Existing Java writer fixtures exercise default, explicit-null, populated, and nested cases across body, route, and heartbeat serializers. Code commit: `a54512da`. Protocol all-feature tests passed (126 unit tests, all integration targets, and 42 doctests), along with strict all-target/all-feature Protocol Clippy, formatting, and diff checks. Inventory is now 46/48; `WriteClassName` and `ReferenceDetection` remain unmapped.
+- Mapped Fastjson `ReferenceDetection` by retaining `SharedValue` Arc identities through the feature-specific serialization pass and emitting Fastjson `$ref` paths for repeated handles. Added an invoked Java route fixture that serializes the same `BrokerData` object at two list positions; Rust matches the second reference path `$.brokerDatas[0]`. Code commit: `eb991847`. Protocol all-feature tests passed (127 unit tests, all integration targets, and 42 doctests); strict Protocol Clippy, formatting, diff checks, and Maven verify (37 scenarios, fixture checks, and Java/Rust cross-decodes) passed. After the final internal-marker refactor, the focused shared-route reference test, strict Protocol Clippy, formatting, and diff checks passed. Inventory is now 47/48; `WriteClassName` remains unmapped.
+
+- Mapped Fastjson `WriteClassName` across the body, route, and heartbeat serializer schemas. The feature emits root DTO metadata, polymorphic DTO metadata in lists/sets/maps and MessageQueue map keys, `Set` collection markers, typed `HashMap`/`ConcurrentHashMap` metadata, and `L` suffixes on small Java `long` field/map values. `NotWriteRootClassName`, `NotWriteHashMapArrayListClassName`, and `NotWriteSetClassName` suppress the matching metadata when combined with the feature. Existing invoked Java 5.5.1 feature outputs now run through body, route, and heartbeat differential loops. Code commit: `07d2fba1`. Validation passed: `cargo test -p rocketmq-classic-protocol --all-features --locked` (127 unit tests, all Protocol integration targets, 42 doctests); strict `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all`; and `git diff --check`. Writer feature inventory is now 48/48. Broad P18-V01, current-revision full-workspace P18-V02, GitHub Ubuntu/Windows CI evidence, Phase 19 local Docker/Broker automation, and pre-publication version/registry checks remain open.
+
+# P18-V02 final local rerun and request-reply deadline race fix — 2026-10-17T04:29:09Z
+
+- Code commit: `e9fe95cd fix(request-reply): expire entries at captured deadline`.
+  The repeated race smoke exposed that the registry sweep used only the future's
+  relative timeout, which can drift from the captured request deadline when
+  registration is delayed. Expiration now honors the stored absolute deadline
+  as well; a regression extends the future timeout after registration and
+  verifies that the registry still expires at the request deadline.
+- Final server-free gates passed on `e9fe95cd`: `TZ=UTC cargo test
+  --workspace --locked`; `TZ=UTC cargo test --workspace --all-features
+  --locked`; strict all-target/all-feature workspace Clippy; pinned Maven
+  `verify` (37 scenarios, fixture checks, Java/Rust cross-decodes); comparator
+  self-test and 37-scenario manifest validation; race/leak smoke (16 cases ×
+  3); fuzz smoke (105 frame seeds, 11 message seeds, 1,856 mutations); release
+  examples; workspace benchmark compilation; workspace metadata/license/
+  dependency checks; seven package listings with LICENSE and NOTICE; format and
+  diff checks.
+- The first post-change race-smoke run reproduced the flaky timeout assertion
+  on repetition 3. The absolute-deadline correction and focused regression
+  passed, then the complete 16 × 3 smoke rerun passed. The initial full-workspace
+  test command's shell wrapper used zsh's read-only `status` variable after the
+  tests had completed; the workspace suites were rerun with a corrected wrapper
+  and both returned exit code 0. No test failure remained.
+- P18-V02 server-free gates are complete on this code revision. P18-V01's broad
+  source/API/settings/overload/error/control-flow/reverse-export audit remains
+  open. The 37-scenario manifest is valid, but the Phase 19 Docker/Broker
+  runner and local scenario execution remain automatic work, not manual
+  validation.
+- Verified the official `apache/rocketmq:5.3.4` multi-platform image index at
+  `sha256:d57ee4ebbd9d7bb6e185775bde41c128e98f185b25bf0b05c77d4e6c010572b8`;
+  its linux/arm64 image is `sha256:4c7982d63c1b1d0edb45d6e9d330746b0a7816d96d01daa340244f5fad84d215`.
+  The pinned image reports server 5.3.4 and OpenJDK 8u472. Docker/Compose are
+  installed, but no Compose profile or Broker scenario has yet been executed.
+- GitHub currently has no run for this local revision. The latest listed run is
+  the older `cc79eb6e` revision and failed the Linux stack-capture test because
+  its signal-selection logic found no available default-ignore signal; the
+  local history contains the subsequent fallback correction. The branch is
+  ahead of origin and remains unpushed; no current-revision Ubuntu/Windows CI
+  result is claimed.
+- No Phase plan was changed; no Broker, tag, publication, push, deployment, or
+  compatibility claim was made. Pre-publication confirmation of the `0.1.0`
+  version set and registry dependency resolution remains open.

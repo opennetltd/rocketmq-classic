@@ -1,0 +1,6 @@
+# Phase 6 ordered NameServer provider parity — 2026-10-10T21:34:30Z
+
+- Added `chained_addressing_providers_match_java_service_loader_order` from the committed pinned Java oracle. Before implementation, the regression failed: Rust returned `third:9876`; Java returned `second:9876` after skipping the null first provider. The direct oracle also requires callbacks to reach all three providers.
+- Updated `DefaultTopAddressing` to retain chained providers in insertion order, return the first non-empty provider value, and forward callback registration to every provider with the same callback handle.
+- Updated the public API map and runtime inventory from one provider to ordered ServiceLoader semantics; requirement audit item 28 records the mismatch and differential boundary. The ordered-provider regression passes; both `namesrv::tests` pass; full `cargo test -p rocketmq-classic-core --test discovery --locked` passes all 8 tests (run with reviewed escalation for the local HTTP peers); all-target/all-feature strict core Clippy, `cargo fmt --all -- --check`, and `git diff --check` pass.
+- Whole Phase 6 source/input/platform reconciliation remains PARTIAL; P6-V04 remains `PENDING_PHASE_19`.

@@ -1,0 +1,62 @@
+# Phase 18 P18-V01 continuation — Producer selector failures
+
+Session started: 2026-10-14T08:38:08Z
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Branch: phase/19-phase-18-compatibility-release-gate
+Base revision: 7373fce9 docs(release): record current server-free gates
+Java source baseline: efa1be59d6fc747ad220f036c86030f05f0419f9
+
+## Selector failure audit
+
+- Pinned Java `DefaultMQProducerImpl.invokeMessageQueueSelector` and
+  `sendSelectImpl` both catch selector `Throwable` and wrap it in
+  `MQClientException`; its rendered message includes the standard FAQ suffix
+  and retains the original cause.
+- Added invoked Java coverage for both selector-only and synchronous send
+  paths. `fixtures/producer/core.json` records each error class/message/cause,
+  confirms one callback with a nonempty route, and has SHA-256
+  `d1b05a04ed53dde2820647bd964ea2092592b35d51de90273f5b22f77ded0fe7`.
+- Rust now catches unwinding selector panics, returns
+  `ProducerError::SelectorPanicked` with the panic payload text, and renders
+  the Java wrapper message. The scripted regression covers selector-only and
+  sync send and proves both fail before Broker I/O. This closes only the
+  thrown-selector slice; P18-V01 remains open.
+
+## Commits
+
+- `4b5aae16 test(compat): capture Java selector exception behavior`
+- `975e6e3c fix(producer): wrap queue selector panics like Java`
+- `46631dc0 docs(compat): record producer selector exception parity`
+
+## Validation
+
+- PASS: `mvn -q -f compat/java-reference/pom.xml -Dproducer.core.fixture.verify=false verify`
+  regenerated the invoked fixture and completed Java reference checks.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` confirmed fixture
+  drift, 37 differential scenarios, and Java/Rust cross-decodes.
+- PASS: `cargo test -p rocketmq-classic-producer --test scripted_send invoke_message_queue_selector_returns_the_namespaced_queue_without_sending --locked`.
+- PASS: `cargo test -p rocketmq-classic-producer --locked` (132 unit tests and
+  all Producer integration/doc targets).
+- PASS: `cargo clippy -p rocketmq-classic-producer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all -- --check` and `git diff --check`.
+- Maven emitted existing JDK/Netty `Unsafe` and reflective-final-field warnings;
+  both verify invocations exited successfully.
+
+## Inherited listener trait crosswalk
+
+- Compared the public Rust trait inventory with compatibility matrices. The
+  concurrent and orderly listener traits were the only public Rust traits
+  without their exact Java interface method recorded in those matrices.
+- Read the pinned Java `MessageListenerConcurrently` and `MessageListenerOrderly`
+  declarations and `ConsumeRequest.run` call sites. Both inherit only the
+  methodless `MessageListener` marker and declare one callback. Existing Rust
+  flows preserve the queue/context ownership; concurrent absent-status or
+  panic maps to retry, and orderly absent-status or panic maps to suspension.
+- Added method-level Java-to-Rust rows to Phase 10 and Phase 12, with links to
+  the existing context/status and callback tests. No missing capability was
+  confirmed in this trait slice; broad P18-V01 remains open.
+- After the selector implementation commits, PASS:
+  `cargo test --workspace --locked`,
+  `cargo test --workspace --all-features --locked`, and
+  `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+  These ran before the documentation-only listener crosswalk update.

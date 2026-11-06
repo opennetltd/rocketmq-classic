@@ -1,0 +1,37 @@
+P18-V01 public-executor shutdown boundary —
+2026-10-22 22:03 UTC
+
+Environment: macOS AArch64, Rust 1.85.0. Branch:
+`phase/18-phase-18-compatibility-closure`. Java reference is RocketMQ 5.5.1,
+commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Source comparison:
+- Java `NettyRemotingClient.shutdown()` waits for `NettyEventExecutor.shutdown()`
+  to join its worker for up to 90 seconds, then shuts down `publicExecutor`
+  without waiting for its queued or running work.
+- Rust had closed public-executor admission at shutdown initiation, before its
+  channel-event worker join completed.
+
+Correction, commit `dc625424`:
+- Keep public-executor admission open through the channel-event worker join,
+  then close admission when the worker stops or the join deadline expires.
+- Apply the same boundary in foreground and cancellation-safe background
+  cleanup. Accepted work continues to drain independently.
+- Extend `shutdown_waits_for_channel_event_worker_only_until_java_join_limit`
+  to prove a submission during the wait is accepted, a new submission after
+  shutdown returns is rejected, and accepted work still completes.
+- Refresh the Phase 3 Remoting inventory, Phase 16 channel-event matrix and
+  `KNOWN_DIFFERENCES.md` lifecycle mapping.
+
+Current-revision verification:
+- Focused shutdown boundary regression — PASS.
+- `cargo test --offline -p rocketmq-classic-remoting --lib --locked` — PASS
+  (140 tests).
+- `cargo test --offline -p rocketmq-classic-remoting --test transport --locked`
+  — PASS (107 tests).
+- Strict all-target/all-feature Remoting Clippy — PASS.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+
+Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export
+reconciliation remains open. No external CI, push, publication, or release
+operation was performed. Protected Phase 19 working-tree paths remain unstaged.

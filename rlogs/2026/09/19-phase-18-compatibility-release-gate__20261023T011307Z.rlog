@@ -1,0 +1,36 @@
+# Recorded: 2026-10-23 01:13:07 UTC
+# Code revision: 612f9c71
+
+## Oracle finding
+
+Pinned Java `ProcessQueue.containsMessage(null)` returns `false` before taking
+its tree lock. Rust previously accepted only a non-null message reference. It
+now exposes `contains_message_nullable(Option<&MessageExt>)`, which returns
+false for `None` and forwards present messages to the existing lookup.
+
+The invoked Java facade fixture records the null result, and the Rust facade
+comparison uses the same case. Fixture SHA-256:
+`edb43a544374bb1c5ae969bcdaa09ea3746a310b3d28dc86b459a18ecfcff551`.
+
+## Commits
+
+- `612f9c71 fix(consumer): match null ProcessQueue lookup`.
+- Compatibility/API audit records and this execution log are in the following
+docs-only commit.
+
+## Validation on code revision 612f9c71
+
+- Focused `process_queue_public_methods_match_pinned_java_behavior` facade test — PASS.
+- `cargo test --offline -p rocketmq-classic-consumer --all-features --locked --quiet` — PASS.
+- Strict Consumer all-target/all-feature Clippy — PASS.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS: 37 differential
+  scenarios, 11 message fixture/runtime cases, 36 route/VIP cases, 106 typed
+  headers, and 19 typed bodies.
+
+## Remaining Phase 18 status
+
+Broad P18-V01 Java source/API/settings/input/error/control-flow and Rust
+reverse-export reconciliation remains PARTIAL. Thirty live handoff scenarios
+remain `PENDING_PHASE_19`; current-revision remote Ubuntu CI, native Windows
+runtime, and Phase 19 Broker/Docker evidence remain open.

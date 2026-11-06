@@ -1,0 +1,12 @@
+# Phase 18 execution session — 2026-10-13T11:13:23Z
+
+- Continued the Phase 9 offset-entrypoint audit against Java 5.5.1. `DefaultMQPullConsumerImpl.persistConsumerOffset` persists only `RebalanceImpl.processQueueTable` keys; the Rust facade, periodic owner callback, and shutdown previously persisted every entry in the offset store.
+- Changed the three Rust paths to snapshot and persist only `in_balance_queues`. Updated the explicit-pull integration expectation for an unassigned queue, and added facade, periodic, and shutdown regression coverage while retaining an unrelated offset-table entry.
+- Extended the invoked Java accessor fixture to set the implementation to RUNNING, inject a recording `OffsetStore`, add one `ProcessQueue`, call `persistConsumerOffset`, and record the exact queue set. Updated the Phase 9 method matrix.
+- Initial full consumer test run found an incorrect assertion in the new rebalance test: the test expected its deliberately unassigned offset to be removed. Corrected the assertion to require that this offset remains untouched and is excluded from persistence.
+- PASS: focused `pull_runtime_rebalance_assigns_all_broadcast_queues_and_persists_removals` and `pull_persist_consumer_offset_uses_only_current_assignment` tests.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (172 unit tests, 43 integration tests, doc tests).
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and invoked accessor fixture verification).
+- PASS: `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. This closes the direct `persistConsumerOffset` queue-selection behavior; `fetchConsumeOffset` and `updateConsumeOffsetToBroker` still need raw-entrypoint evidence. P18-V01 remains open.
+- Rust changes, test expectation, Java fixture, fixture JSON, Phase 9 matrix, and this log are included in the independent offset-persistence commit.

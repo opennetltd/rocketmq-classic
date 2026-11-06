@@ -1,0 +1,34 @@
+# Phase 18 Remoting and Phase 6 cross-inventory review
+
+- Recorded: 2026-10-24 10:25:15 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Code revision: `1e928372`
+- Documentation head before this record: `cdf5efcb`
+
+## Findings
+
+- Re-read the Phase 3 Remoting Rust-to-Java surface and its request-generation
+  notes after the `ErrorSource` identity correction. The inventory has no
+  `NOT MAPPED` row. It retains the source-backed Java `ChannelWrapper` race:
+  `reconnect` uses `tryLock`, and a GO_AWAY callback before the channel swap
+  can fail to retry if it cannot acquire that wrapper lock. Existing
+  deterministic tests verify retry after the swap and do not claim exhaustive
+  contention-order parity.
+- Rust currently protects connection state through global connection-map
+  mutexes. Adding `try_lock` there would model a different contention domain
+  from Java's per-wrapper lock; this review made no production change.
+- Phase 6's API map still calls for a complete Java method/overload,
+  input/default/error/control-flow and reverse-export audit across DTO, route,
+  heartbeat, enum, configuration and subscription surfaces. Broad P18-V01
+  therefore remains partial.
+- Removed an obsolete `KNOWN_DIFFERENCES.md` statement that said no Rust client
+  implementation existed at Phase 0. Current Phase 0 fixtures remain offline
+  protocol evidence rather than live Broker/NameServer outcomes.
+
+## Validation
+
+- Documentation-only correction; no tests were run.
+- `git diff --check` — PASS.
+- The current-tree P18-V02 gates are recorded separately in
+  `2026/10/24-phase-18-current-tree-error-identity-gates__20261024T102143Z.rlog`.

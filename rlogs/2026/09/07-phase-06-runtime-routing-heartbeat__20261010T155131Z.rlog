@@ -1,0 +1,9 @@
+# Phase 6 execution session — 2026-10-10T15:51Z
+
+- Continued API and control-flow boundary reconciliation on `07-phase-06-runtime-routing-heartbeat`; the requested Java source checkout is absent here, so the oracle uses pinned RocketMQ 5.5.1 artifacts.
+- The Java runtime oracle confirms `registerConsumer` and `registerProducer` return `false` when either the group or owner is null. Null groups passed to consumer or producer unregister throw `NullPointerException` before Broker RPC. Oracle/fixture commit: `50b83107`.
+- Rust adds nullable registration wrappers that return `Ok(None)` for either null input and nullable group-removal wrappers that map null keys to typed `InvalidRoute` errors. `nullable_registration_and_group_removal_match_invoked_java` verifies those results and that no Broker operation starts the runtime. Implementation/test commit: `9ea85053`.
+- `fixtures/runtime/lookup.json` SHA-256: `de2d3104c034955172e04f2ea73bd67f1981ad27664b2fe413b0ac98c18835b6`.
+- Validation passed: focused registration regression; `cargo test --workspace --all-targets --locked`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; pinned offline Maven verify (22 scenarios, runtime fixture drift and Java cross-decodes); direct Java runtime-lookup fixture verification; comparator self-test and manifest validation (22 scenarios); formatting and diff checks.
+- Updated the Phase 6 API map and requirement audit. This closes null registration/unregister boundaries only; full source/API/input/reverse-export reconciliation remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+- Documentation/log commit: pending.

@@ -1,0 +1,24 @@
+Phase 18 `triggerLiteDispatch` RPC compatibility slice
+
+Date: 2026-10-21 UTC
+Branch: `phase/18-phase-18-compatibility-closure`
+
+Scope:
+- Added `MQClientApi::trigger_lite_dispatch` for request 200079, matching pinned Java 5.5.1 `MQClientAPIImpl.triggerLiteDispatch(String,String,String,long)`.
+- Preserved nullable `group` and `clientId` fields, empty body, configured VIP address transform, caller deadline, and Broker response error classification.
+- Added Java invoked cases and a Rust loopback differential for populated/null headers, VIP address, request code, body and response outcomes.
+- Updated request-code and Java compatibility references and the release checklist.
+
+Evidence:
+- Code commit: `f521c5b5` (`feat(core): add trigger lite dispatch RPC`).
+- Producer core fixture SHA-256: `7846aa7100a8f2339917fc71ad0018e32786692e4b3cff3c1bfafe1c6621372f`.
+- Focused regression `cargo test -p rocketmq-classic-core trigger_lite_dispatch_matches_java_fixture_vip_and_nullable_header_fields --locked`: passed.
+- `cargo test --workspace --locked` and `cargo test --workspace --all-features --locked`: passed.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- Pinned Java `mvn -f compat/java-reference/pom.xml verify`: passed; 37 scenario-manifest cases, 80 Java-decoded Rust typed header frames, and 15 typed body frames verified.
+
+Remaining:
+- Broad P18-V01 bidirectional API/settings/input/error/control-flow/reverse-export audit remains open.
+- Current Ubuntu/native Windows P18-V04 evidence and Phase 19 live Broker scenarios remain open.
+- Preserved Phase 19 paths remain unstaged and untouched by this slice: `integration-tests/README.md`, `tests/differential/run.sh`, `integration-tests/run-local.sh`, and `rlogs/2026/09/20-phase-19-docker-local-validation__20261017T224455Z.rlog`.

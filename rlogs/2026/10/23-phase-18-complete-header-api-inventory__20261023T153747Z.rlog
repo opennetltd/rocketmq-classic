@@ -1,0 +1,46 @@
+# Phase 18 complete CommandHeader API inventory and Notify RPC inheritance
+
+- Recorded: 2026-10-23 15:37:47 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source revision: `e7d779af`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Java reference: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Change
+
+Added an invoked Java constructor, public-field, declared-method, and
+callable-method inventory for the 25 request-header classes that previously
+lacked class API evidence. Explicit mappings preserve the NameServer package,
+Java KV capitalization, and the Java `GetConsumeStatsInBrokerHeader` class
+name. The five-fixture Rust parity test now covers all 103 public
+`CommandHeader` implementations, normalizing the Java
+`DeleteKVConfigRequestHeader` spelling and excluding the unrelated
+`ExportRocksDBConfigType` enum.
+
+The inventory exposed a Rust compatibility gap: Java
+`NotifyUnsubscribeLiteRequestHeader` inherits `RpcRequestHeader`, but the Rust
+header had no inherited routing fields or accessors. Rust now retains and
+encodes/decodes nullable `ns`, `nsd`, `bname`, and `oway`, and its equality/hash
+behavior matches Java's base-field-only implementation. The Java identity
+fixture now covers 50 headers.
+
+Fixture SHA-256:
+
+- `fixtures/protocol/remaining-header-api.json`:
+  `54df2a5effcb30ecdab9303c78d404a05916576bec60d1f33e540ec28ae6b688`
+- `fixtures/protocol/request-header-identity.json`:
+  `38c163fea5ca151b00c450e709cc7006cb442e39799c34b3eecde930d4eeb10d`
+
+## Verification
+
+- `cargo test --locked -p rocketmq-classic-protocol` — passed, including 160 unit tests, 18 header inventory tests, 27 header behavior tests, and 165 doctests.
+- `cargo test --locked --all-features -p rocketmq-classic-protocol` — passed, including 165 doctests.
+- `cargo clippy --locked --all-targets --all-features -p rocketmq-classic-protocol -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- `mvn -o -f compat/java-reference/pom.xml verify` — passed: 37 scenarios, Java fixture drift, 11 message fixtures, 106 typed headers, and 19 typed bodies cross-decoded.
+
+This closes the public `CommandHeader` API inventory gap and the identified
+Notify Lite inherited-routing mismatch. Broad P18-V01 remains PARTIAL. Native
+Windows runtime and current-revision remote Ubuntu CI remain open; Phase 19
+remains out of scope. No push or remote CI was run. The four existing
+user-owned Phase 19 paths were not edited or staged.

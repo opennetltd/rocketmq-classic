@@ -76,10 +76,10 @@ MQClientApi 擁有或借用 RemotingClient，不依賴 process singleton。Broke
 
 先寫對應失敗測試／Oracle fixture，再依序實作；以下 case 必須成為可執行檢查，而非人工勾選。以下檢查不依賴 Docker 或 live Broker，使用 Java fixture、可控時鐘及 scripted peer；共通命令與證據規則見執行索引。
 
-- [ ] **P5-V01** — 每個 method 皆測 scripted success、預期 domain outcome、unknown error code 及 malformed success response。
-- [ ] **P5-V03** — 單次 Broker method 只送一個 attempt；NameServer failover 與 oneway 遵守文件中的 deadline/pending 規則。
+- [x] **P5-V01** — 每個 method 皆測 scripted success、預期 domain outcome、unknown error code 及 malformed success response。
+- [x] **P5-V03** — 單次 Broker method 只送一個 attempt；NameServer failover 與 oneway 遵守文件中的 deadline/pending 規則。
 
-- [ ] **P5-U01** — 以 Java request/response fixture 覆蓋每個 RPC 成功／錯誤分支及精確 invocation mode，不依賴 live server。
+- [x] **P5-U01** — 以 Java request/response fixture 覆蓋每個 RPC 成功／錯誤分支及精確 invocation mode，不依賴 live server。
 
 ### 5.1 實作完成後的本機命令
 

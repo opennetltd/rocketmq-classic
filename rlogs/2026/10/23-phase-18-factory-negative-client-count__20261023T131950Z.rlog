@@ -1,0 +1,41 @@
+# Phase 18 factory negative client-count input compatibility
+
+- Recorded: 2026-10-23 13:19:50 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Starting revision: `46ee173d`
+- Implemented revision: `42fa4f87`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: negative `clientNum` failure timing and factory-array state
+
+## Finding and change
+
+Java accepts a negative `clientNum` in the constructor. `start()` then fails
+while evaluating the `MQClientAPIExt[]` allocation with
+`NegativeArraySizeException`; because assignment never completes,
+`getClients()` remains null. Rust already returns `NegativeClientCount` from
+`start()` before creating or publishing its shared client array.
+
+The invoked Java factory fixture now records the exception class and null
+array state, and the Core regression compares both. Fixture SHA-256:
+`46c1c0eba80e678fcec6fa39fec4525b80801a595e68dee6dc06413f4635a480`.
+
+## Verification
+
+- Focused Core negative-count regression — passed.
+- `cargo test --offline --workspace --locked` — passed, including doctests.
+- `cargo test --offline --workspace --all-features --locked` — passed, including doctests.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — passed.
+- `mvn -q -o -f compat/java-reference/pom.xml verify` — passed; 37 differential scenarios and invoked fixtures, including the factory negative-count case.
+- Differential comparator self-test and 37-scenario manifest validation — passed.
+- Workspace metadata/dependency/license checks and all seven package-list checks — passed.
+- Race/leak smoke — 17 cases × 3; fuzz smoke — 163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes, and 192 message decodes.
+- Release examples, fixed-input offline benchmark, Core Windows GNU all-target/all-feature cross-check, workspace Rustdoc JSON, formatting, and diff checks — passed. Rustdoc inventory: Common 439, Consumer 460, Core 747, Producer 362, Protocol 1,524, Remoting 337.
+
+## Acceptance boundary
+
+This closes only the negative factory client-count start branch. Broad P18-V01
+source/API/settings/input/error/control-flow/reverse-export reconciliation
+remains PARTIAL. Current-revision remote Ubuntu CI and native Windows runtime
+evidence remain pending. Phase 19 Broker/Docker validation was not run. No
+push or remote CI was performed. The four user-owned Phase 19 worktree paths
+remained untouched and unstaged.

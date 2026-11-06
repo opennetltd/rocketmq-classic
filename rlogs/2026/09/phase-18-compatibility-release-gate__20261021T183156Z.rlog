@@ -1,0 +1,49 @@
+# Phase 18 MessageExt queue-offset override follow-up — 2026-10-21T18:31:56Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `a5bfd35b` (`feat(common): preserve MessageExt subtype queue offsets`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `00a09f96bb75f96f2ae81111e83c916af4dc47999b7462efdb82163ab8e1fe54`.
+
+## Source audit and change
+
+- Java `ProcessQueue.putMessage` indexes messages by virtual
+  `MessageExt.getQueueOffset`; its setter is also overridable. Rust previously
+  read and wrote the stored base offset directly.
+- Added optional `getQueueOffset`/`setQueueOffset` hooks to
+  `MessageExtSubtype`. Rust queue insertion/removal now observes the subtype's
+  virtual offset accessor through the existing `MessageExt::queue_offset` API.
+- Extended the invoked Java custom subtype fixture to record the virtual
+  offset and setter call. A Java `ProcessQueue.putMessage` run is compared with
+  Rust for the dispatch flag, tree key, message count, body size and setter
+  count. All 27 direct-consume cases and the direct ProcessQueue comparison
+  pass.
+- Updated the Phase 6, Phase 10 and Phase 18 crosswalks and release checklist.
+  Other inherited virtual methods remain part of the broader audit.
+
+## Verification
+
+- PASS: `cargo test --workspace --locked --quiet`.
+- PASS: `cargo test --workspace --all-features --locked --quiet`.
+- PASS: strict workspace Clippy with all targets/features and `-D warnings`;
+  `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: focused Common and Consumer package tests, including the
+  `runtime_direct_consume` Java/Rust fixture comparison. Consumer package
+  tests include 247 library tests and all package integration tests.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify`: 37 scenarios, 83
+  typed headers, 16 typed bodies and Rust/Java cross-decodes. The runtime
+  consumer fixture verifies 9 Running Info, 27 direct-consume and 15 reset
+  cases. Existing JDK Unsafe/reflection warnings were emitted.
+- Supplemental differential, stress, fuzz, examples, benchmark, metadata,
+  package-content and time-zone gates have not yet been refreshed on this new
+  code revision.
+
+## Remaining status
+
+This closes the two queue-offset subtype hooks only. Broad P18-V01
+source/API/settings/input/error/control-flow/reverse-export work and inherited
+method overrides beyond the adapter remain open. Current GitHub Ubuntu and
+native Windows P18-V04 runtime evidence is absent. Phase 19 Broker/Docker
+validation remains separate. No push, remote CI, Broker or Docker run was
+performed. Pre-existing Phase 19 worktree paths were left untouched and
+unstaged.

@@ -1,0 +1,10 @@
+# Phase 6 execution session — 2026-10-10T16:38Z
+
+- Continued platform verification on `07-phase-06-runtime-routing-heartbeat`; the Phase 6 goal remains active.
+- Added a host-side test for the pure Windows `SOCKADDR_INET` conversion. The actual `windows-sys` union members exercise IPv4 byte order, IPv6 address bytes, nonzero scope/interface-name mapping, and unknown-family rejection. `windows-sys` is a core dev dependency so the Windows ABI structures are available to macOS unit tests; the production helper is compiled for tests without changing its Windows runtime implementation.
+- `cargo test -p rocketmq-classic-core --lib windows_sockaddr_conversion_preserves_address_bytes_and_scope --locked --offline`: exit 0, 1 passed.
+- `cargo test -p rocketmq-classic-core --lib config::local_address::tests --locked --offline`: exit 0, 17 passed.
+- `cargo clippy -p rocketmq-classic-core --all-targets --all-features --locked --offline -- -D warnings`: exit 0.
+- `cargo fmt --all -- --check` and `git diff --check`: exit 0.
+- Code/test commit: `b77b9719` (`Test Windows socket address conversion`). Updated `docs/compatibility/PHASE_6_REQUIREMENT_AUDIT.md` with this scoped evidence.
+- The conversion test does not execute Java or the Windows IP Helper APIs. The full Windows core cross-check remains blocked before Rust checking by absent `x86_64-w64-mingw32-gcc`; the isolated repository-module Windows-target type-check passed in the previous session. Windows runtime enumeration, non-macOS Unix enumeration, and an actual IPv6-only host remain unverified. Phase 6 stays PARTIAL and P6-V04 stays `PENDING_PHASE_19`.

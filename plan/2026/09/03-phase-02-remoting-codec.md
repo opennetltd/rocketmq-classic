@@ -76,9 +76,9 @@ Implement tokio-util Decoder/Encoder only if useful for the upcoming transport; 
 
 Write the failing check/oracle fixture before its implementation. The cases below must become runnable checks, not manual checklist-only claims. Run these checks without Docker or a live Broker; use Java fixtures, controlled clocks and scripted peers. Shared commands and evidence rules are in the execution index.
 
-- [ ] **P2-V01** — Cross-decode route/heartbeat/send/pull/offset/lock/transaction/reply fixtures under both supported serializations where the Java codec permits them.
-- [ ] **P2-V02** — Test length 0/1/0xFFFFFF/overflow, configured frame limit ±1, high-bit total lengths, nested truncation and unknown fields/codes.
-- [ ] **P2-V03** — Every fragmentation point and concatenated-frame case emits exactly the expected commands; malformed bytes never panic or cause unbounded reserve.
+- [x] **P2-V01** — Cross-decode route/heartbeat/send/pull/offset/lock/transaction/reply fixtures under both supported serializations where the Java codec permits them.
+- [x] **P2-V02** — Test length 0/1/0xFFFFFF/overflow, configured frame limit ±1, high-bit total lengths, nested truncation and unknown fields/codes.
+- [x] **P2-V03** — Every fragmentation point and concatenated-frame case emits exactly the expected commands; malformed bytes never panic or cause unbounded reserve.
 
 ### 5.1 Local commands after implementation
 

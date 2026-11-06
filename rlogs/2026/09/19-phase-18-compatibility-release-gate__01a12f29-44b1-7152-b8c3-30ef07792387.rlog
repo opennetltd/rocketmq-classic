@@ -1,0 +1,171 @@
+# Phase 18 MessageAccessor setProperties alias oracle — 01a12f29-44b1-7152-b8c3-30ef07792387
+
+- Inspected the pinned Java client source at `efa1be59d6fc747ad220f036c86030f05f0419f9`. `MessageAccessor.setProperties` assigns the caller's `Map` reference directly to `Message`; mutations through either reference are visible through the other.
+- Added invoked Java observations for retained map identity, caller-to-message mutation, and message-to-caller mutation in `MessageDecodeFixtures.messagePublicApi`. The fixture is generated with the Maven-pinned `org.apache.rocketmq:rocketmq-client:5.5.1` dependency and retains the source commit metadata.
+- First standalone generation attempt used a compile-scope classpath and failed because `commons-validator` was absent. Rebuilt the generated classpath with `includeScope=test`, then generated the fixture successfully. `mvn -q -f compat/java-reference/pom.xml exec:java@verify-java-message-decode-fixtures` passes with all 11 message fixtures.
+- Updated `fixtures/messages/records.json`; SHA-256: `02be176d528051f874a159a7fc2867484a8e1c2f8a7cffcf92c588ec8853db91`.
+- No files in `/Users/bruce.tsai/Projects/3rd/rocketmq` were changed. No plan files were changed.
+
+## Rust alias implementation and server-free gate — 2026-10-16
+
+- The new Java fixture exposed that the existing Rust owned-map setter could not preserve caller/message aliasing. The added Rust assertion failed to compile before implementation because `SharedMessageProperties`, `Message::set_properties_shared`, and `Message::shared_properties` were absent.
+- Implemented the cloneable synchronized map handle with Java-style nullable keys/values, live attachment to `Message`, mutable live-handle access, and a primary-facade re-export. Added Common and facade tests plus Java-to-Rust API crosswalk documentation.
+- PASS: focused Common public API test, facade public-types test, all-feature Common tests (23 unit, 30 integration, 24 doctests), strict Common Clippy, and pinned Java fixture verification.
+- PASS on code commit `830969e8`: default and all-feature workspace tests; all-target/all-feature workspace check and strict Clippy; pinned Maven `verify` (37 scenarios, fixture checks, Java/Rust cross-decodes); comparator self-test and 37-scenario manifest; offline race/leak smoke (16 cases × 3); fuzz smoke (105 frame seeds, 11 message seeds, 1,856 mutations, 146 frame decodes, 113 message decodes); release examples; workspace benchmark compilation; metadata/package checks; UTC and Asia/Taipei Unique ID tests (4 each); rustfmt and diff checks.
+- Full locked Cargo metadata reports 215 packages, including 208 registry packages, all with license metadata. All seven `cargo package --workspace --list --locked --allow-dirty` listings contain `LICENSE` and `NOTICE`. `scripts/check-workspace-metadata.py` passes.
+- `python3 tests/differential/compare.py --help` is not supported and prints usage with exit 1; the documented `--self-test` and `--validate-manifest` commands pass.
+- The broad P18-V01 bidirectional Java/Rust audit, current-revision GitHub Ubuntu/P18-V04 result, Phase 19 Docker/Broker runner and scenarios, and pre-publication version/dependency resolution remain open. No push, tag, publication, Docker/Broker run, plan edit, or Java checkout edit occurred.
+
+## Message body caller-array alias oracle — 2026-10-16
+
+- Pinned Java `Message.getBody()` and `setBody(byte[])` return/store the exact byte-array reference at source commit `efa1be59d6fc747ad220f036c86030f05f0419f9`. Added invoked observations for reference identity, mutation visibility in both directions, and replacement detachment in `MessageDecodeFixtures.messagePublicApi`.
+- Compiled the Java harness, regenerated the message fixture through `compat.Main message-decode-fixtures`, and verified the checked-in fixture with `exec:java@verify-java-message-decode-fixtures` (11 fixtures). SHA-256: `efb8b02c5eb9fec2e78459ec63e97144fdf633d964bd4a2d6e276fc60b13e39d`.
+- The first direct `exec:java` attempt selected the default `compat.Main` command and failed on usage; the first generation before compiling used stale `target/classes`. Re-running with the supported dispatcher after `mvn -DskipTests compile` produced and verified the expected fixture. No Java checkout or plan files were modified.
+
+## Rust Message body alias implementation and P18-V02 rerun — 2026-10-16
+
+- The invoked fixture initially failed to compile because Rust had no `SharedMessageBody`, `Message::set_body_shared`, or `Message::shared_body`. Added a cloneable synchronized fixed-length byte-slice handle, live attachment/access on `Message`, Common exports and primary-facade re-export. Common differential and facade tests cover handle identity, mutation from both sides, replacement detachment, and public type availability.
+- PASS: focused Common fixture test; facade public-type test; all-feature Common test suite; strict all-target/all-feature Clippy for Common and facade crates; `cargo fmt --all -- --check`; and `git diff --check`.
+- PASS on the implementation worktree based on oracle commit `fe2e0852`: default and all-feature workspace tests; all-target/all-feature workspace check and strict Clippy; pinned Maven `verify` (37 scenarios, fixture checks, Java/Rust cross-decodes); comparator self-test and 37-scenario manifest; deterministic race/leak smoke (16 cases × 3); fuzz smoke (105 frame seeds, 11 message seeds, 1,856 mutations, 146 frame decodes, 113 message decodes); release examples; workspace benchmark compilation; metadata/dependency/package checks; and the Asia/Taipei Unique ID differential (4 tests). Workspace tests, Maven verify, and all other commands returned exit 0.
+- Locked Cargo metadata reports 215 packages (7 workspace members) and no missing license metadata. Each of the seven individual locked package listings contains `LICENSE` and `NOTICE`; `scripts/check-workspace-metadata.py` passes.
+- The fixture SHA-256 is `efb8b02c5eb9fec2e78459ec63e97144fdf633d964bd4a2d6e276fc60b13e39d`. The complete gate remains server-free; broad P18-V01, current-revision Ubuntu/Windows CI evidence, Phase 19 Docker/Broker automation, owner-validation documentation, and pre-publication version/dependency resolution remain open. No Docker/Broker run, push, publication, tag, deployment, plan edit, or Java checkout modification occurred.
+
+## Message body alias crosswalk and release evidence — 2026-10-16
+
+- Added the Common `Message.getBody`/`setBody(byte[])` mapping and Java-oracle evidence to `docs/compatibility/PHASE_6_API_CONFIG_MAP.md`; appended the body-alias and full P18-V02 results for `d3532c6e` to `docs/release-checklist.md`.
+- Documentation reports the fixture SHA-256 `efb8b02c5eb9fec2e78459ec63e97144fdf633d964bd4a2d6e276fc60b13e39d`. Broad P18-V01, current-revision Ubuntu/Windows CI results, Phase 19 local Docker/Broker automation, `docs/owner-validation.md`, and pre-publication version/dependency resolution remain open.
+- `git diff --check` passes. The documentation changes are isolated from the implementation commit `d3532c6e`.
+
+## Message constructor body-array alias oracle — 2026-10-16
+
+- Pinned Java source confirms all four public body-bearing `Message` constructors delegate to the six-argument constructor, which assigns `this.body = body`. Added invoked fixture observations for caller-array identity across the two-argument, tags, tags-and-keys, and all-fields constructors, plus post-construction mutation visibility.
+- Recompiled the Java harness, regenerated and verified all 11 message fixtures with the pinned Maven client. `fixtures/messages/records.json` SHA-256: `0346a246d0f22440ed71773ac1854ad510acf857954d85f7ee9b8a451afc6471`.
+- No Java checkout or plan files were modified.
+
+## Deterministic Producer timeout-scan test correction — 2026-10-16
+
+- A full default workspace run failed once in `request_reply::tests::callback_timeout_uses_java_housekeeping_initial_delay_and_period`; an isolated rerun passed. The test relied on Tokio's paused-time runtime not auto-advancing while awaiting an asynchronous send, so workspace scheduling could advance through the scanner's three-second first tick before the assertion.
+- Reworked the test to start the scanner directly, insert two pending futures, and advance virtual time explicitly to 2s, 3s, and 4s. It now verifies the initial delay and one-second scan period without a live send path or busy-loop keepalive.
+- PASS: isolated timeout-schedule test (0.00s), Producer all-target/all-feature strict Clippy, and `bash tests/stress/run-offline-smoke.sh` (16 cases × 3, including the corrected callback schedule test). The complete workspace gate is being rerun after this correction and the Message constructor alias change.
+
+## Message constructor body-array alias implementation and P18-V02 rerun — 2026-10-16
+
+- Pinned Java constructors for `(topic, body)`, `(topic, tags, body)`, `(topic, tags, keys, body)`, and all six fields retain the caller's exact `byte[]`. Added Rust `new_shared`, `new_nullable_shared`, `with_tags_shared`, `with_tags_and_keys_shared`, `with_fields_shared`, and `with_nullable_fields_shared`; they attach the same `SharedMessageBody` storage while retaining existing owned constructors.
+- Common fixture tests compare identity and post-construction mutation across all four Java constructor forms, including nullable topic/body. Facade tests verify the public constructor path. Fixture SHA-256: `0346a246d0f22440ed71773ac1854ad510acf857954d85f7ee9b8a451afc6471`.
+- PASS on the constructor implementation worktree based on `f04c4384`: default and all-feature workspace tests; all-target/all-feature workspace check and strict Clippy; Maven `verify` (37 scenarios, updated fixture checks, Java/Rust cross-decodes); comparator self-test and 37-scenario manifest; race/leak smoke (16 cases × 3); fuzz smoke (105 frame seeds, 11 message seeds, 1,856 mutations, 146 frame decodes, 113 message decodes); release examples; workspace benchmark compilation; metadata/dependency checks; seven individual package-content listings; Asia/Taipei Unique ID tests (4); formatting and diff checks.
+- Locked metadata reports 215 packages (7 workspace members) with no missing license metadata; all seven package listings contain `LICENSE` and `NOTICE`. `scripts/check-workspace-metadata.py` passes.
+- These checks remain server-free. Broad P18-V01 reconciliation, current-revision GitHub Ubuntu/Windows CI evidence, Phase 19 Docker/Broker automation, owner-validation documentation, and pre-publication version/dependency resolution remain open. No plan or Java checkout files were changed; no Docker/Broker run, push, publication, tag, or deployment occurred.
+
+## Constructor alias evidence documentation — 2026-10-16
+
+- Updated the Phase 6 API/config map with the four body-bearing Java `Message` constructor aliases and linked the invoked fixture SHA-256 `0346a246d0f22440ed71773ac1854ad510acf857954d85f7ee9b8a451afc6471`.
+- Appended the constructor alias implementation and current-revision server-free P18-V02 results for code revision `b03d7fe9` to `docs/release-checklist.md`; retained the distinction between completed server-free gates and remaining P18-V01, CI, Phase 19 automation, owner-handoff, and release-preflight work.
+- `git diff --check` passes. Documentation changes are isolated from the implementation commits; no plan or Java checkout files were changed.
+
+## Remoting request-context API disposition — 2026-10-16
+
+- Read the pinned `NettyRequestProcessor` declaration and `NettyRemotingAbstract` request dispatch at Java source commit `efa1be59d6fc747ad220f036c86030f05f0419f9`. The RocketMQ interface declares `processRequest(ChannelHandlerContext, RemotingCommand)` plus default `rejectRequest()`; the Rust request processor maps these through the shared `RequestContext` and `reject_request()`.
+- The RocketMQ dispatch contract's peer/channel-state, close, and typed-command write operations map to Rust/Tokio APIs. Generic Netty allocator, handler propagation, arbitrary-object write, promise, and raw-channel operations are framework-specific and are not reimplemented. The separate exception-remark formatting mismatch remains open.
+- Updated the Phase 6 API map and `KNOWN_DIFFERENCES.md` to record the source-backed disposition; appended the bounded result and focused test evidence to the release checklist.
+- PASS: `cargo test -p rocketmq-classic-remoting --all-features --locked p18_` (11 tests); executor/rejection and pipeline-order regressions (1 each). No Java checkout or plan files were modified.
+
+## Common shared-message alias reverse-export map — 2026-10-16
+
+- The Phase 8 method matrix did not yet list the public `SharedMessageBody`/`SharedMessageProperties` operations or the `Message` shared constructor/accessor variants added to preserve Java caller/message aliasing. Added the Java API mapping, documented these as ownership representations of existing array/Map capabilities, and recorded their complete public method inventory.
+- PASS: `cargo test -p rocketmq-classic-common --all-features --locked --test message_decode message_public_api_matches_java_551_fixture` and the facade `phase_owned_public_types_are_available_from_the_facade_crate` test (1 each). Fixture SHA-256: `0346a246d0f22440ed71773ac1854ad510acf857954d85f7ee9b8a451afc6471`.
+- The broad Common/API/error/control-flow and reverse-export audit remains open. No implementation or Java checkout files were changed.
+
+## P18-V01 RemotingCommand identity equality — 2026-10-17
+
+- Pinned Java 5.5.1 reflection shows `RemotingCommand.equals(Object)` and
+  `hashCode()` are inherited from `java.lang.Object`. Two distinct commands
+  with equal visible state compare unequal and both remain in a `HashSet`.
+- Removed Rust structural `PartialEq`/`Eq` from `RemotingCommand`. Updated
+  response-future and codec regressions to inspect presence, errors, and wire
+  fields explicitly; updated transport assertions to match typed error
+  variants. Added a compile-fail doctest for the public trait boundary and a
+  Java-invoked identity fixture. Fixture SHA-256:
+  `a539bc204e2f2c03077af07dad37bc4a58c631ce2fa24d8e9e69f50999e4c9b0`.
+- Initial Remoting compilation found 17 test assertions depending on
+  `RemotingCommand` equality; they were converted to field/error assertions. The
+  first full-workspace compile then found one Core shutdown assertion and it
+  was converted to `matches!`. An initial Docker invocation used a login shell
+  that hid the image's Cargo path; using `sh -c` corrected the command.
+- PASS: `cargo test -p rocketmq-classic-remoting --all-features --locked`
+  (123 unit, 8 codec, 1 fuzz regression, 7 security, 107 transport, 17
+  doctests); full workspace default and all-feature tests on
+  `rust:1.85.0-bookworm` with `--init` and offline Cargo; strict workspace
+  all-target/all-feature Clippy; `cargo fmt --all -- --check`;
+  `git diff --check`; and `mvn -f compat/java-reference/pom.xml verify` (37
+  scenarios, Java fixture drift, Java/Rust cross-decodes).
+- Code/test/fixture commit: `4eb99671 fix(remoting): align command identity
+  semantics`. The crosswalk, requirement audit, release checklist, and this log
+  are pending a separate documentation commit. Broad P18-V01 remains open; the
+  final P18-V02 gate must be rerun after the remaining implementation changes.
+
+## ConsumerConnection minimum-version DTO slice — 2026-10-18
+
+- Pinned Java source `ConsumerConnection.computeMinVersion()` initializes with
+  `Integer.MAX_VALUE`, returns it for an empty set, and otherwise returns the
+  minimum `Connection.version`. A null set or element throws
+  `NullPointerException`. Added `ConsumerConnection::compute_min_version` with
+  Java-equivalent empty/minimum behavior and typed errors at those null
+  boundaries. The invoked fixture checks default/explicit empty sets, default
+  and mixed versions, `i32` bounds, null set/member, and method signature.
+  Fixture SHA-256: `748138c8020551f397ab68bbb24e8e858b5345e95fb78998d0051cea5bbd5f20`.
+- Code commit: `d8f84f2c feat(protocol): map ConsumerConnection minimum version`.
+- PASS: focused Protocol regression; Protocol all-feature tests (142 unit,
+  all integration targets, 51 doctests); strict Protocol all-target/all-
+  feature Clippy; pinned Maven verify (37 scenarios, 66 typed-header and 15
+  typed-body cross-decodes); `cargo fmt --all -- --check`; `git diff --check`.
+- Linux ARM64, Rust 1.85.0: current-worktree default workspace tests pass with
+  `--init` and a temporary Cargo target runner that clears the inherited
+  signal mask before `exec` of test binaries. Without the runner, Cargo-launched
+  Consumer tests had one jstack serialization failure because all candidate
+  signals were blocked; the same Consumer unit binary passed 224/224 when run
+  directly, and the focused test passed through the runner.
+- All-feature workspace unit and integration targets passed through the
+  Consumer doctest stage. The full all-feature workspace command was stopped
+  during Consumer doctests after the Common compile-fail doctest target took
+  306.29 seconds and Consumer compile-fail cases continued slowly; this
+  attempt is incomplete and is not counted as a P18-V02 pass. On the changed
+  Protocol crate, all 51 all-feature doctests passed. Current-worktree
+  all-target/all-feature workspace `cargo check` and strict Clippy pass.
+- The previous complete P18-V02 gate was on `411d4efb`, before this DTO slice.
+  Broad bidirectional P18-V01 source/API/settings/input/error/flow and
+  reverse-export reconciliation, final P18-V03 package/provenance review,
+  current-revision P18-V04 Ubuntu/native Windows evidence, Phase 19 local
+  runner/profile completion, and pre-publication version/registry checks
+  remain open. Owner-only checks remain separate manual work.
+- The pre-existing uncommitted Phase 19 README/runner changes and their rlog
+  were left untouched. No plans or Java oracle files were modified.
+
+## Current-worktree P18-V02 server-free gate — 2026-10-18
+
+- The code revision is `d8f84f2c` (`21ca6993` documentation HEAD). On Linux
+  ARM64 with Rust 1.85.0, the current-worktree default workspace tests, full
+  all-feature workspace tests including unit/integration/doctest targets,
+  all-target/all-feature workspace check, and strict Clippy pass. The full
+  all-feature test exited 0 using an internal container target directory and a
+  temporary runner that clears the signal mask inherited by test processes.
+- PASS on macOS ARM64 Apple M5 Max / Rust 1.85.0: differential comparator
+  self-test; 37-row manifest validation; deterministic race/leak smoke (16
+  cases × 3); fuzz smoke (120 frame seeds, 11 message seeds, 2,096 mutations,
+  164 frame decodes, 120 message decodes); release example build; and offline
+  benchmark run. Benchmark observations: frame encode/decode 2,552 ns/iter,
+  zstd decode 1,193 ns/iter, producer request construction 1,274 ns/iter,
+  route lookup 14.6 ns/iter, and loopback pending completion 77,248 ns/iter.
+- PASS: Maven 3.10.0 / OpenJDK 27 `verify` (37 scenarios, 66 typed-header
+  cross-decodes, 15 typed-body cross-decodes); workspace metadata/license/
+  dependency-direction check; all seven publishable `cargo package --list`
+  outputs include `LICENSE` and `NOTICE`; UTC and Asia/Taipei Unique ID fixture
+  tests; `cargo fmt --all -- --check`; and `git diff --check`.
+- This closes the current-worktree server-free P18-V02 rerun. Broad P18-V01
+  bidirectional source/API/settings/input/error/flow and reverse-export
+  reconciliation, final P18-V03 package/provenance review, current-revision
+  P18-V04 Ubuntu/native Windows evidence, Phase 19 local scenario runners and
+  required profiles, and pre-publication release-version/registry dependency
+  checks remain open. `docs/owner-validation.md` records owner-only MAN-01–04
+  as blocked pending environment inputs; MAN-05 awaits local-matrix
+  classification. Existing uncommitted Phase 19 files were preserved. No plan
+  or Java oracle files were changed.

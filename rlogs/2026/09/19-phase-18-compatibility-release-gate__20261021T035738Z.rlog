@@ -1,0 +1,17 @@
+# P18 inherited rebalance method crosswalk — 2026-10-21T03:57:38Z
+
+- Added a method-level mapping for every one of the 32 callable methods
+  inherited by the pinned Java `RebalancePushImpl` and `RebalancePullImpl`.
+  The crosswalk identifies owner APIs for all direct controls and names the
+  three internal adaptations: factory replacement and mutable Pull/POP
+  dispatch-request lists.
+- Added a Consumer integration guard that reads the reflection-generated Java
+  method inventory and requires each name to occur in the crosswalk and have a
+  Rust owner source mapping or one of the three documented adaptations.
+- PASS: `cargo test -p rocketmq-classic-consumer --test facade_api_surface
+  --locked` (10 tests); `cargo fmt --all`; `git diff --check`.
+- Full Consumer tests, strict Clippy and pinned fixture drift verification
+  passed immediately before this crosswalk-only follow-up on the same
+  implementation revision. No production behavior changed here.
+- The rebalance method inventory is complete. The broader P18-V01 audit and
+  current-revision full-workspace P18-V02/P18-V04 gates remain open.

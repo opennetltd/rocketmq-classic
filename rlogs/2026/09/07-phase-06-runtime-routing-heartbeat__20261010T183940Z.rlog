@@ -1,0 +1,6 @@
+# Phase 6 API compatibility session — 2026-10-10T18:39Z
+
+- Pinned Java 5.5.1 `LinkedHashMap` probes confirm `ConcurrentHashMap.putAll` writes rows before a null key/value, throws `NullPointerException` at that row, and leaves later rows unapplied.
+- Code/fixture commit: `fd4fc086` (`Match nullable putAll row failures`). Rust adds ordered `put_all_nullable_rows` adapters on Factory/Producer/Consumer tables, with typed null-key/value errors and partial-write preservation. Fixture SHA-256: `fae76c809c567ea32cc432c98943286e87b7cbb55db5ec0faf63dcb306d59d07`.
+- Validation passed: manager-table 14/14, registry-table 16/16, locked workspace/all-target tests with local socket access, strict workspace/all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture drift, and Java cross-decodes), comparator self-test/manifest22, formatting, and diff checks.
+- API map and requirement audit updated. Other source-map traversal variants and broader Phase 6 source/API/input/reverse-export reconciliation remain open; P6-V04 is a Phase 19 handoff.

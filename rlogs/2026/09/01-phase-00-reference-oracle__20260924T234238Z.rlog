@@ -1,0 +1,18 @@
+# Phase 0 execution log — 20260924T234238Z
+
+- Plan: plan/2026/09/01-phase-00-reference-oracle.md
+- Branch: 01-phase-00-reference-oracle
+- Baseline check: RocketMQ tag rocketmq-all-5.5.1 resolves to efa1be59d6fc747ad220f036c86030f05f0419f9, matching plan; inspected read-only.
+- Java repository worktree has pre-existing untracked broker/src/test/java/org/apache/rocketmq/broker/aaaa.java; preserved and not modified.
+- Environment: openjdk version "21.0.2" 2024-01-16; Apache Maven 3.9.16 (2bdd9fddda4b155ebf8000e807eb73fd829a51d5); Python 3.13.13; rustc 1.98.0 (88d9e12ae 2026-08-18).
+- Inspected pinned Java source files in the exact release tag; verified key source paths and RocketMQ Remoting decode contract.
+- Cached artifact SHA-256 recorded: client JAR `1c39c94a28e59b292e29d699872d693cdc2ce30bd54c4e0f95a4c377fd9dff84`; sources JAR `de63ae377bcc9b461b0d65b4cb77673d9daabb8f46caabef903826ea7c627e76`.
+- Implemented version-pinned Maven oracle, dual-codec command fixture generation/decode, 8 deterministic fixtures, 17 Phase 19 scenario entries, manifest/comparator self-test, compatibility docs.
+- Validation passed: `mvn -f compat/java-reference/pom.xml verify`; Java self-test covers JSON/ROCKETMQ fixtures and malformed frame; two clean fixture generations compare byte-for-byte; fixture hashes and metadata verified; `python3 tests/differential/compare.py --self-test`; overriding client dependency to 5.5.0 fails as required; `git diff --check`.
+- Scope note: Phase 0 fixtures encode command/header examples; they do not represent live Broker success or the complete all-client feature matrix. Live cases remain PENDING_PHASE_19 and subsequent phases expand feature evidence.
+- Phase/commit status: Phase 0 implementation ready for review/commit; phases 1–19 not started.
+- Final plan verification: Phase 0 deliverables checked against English plan. Offline oracle gates pass; Phase 19 live gate remains intentionally pending.
+
+- Phase 0 committed: 63a895c. Created next branch from completed phase commit.
+- Phase 1 branch: 02-phase-01-common-protocol-models; implementation in progress.
+- Follow-up session note: restored tracked phase-0 log had the Phase 1 branch note uncommitted, so this appended update records it in the Phase 1 commit for audit continuity.

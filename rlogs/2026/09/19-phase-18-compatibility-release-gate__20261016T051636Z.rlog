@@ -1,0 +1,32 @@
+P18-V01 Remoting request-context slice (2026-10-16)
+
+- Compared the pinned Java 5.5.1 source at
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`. `NettyRequestProcessor.processRequest`
+  and `RequestPipeline.execute` both receive `ChannelHandlerContext`; Rust inbound
+  processing previously exposed only the peer address to processors and no
+  context to pipeline stages.
+- Added Rust-native `RequestContext` over the same identity-preserving
+  `ChannelHandle` for pipeline and processor calls. It exposes channel identity,
+  peer address, close, and immediate no-deadline `write_and_flush` enqueue with
+  a future for the local write result. Existing `process_with_context` processors
+  and pipeline implementations continue through default adapters.
+- Added a loopback regression proving both piped stages and the processor receive
+  the same channel handle, a context write reaches the peer, and the processor's
+  ordinary response still completes. Added a unit regression for the legacy
+  address-only processor adapter.
+- Validation passed: `cargo test --workspace --locked`,
+  `cargo test --workspace --all-features --locked`,
+  `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+- Strict workspace Clippy initially reported `items-after-test-module` for an
+  existing protocol-code import left below the new test module. Moved the import
+  to the file header and reran strict Clippy successfully.
+- Code/test commit: `eadcdb55` (`feat(remoting): pass request channel context`).
+  Compatibility docs and release-checklist follow-up are in the separate docs
+  commit for this slice.
+- Java reference checkout remained read-only. No plan files, Docker profiles,
+  live Broker, or production environment were modified or used.
+- This closes only the request-context capability slice. The remaining Netty
+  handler-context surface and broad bidirectional P18-V01 source/API/input/error/
+  control-flow/reverse-export audit remain open; no full Phase 18 acceptance is
+  claimed.

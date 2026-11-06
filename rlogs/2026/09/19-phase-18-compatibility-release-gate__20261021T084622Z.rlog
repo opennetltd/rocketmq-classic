@@ -1,0 +1,22 @@
+Phase 18 `getClusterList` immutable-empty stub closure slice
+
+Date: 2026-10-21 UTC
+Branch: `phase/18-phase-18-compatibility-closure`
+
+Scope:
+- Compared the pinned Java 5.5.1 public `MQClientAPIImpl.getClusterList(String,long)` method and invoked fixture behavior.
+- Added `MQClientApi::get_cluster_list`, preserving ignored inputs, zero RPCs, stable shared empty result, and immutable access.
+- Added Java fixture cases for nonempty, null, and empty topics; singleton identity; mutation failure; and request absence.
+- Updated the Java compatibility evidence, Phase 6 API map and requirement audit, and release checklist.
+
+Evidence:
+- Producer core fixture SHA-256: `42244fafb6e6b824db21d17ba6d3e420d6f6dc57baeabd26b5a2573178da528f`.
+- `cargo test -p rocketmq-classic-core --locked get_cluster_list_matches_java_immutable_empty_singleton_without_rpc`: passed (1 test).
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- `mvn -f compat/java-reference/pom.xml verify`: passed; 37 manifest scenarios, 73 typed headers, and 15 typed bodies verified.
+
+Remaining:
+- Broad P18-V01 bidirectional API/settings/input/error/control-flow/reverse-export audit remains open.
+- Current Ubuntu/native Windows P18-V04 evidence and Phase 19 live Broker scenarios remain open.
+- Preserved Phase 19 paths were not included in this slice: `integration-tests/README.md`, `tests/differential/run.sh`, `integration-tests/run-local.sh`, and `rlogs/2026/09/20-phase-19-docker-local-validation__20261017T224455Z.rlog`.

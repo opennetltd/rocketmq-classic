@@ -1,0 +1,56 @@
+Phase 18 Lithuanian ACL locale parity and current local gate — 2026-10-22 18:04 UTC
+
+Code revision: `505bbe97` on `phase/18-phase-18-compatibility-closure`.
+The full gate ran against the same source tree immediately before the code
+commit. Environment: macOS AArch64, Apple M5 Max, 18 logical CPUs, Rust 1.85.0.
+Pinned Java reference: RocketMQ client 5.5.1, commit
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Compatibility slice:
+- Java `String.toUpperCase()` under `lt-LT` removes U+0307 immediately after
+  lowercase `i` or `j`. The public `AclUtils.expandIP` returns different
+  padded segments when the mark is removed. Rust now matches those inputs.
+- Pinned Java fixture cases cover `i`/`j` triggers and `x`/dotless-`ı`
+  controls. The fixture restores the old JVM locale in `finally`.
+- ACL fixture SHA-256:
+  `da5c9ee1920ed89a997268afcc7eabd77fe53cb91315289179f5d305379ba340`.
+
+PASS:
+- `cargo test -p rocketmq-classic-core --lib --locked acl_expand_ip_matches_ -- --nocapture`
+- `mvn -o -q -f compat/java-reference/pom.xml verify`: 37 scenarios, 36
+  route/VIP cases, Java decode of 106 typed headers and 19 typed bodies.
+- `cargo fmt --all -- --check`; `git diff --check`
+- `cargo test --workspace --locked`
+- `cargo test --workspace --all-features --locked`
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+- `python3 tests/differential/compare.py --self-test`
+- `python3 tests/differential/compare.py --validate-manifest`: 37 scenarios
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`:
+  163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes,
+  112 message decodes
+- `bash tests/stress/run-offline-smoke.sh`: 16 deterministic race/leak cases
+  repeated three times
+- `cargo build -p rocketmq-classic --examples --release --locked`
+- `cargo bench -p rocketmq-classic --bench offline --locked`
+- `cargo clippy -p rocketmq-classic --bench offline --all-features --locked -- -D warnings`
+- `python3 scripts/check-workspace-metadata.py`; locked Cargo metadata:
+  8 workspace members, 216 resolved packages
+- All seven `cargo package --list --locked` product checks include `LICENSE`
+  and `NOTICE`
+- Four Core Unique ID tests pass under each of `TZ=UTC` and `TZ=Asia/Taipei`
+- `cargo check -p rocketmq-classic-core --all-targets --all-features --target x86_64-pc-windows-gnu --locked`
+- Consumer stack-capture test cross-compiles with Windows GNU `--no-run`
+
+Benchmark sample: frame 1,605.9 ns; Zstd record 1,144.1 ns; Producer
+construction 1,251.1 ns; route lookup 15.3 ns; loopback 60,195.1 ns.
+These are single-host observations with no thresholds; ACL expansion is not
+benchmarked.
+
+Differential manifest validation passes. `tests/differential/run.sh
+--check-all` remains an open handoff check with 30 scenarios lacking local live
+runners; no Docker resources were started for it.
+
+Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export
+reconciliation remains open. Current-revision remote Ubuntu CI, native Windows
+execution, and Phase 19 Broker/Docker validation remain outstanding. No push
+or external CI was run; protected Phase 19 worktree files remain unstaged.

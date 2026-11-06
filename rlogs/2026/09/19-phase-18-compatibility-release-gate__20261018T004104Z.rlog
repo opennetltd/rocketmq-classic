@@ -1,0 +1,60 @@
+# P18-V01 EndTransactionRequestHeader reflection decoding — 2026-10-18T00:41:04Z
+
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Pinned Java oracle: RocketMQ client 5.5.1 at
+  `efa1be59d6fc747ad220f036c86030f05f0419f9` in the read-only checkout
+  `/Users/bruce.tsai/Projects/3rd/rocketmq`.
+- Source inspection confirmed `EndTransactionRequestHeader` does not use
+  `FastCodesHeader`. Java's reflection decoder catches each field conversion
+  or missing-`@CFNotNull` error independently, then calls `checkFields()`;
+  only commit states 0, 8, and 12 pass. `fromTransactionCheck` defaults to
+  false, invalid Boolean text maps to false, and nullable wrappers/strings stay
+  unset when absent or malformed.
+- Rust now represents nullable offsets, commit state, and message ID as
+  `Option`, skips per-field numeric conversion failures, applies Java Boolean
+  parsing, and validates commit state after decoding. Producer transaction
+  paths, protocol/remoting fixtures and tests were updated. Fixture SHA-256:
+  `78605a0c0cd70f33553813559e2e6b4c9fe82589a08acd83ca18a9ebc616ab5d`.
+- Code commit: `0961d24d fix(protocol): match end-transaction reflection decode`.
+
+## Verification
+
+- `cargo test -p rocketmq-classic-protocol --test headers --locked --offline`:
+  PASS (12 tests).
+- `cargo test -p rocketmq-classic-protocol --test headers header_validation_matrix --locked --offline`:
+  PASS.
+- `cargo test -p rocketmq-classic-producer --locked --offline`: PASS (all unit,
+  integration, and documentation tests).
+- `cargo test -p rocketmq-classic-core --test rpc_invoked_producer_fixtures --locked --offline`:
+  PASS.
+- `cargo test -p rocketmq-classic-remoting --lib end_transaction_header_decode_modes_match_invoked_java_551 --locked --offline`:
+  PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml verify`: PASS. The new fixture
+  verified alongside all 37 differential scenarios, fixture drift checks, 56
+  typed-header and 14 typed-body cross-decodes.
+- `cargo clippy -p rocketmq-classic-protocol -p rocketmq-classic-remoting -p rocketmq-classic-core -p rocketmq-classic-producer --all-targets --all-features --locked --offline -- -D warnings`:
+  PASS.
+- `cargo fmt --all -- --check` and `git diff --check`: PASS.
+
+## Corrections made during this slice
+
+- An initial header validation-matrix run still expected strict required-field
+  failures; it was updated to match Java's per-field reflection catch behavior.
+- The generic integer-boundary matrix also assumed any valid-width integer was
+  a valid enum. It now checks the Java commit-state set separately.
+- Clippy identified duplicate validation branches; those were consolidated.
+- An early Maven verify found fixture drift because the generator had not been
+  recompiled after source edits. Regenerating with `mvn compile exec:java` and
+  rerunning verify passed.
+
+## Remaining phase scope
+
+- This closes one EndTransaction decoder slice only. Broad P18-V01 source/API/
+  settings/input/error/control-flow and reverse-export reconciliation remains
+  open. The full workspace P18-V02 gate has not been rerun after this commit.
+- Current-revision Ubuntu/native Windows P18-V04 evidence and final P18-V03
+  package/provenance review remain open. Phase 19 live scenarios remain out of
+  this slice; no live Broker was contacted.
+- Existing uncommitted Phase 19 integration runner/README changes were
+  preserved and excluded. No plans or Java oracle files were changed.

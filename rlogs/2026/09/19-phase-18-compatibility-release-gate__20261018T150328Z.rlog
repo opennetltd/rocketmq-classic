@@ -1,0 +1,113 @@
+# P18-V01 consume-time-span DTO API closure — 2026-10-18T15:03:28Z
+
+- Branch: `phase/18-phase-18-compatibility-closure`. Pinned Java oracle at
+  `/Users/bruce.tsai/Projects/3rd/rocketmq` remained read-only at commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- Corrected `QueueTimeSpan` field visibility and
+  `QueryConsumeTimeSpanBody.consumeTimeSpanSet` visibility to match Java. Added
+  `SharedValue` identity preservation for the queue, list and non-null rows;
+  Core snapshots shared rows into its existing owned result. Java fixtures now
+  cover declared public methods, defaults, null setters, identity and mutation
+  visibility. Fixture SHA-256:
+  `3012f8dfb49f4bd404e1d29a7e27cdbe14d47435347bcb55ac807e5649085af5`.
+- Verification: Protocol doctests PASS (53); Protocol invoked-body differential
+  PASS; Core invoked lookup fixture PASS; Core `admin_rpc` focused case PASS;
+  strict Protocol/Core all-target/all-feature Clippy PASS; offline Maven
+  `verify` PASS (37 scenarios, fixture checks, 66 typed-header and 15 typed-body
+  cross-decodes); `cargo fmt --all -- --check` and `git diff --check` PASS.
+- The first Clippy run rejected explicit `fn main` wrappers in the new
+  compile-fail doctests. Removed those wrappers; doctests and strict Clippy then
+  passed. No functional test failure occurred.
+- Code commit: `423bcdbc` (`fix(protocol): match consume span DTO API`). The
+  Phase 17 admin matrix, release checklist and this execution record are being
+  committed separately.
+- Broad P18-V01 bidirectional source/API/settings/input/error/flow and
+  reverse-export reconciliation remains open. The P18-V02 supplementary gate
+  needs a complete rerun on this newer code revision. Final P18-V03
+  package/provenance and version/registry preflight, current-revision Ubuntu
+  and native Windows P18-V04 evidence, and Phase 19's 30 local Docker/Broker
+  scenario runners and required profiles remain open. MAN-01–04 remain owner
+  environment checks; MAN-05 awaits completion of the local matrix.
+- Existing Phase 19 runner/README edits and its untracked log remain untouched
+  and unstaged. No plan, Java oracle, remote CI, Broker or Docker state changed.
+
+## Audit-ledger correction — 2026-10-18
+
+- The Phase 6 requirement audit still described the 19-method
+  `MqClientAdmin` inventory as unreconciled, although the Phase 17 matrix and
+  release checklist now contain source-backed slices for all 19 operations.
+  Appended a dated superseding note: there is no missing direct RPC method in
+  that inventory; broad DTO/API/settings/input/error/flow/reverse-export
+  reconciliation remains open. This is a documentation status correction;
+  no implementation claim was added beyond the existing matrix evidence.
+
+## P18-V01 GroupList public API follow-up — 2026-10-18T15:11:22Z
+
+- The pinned Java fixture already recorded `GroupList`'s declared public
+  getter/setter methods, but the Protocol differential did not assert the
+  method, constructor or public-field inventory. Added constructor reflection,
+  exact inventory assertions, and a compile-fail guard for Rust field privacy.
+  Existing default/null/nullable-element/alias checks remain. Fixture SHA-256:
+  `5961395fa36f199d8b3745f91d1dcc4941c1d2d8748f272e119ed9c3ae1ad73a`.
+- Verification: focused Protocol differential PASS; Protocol doctests PASS
+  (54); strict all-target/all-feature Protocol Clippy PASS; offline Maven
+  `verify` PASS (37 scenarios, fixture checks, 66 typed-header and 15
+  typed-body cross-decodes); formatting and diff checks PASS. The first Maven
+  fixture-generation invocation used the wrong main-class override and exited
+  with dispatcher usage text; the `compat.Main group-list-fixture <path>`
+  dispatch regenerated the fixture successfully.
+- Test/fixture commit: `3b8a62b3`. Matrix and release-checklist updates are
+  recorded separately. Broad P18-V01, final current-revision P18-V02,
+  P18-V03/V04 and Phase 19 local matrix work remain open.
+
+## P18-V01 TopicList public API follow-up — 2026-10-18T15:15:47Z
+
+- The pinned Java `TopicList` fixture recorded declared methods and fields but
+  not constructors; the Rust differential did not assert its API inventory or
+  directly exercise `setBrokerAddr`. Added public-constructor reflection,
+  exact constructor/method/field assertions, broker-address setter/getter
+  coverage, and a compile-fail privacy guard. Existing default/null/set alias
+  tests remain. Fixture SHA-256:
+  `11d0a8919e272d3f3ed347695a06220a3688c3437805a0e5737ba4fccd43726b`.
+- Verification: focused Protocol differential PASS; Protocol doctests PASS
+  (55); strict all-target/all-feature Protocol Clippy PASS; offline Maven
+  `verify` PASS (37 scenarios, fixture checks, 66 typed-header and 15
+  typed-body cross-decodes); formatting and diff checks PASS.
+- Test/fixture commit: `5233eb2f`. Matrix and release-checklist updates are
+  recorded separately. Broad P18-V01, final current-revision P18-V02,
+  P18-V03/V04 and Phase 19 local matrix work remain open.
+
+## P18-V01 TopicStatsTable / TopicOffset API follow-up — 2026-10-18T15:20:31Z
+
+- Pinned Java fixtures already listed both DTOs' methods and fields, but did
+  not record constructors. Added public constructor inventories, Rust assertions
+  for those signatures, and compile-fail guards for private fields. Added a
+  direct setter/getter differential for `TopicOffset` at both signed 64-bit
+  bounds and a negative timestamp. Fixture SHA-256:
+  `9b1bd6d1cebd844db4415a45e60cee14442e76dc235662d5189056977da0aeb6`.
+- Verification: focused Protocol differential PASS; Protocol doctests PASS
+  (57); strict all-target/all-feature Protocol Clippy PASS; offline Maven
+  `verify` PASS (37 scenarios, fixture checks, 66 typed-header and 15
+  typed-body cross-decodes); final format and diff checks PASS. The initial
+  format check found one line-wrap mismatch; `cargo fmt --all` corrected it
+  and the final check passed.
+- Test/fixture commit: `93412b9a`. Matrix and release-checklist updates are
+  recorded separately. Broad P18-V01, final current-revision P18-V02,
+  P18-V03/V04 and Phase 19 local matrix work remain open.
+
+## P18-V01 QuerySubscriptionResponseBody API follow-up — 2026-10-18T15:24:29Z
+
+- The Java fixture for `QuerySubscriptionResponseBody` recorded public methods
+  and fields but omitted constructors; the Rust test did not assert the API
+  inventory or call group/topic setters. Added constructor reflection, exact
+  declaration assertions, field-privacy compile-fail, and direct setter/null
+  reset checks. Existing default, JSON and shared nested-object alias checks
+  remain. Fixture SHA-256:
+  `e5c6405810fbe550a58bd7ce3b843b3e21410fc3e1674c1692f18836a2e969af`.
+- Verification: focused Protocol differential PASS; Protocol doctests PASS
+  (58); strict all-target/all-feature Protocol Clippy PASS; offline Maven
+  `verify` PASS (37 scenarios, fixture checks, 66 typed-header and 15
+  typed-body cross-decodes); formatting and diff checks PASS.
+- Test/fixture commit: `67edffe7`. Matrix and release-checklist updates are
+  recorded separately. Broad P18-V01, final current-revision P18-V02,
+  P18-V03/V04 and Phase 19 local matrix work remain open.

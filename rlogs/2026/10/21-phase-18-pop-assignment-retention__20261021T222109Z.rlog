@@ -1,0 +1,41 @@
+# Phase 18 POP assignment retention — 2026-10-21T22:21:09Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Test revision: `05dcbf0e` (`test(consumer): cover active POP assignment retention`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Runtime fixture: `fixtures/runtime/consumer-operations.json`
+SHA-256: `a8d82baca384b9b7932b4961b051902336155543428047d891eb9f84052d166d`.
+
+## Coverage
+
+- Invoked Java `RebalanceImpl.updateMessageQueueAssignment` records four POP
+  table states: expired assigned queues are replaced; active assigned queues
+  retain the same object; dropped assigned queues remain present; empty
+  assignments drop and remove the queue.
+- Rust's
+  `broker_assignment_error_preserves_worker_until_empty_assignment` checks the
+  same four fixture outcomes through owner rebalance flow, including retaining
+  the active POP worker across an assignment error and stopping it after empty
+  assignment.
+- Updated the Phase 6 requirement audit, Phase 18 rebalance/process-queue API
+  map and release checklist with this slice and its remaining audit scope.
+
+## Verification
+
+- `cargo test -p rocketmq-classic-consumer broker_assignment_error_preserves_worker_until_empty_assignment --locked -- --nocapture`
+  — passed.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+  — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- Pinned `mvn -q -f compat/java-reference/pom.xml verify` — passed: 37
+  scenarios, 9 Running Info, 29 direct-consume, 15 reset cases, 85 typed
+  headers, 16 typed bodies and Java/Rust cross-decodes. Existing JDK/Netty
+  `Unsafe` and reflective-final-field warnings were emitted.
+
+## Remaining work
+
+Broad P18-V01 source/API/settings/input/error/control-flow/reverse-export and
+other assignment expiry/retention reconciliation remains open. The full
+current-revision supplemental P18-V02 refresh and GitHub Ubuntu/native Windows
+P18-V04 evidence remain open. No remote CI, Broker or Docker run was performed;
+protected Phase 19 paths remain unstaged.

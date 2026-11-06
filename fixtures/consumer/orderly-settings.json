@@ -1,0 +1,39 @@
+{
+  "sourceCommit": "efa1be59d6fc747ad220f036c86030f05f0419f9",
+  "pushConsumerDefaults": {
+    "maxReconsumeTimes": -1,
+    "suspendCurrentQueueTimeMillis": 1000,
+    "pullBatchSize": 32,
+    "pullBatchSizeInBytes": 262144,
+    "consumeTimeoutMinutes": 15,
+    "consumeMessageBatchMaxSize": 1
+  },
+  "configuredPublicSettings": {
+    "maxReconsumeTimes": 7,
+    "suspendCurrentQueueTimeMillis": 4321,
+    "pullBatchSize": 7,
+    "pullBatchSizeInBytes": 12345
+  },
+  "orderlyContextDefaults": {
+    "autoCommit": true,
+    "suspendCurrentQueueTimeMillis": -1,
+    "messageQueue": {
+      "topic": "orders",
+      "brokerName": "broker-a",
+      "queueId": 3
+    }
+  },
+  "mutatedContext": {
+    "autoCommit": false,
+    "suspendCurrentQueueTimeMillis": 7654
+  },
+  "orderlyStatuses": ["SUCCESS", "ROLLBACK", "COMMIT", "SUSPEND_CURRENT_QUEUE_A_MOMENT"],
+  "lockConstants": {
+    "maxLiveTimeMillis": 30000,
+    "intervalMillis": 20000
+  },
+  "orderlyRuntimeProperties": {
+    "unlockDelayTimeMillis": 20000,
+    "maxContinuousConsumeMillis": 60000
+  }
+}

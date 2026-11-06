@@ -1,0 +1,1 @@
+{"case":"nameserver-refresh-null","mode":"LOCAL","provenance":{"client":"org.apache.rocketmq:rocketmq-client:5.5.1","entrypoint":"MQClientAPIExt.updateNameServerAddressList","serverBaselineContacted":false,"transport":"mock RemotingClient"},"resultingAddresses":["initial:9876"],"returnValue":false}

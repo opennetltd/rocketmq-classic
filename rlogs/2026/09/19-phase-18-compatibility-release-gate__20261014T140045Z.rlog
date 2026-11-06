@@ -1,0 +1,30 @@
+Phase 18 continuation — MessageExt API reconciliation — 2026-10-14 UTC
+
+Starting state
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Base revision: `82332f9b`.
+- Java reference: RocketMQ client 5.5.1, commit `efa1be59d6fc747ad220f036c86030f05f0419f9`; reference checkout remains read-only.
+
+Changes recorded
+- Added the typed resolved/unresolved `MessageHostAddress` representation and mapped `MessageExt` host constructor, getters/setters, address formatting, network bytes and buffer overloads. Reply processing keeps typed hosts; consumer send-back uses Java `socketAddress2String` formatting.
+- Extended Java `messageExtSystemFlagsApi` coverage and Rust `MessageExt` APIs for transient topic/group flags, null clearing, empty/malformed/Unicode integer inputs, V6 flag setters, `parseTopicFilterType`, and Java-style `toString()` formatting. Multiple properties use Rust's stable map order because Java `HashMap` iteration order is unspecified.
+- Updated the Phase 6/8/15 compatibility evidence and release checklist. No phase plan was modified.
+- `fixtures/messages/records.json` SHA-256: `d7f7fd063ee8c9119591f89492032018929e9fb89e7d51762689903be45e782e`.
+
+Validation
+- PASS: `cargo test -p rocketmq-classic-common --test message_decode --locked` (6 tests).
+- PASS: `cargo test --workspace --locked`.
+- PASS: `cargo test --workspace --all-features --locked`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, message fixture drift check and Java cross-decodes).
+- PASS: `cargo fmt --all -- --check` and `git diff --check`.
+
+Remaining work outside final owner manual validation
+- P18-V01 remains open: finish broad bidirectional Java/Rust source, overload input/error/control-flow, inherited/trait API and reverse-export reconciliation. The `MessageExt` slices above close only those method families.
+- P18-V04 remains open because this branch has no current GitHub Ubuntu CI result for the Linux-specific address profile.
+- Phase 19 local Docker/Broker automated cases remain unbuilt and unrun, including P15-V03 request/reply and P17-V02 multi-Broker query. Locally executable Phase 19 cases cannot be deferred as manual items.
+- Phase 15–17 plans still contain unchecked verification boxes; reconcile them with their matrices and execution records. Some local PASS evidence is already recorded. This session did not edit plan files.
+- Phase 6 platform runtime evidence remains incomplete for Windows IP Helper enumeration, non-macOS BSD enumeration, and a real IPv6-only host.
+- Before publication, confirm the intended `0.1.0` version set and registry dependency resolution; all packages remain `publish = false`.
+
+No Docker Broker was contacted, no push/tag/publication occurred, and the Java reference checkout was not modified.

@@ -1,0 +1,85 @@
+# Phase 6 execution log — 2026-10-10T03:18:33Z
+
+## Scope and decision
+
+Closed the audited nested `MessageQueue` object alias gap in `LockBatchRequestBody.mqSet`, `UnlockBatchRequestBody.mqSet`, and `LockBatchResponseBody.lockOKMQSet`. The direct pinned Java 5.5.1 oracle confirms getter elements are the caller-assigned objects and mutations are visible in both directions. Rust uses shared queue handles with value-based equality and hashing so Set membership follows Java; the existing owned core RPC result snapshots those handles at its boundary. Mutable Set key behavior remains the Java-compatible hash hazard.
+
+The requested source checkout `/Users/nanashi07/Projects/3rd/rocketmq` is unavailable in this environment. Validation used the pinned RocketMQ 5.5.1 Maven artifacts and the repository's Java oracle. P6-V04 remains `PENDING_PHASE_19`; broader Phase 6 audit remains partial.
+
+## Commits
+
+- Code: `625122ee` — Preserve lock set message queue aliases.
+- Documentation: pending separate commit after review.
+
+## Evidence and validation
+
+- `fixtures/runtime/lookup.json` SHA-256: `4b4d410671a673533e1238a8bcf8e939134884296610ec6d1045c1022c6818c6`.
+- Passed `cargo test --workspace --all-targets --locked`.
+- Passed `cargo check --workspace --all-targets --locked`.
+- Passed `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- Passed pinned offline Maven `verify` (22 scenarios and Java cross-decodes).
+- Passed the focused invoked-Java runtime-body differential, comparator self-test, 22-scenario manifest validation, `cargo fmt --all -- --check`, and `git diff --check`.
+- Documentation updates add ADR-0067 and reconcile ADR-0055/0062 plus the Phase 6 API map, runtime inventory, and requirement audit. Local Markdown links in all six changed documents validate.
+
+## Remaining work and status
+
+The Phase 6 plans and broad audit still list other API/alias/input/source reconciliation gaps. No phase acceptance is claimed. The documentation and this log are committed separately from code; final plan-wide verification remains outstanding.
+
+## Additional Phase 6 alias correction
+
+- Code commit `d312bb6c` — Preserve QueryAssignment Set element aliases.
+- The Java oracle now asserts setter-supplied assignment element `==` getter iteration identity and mode mutation in both directions. Rust decodes each Set object into `SharedQueryAssignment`; shared-handle `Eq`/`Hash` delegates to assignment snapshots, preserving the pre-existing Rust value membership contract. `ClientRuntime::query_assignment` snapshots both the Set and its elements at the established owned return boundary.
+- Updated `fixtures/runtime/lookup.json`; SHA-256 `a4d4c85dc1ab17a240906f0e48348ebf2644c31bfcdd987d958fc1368b0e20de`.
+- Focused runtime-body Java differential passed. Full workspace/all-target tests passed after rerunning with approved local socket access; strict all-target/all-feature Clippy passed; pinned offline Maven verify passed 22 scenarios and Java cross-decodes; comparator self-test, manifest validation (22 scenarios), formatting, and diff checks passed.
+- Added ADR-0068 and reconciled ADR-0020/0054/0055/0065/0066 plus Phase 6 compatibility maps and requirement audit. Documentation commit is pending separate review/commit. Whole Phase 6 reconciliation and final plan verification remain open; P6-V04 stays `PENDING_PHASE_19`.
+
+## Additional Phase 6 wrapper Map alias correction
+
+- Code commit `853b3fdd` — Preserve request mode wrapper aliases.
+- Java direct API evidence now covers setter/getter identity and bidirectional mutation for the wrapper outer topic Map, nested group Maps, and each mutable request-body value; it also records inherited Object equality/hash. Rust shares all three levels and wraps decoder output.
+- Fixture `lookup.json` SHA-256: `1a0df76edff7063ea8790fc0cfbf0321eca6469c766a9be191e6596f7403d799`.
+- Passed focused wrapper differential, full workspace/all-target tests with local socket access, strict all-target/all-feature Clippy, workspace doctests (15 protocol doctests), pinned offline Maven verify (22 scenarios and Java cross-decodes), comparator self-test, manifest validation (22 scenarios), formatting, and diff checks.
+- ADR-0069 and Phase 6 API/runtime/audit updates are prepared for a separate documentation commit. Overall Phase 6 reconciliation and final plan verification remain open; P6-V04 stays `PENDING_PHASE_19`.
+
+## Additional Phase 6 LiteSubscriptionDTO alias correction
+
+- Code commit `60251cee` — Preserve Lite subscription DTO aliases.
+- The existing pinned Java 5.5.1 `liteSubscriptionDtoApiCase` directly verifies setter/getter identity and mutation in both directions for `LiteSubscriptionDTO.liteTopicSet` and `offsetOption`; no Java fixture change was needed. Rust now uses `SharedLiteSubscriptionTopicSet` and `SharedOffsetOption`, wraps decoded values, and leaves JSON/`Display` shape unchanged.
+- `fixtures/runtime/lookup.json` SHA-256 remains `1a0df76edff7063ea8790fc0cfbf0321eca6469c766a9be191e6596f7403d799`.
+- The focused DTO differential, Lite public API test, header/wire tests, `cargo test --workspace --all-targets --locked` with local socket access, strict all-target/all-feature Clippy, workspace doctests (15 protocol doctests), pinned offline Maven `verify` (22 scenarios and Java cross-decodes), comparator self-test, manifest validation (22 scenarios), formatting, and diff checks passed. The sandboxed workspace test attempt alone was denied for three existing local-socket lifecycle tests; the full rerun with local socket access passed.
+- Added ADR-0070, updated ADR-0060 and the Phase 6 API map/runtime inventory/requirement audit. The documentation commit is pending separate validation/commit. Other DTO aliases and whole Phase 6 source/API/input reconciliation remain open; P6-V04 stays `PENDING_PHASE_19`.
+
+## Additional Phase 6 Lite control Set and element alias correction
+
+- Code commit `66adb0c4` — Preserve Lite control subscription Set aliases.
+- Expanded `RuntimeLookupFixtures.liteSubscriptionControlApiCase` to record outer Set `==`, setter-element `==`, caller/getter additions, and membership visibility in both directions. Regenerated `fixtures/runtime/lookup.json`; current SHA-256 is `4a74a1a23d7a6eb861f792e02bd9167e978b70d43ed42dba3ee7241815a359f3`.
+- Rust stores the outer collection as `SharedLiteSubscriptionSet` containing identity-hashed `SharedValue<LiteSubscriptionDto>` elements. Decode wraps each DTO, preserves distinct object identities, and retains the existing single-null Set rule. Serialization remains a JSON array. Handle hashing is pointer-identity based and remains stable across DTO mutation, matching the Java `Object.hashCode` contract.
+- Passed the focused Lite control API differential, full protocol crate suite (108 unit tests, integrations, and 15 doctests), full workspace/all-target tests with local socket access, strict all-target/all-feature Clippy, pinned offline Maven `verify` (22 scenarios and Java cross-decodes), comparator self-test, manifest validation (22 scenarios), formatting, and diff checks.
+- Added ADR-0071, updated ADR-0060 and the Phase 6 API map/runtime inventory/requirement audit. The documentation commit is pending separate validation/commit. `LiteSubscription.liteTopicSet`, heartbeat collections, status/reset Maps, and whole Phase 6 reconciliation remain open; P6-V04 stays `PENDING_PHASE_19`.
+
+## Additional LiteSubscription live getter Set alias correction
+
+- Code commit `e33c43b2` — Preserve Lite subscription topic set getter aliases.
+- Expanded `RuntimeLookupFixtures.liteSubscriptionApiCases` to distinguish setter copying from getter identity: Java does not retain the supplied Set, but repeated `getLiteTopicSet()` calls return the same mutable Set. Mutations through that retained Set and later subscription methods are mutually visible; the additive setter leaves `updateTime` unchanged.
+- Rust now stores `LiteSubscription.lite_topic_set` as `SharedLiteSubscriptionTopicNames` (`SharedValue<BTreeSet<String>>`); topic add/remove APIs mutate the shared value. JSON and `Display` shape remain unchanged. Added direct protocol and external public API handle tests.
+- `fixtures/runtime/lookup.json` SHA-256: `7d56171dba60258e9ec45ad91c483f51c0a049a65adaf2f62212c416e780094a`.
+- Passed focused protocol suite (108 unit tests, all protocol integrations, 15 doctests), full workspace/all-target tests with local socket access, strict all-target/all-feature Clippy, pinned offline Maven `verify` (22 scenarios and Java cross-decodes, exit 0), comparator self-test, manifest validation (22 scenarios), formatting, diff checks, and local Markdown-link validation.
+- Added ADR-0072 and updated ADR-0060 plus the Phase 6 API map, runtime inventory, and requirement audit. Documentation commit is pending. Heartbeat Set aliases, runtime status/reset Map aliases, whole Phase 6 source/API/input reconciliation, and final plan verification remain open; P6-V04 stays `PENDING_PHASE_19`.
+
+
+## Additional Phase 6 status/reset Map alias correction
+
+- Code commit `2f07fe94` — Preserve status and reset map aliases.
+- Pinned Java 5.5.1 API cases confirm caller identity for `GetConsumerStatusBody.messageQueueTable` and `consumerTable`, each non-null nested consumer Map, and `ResetOffsetBody.offsetTable`. Rust now uses shared outer and nested Map handles and the protocol tests assert `ptr_eq` plus mutations in both directions. Individual `MessageQueue` key identity is not claimed. Fastjson decoding wraps each Map level; Java-compatible JSON output is unchanged.
+- `fixtures/runtime/lookup.json` SHA-256 remains `7d56171dba60258e9ec45ad91c483f51c0a049a65adaf2f62212c416e780094a`. The source checkout `/Users/nanashi07/Projects/3rd/rocketmq` was unavailable; validation used pinned RocketMQ 5.5.1 artifacts and the repository Java oracle.
+- Passed protocol tests (108 unit tests, integration tests, 15 doctests), full workspace/all-target tests with local socket access, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and Java cross-decodes), comparator self-test, 22-scenario manifest validation, formatting, and diff checks.
+- Added ADR-0073 and updated ADR-0057/0060 plus the Phase 6 API map, runtime inventory, and requirement audit. Documentation is committed separately from code. Broader Phase 6 reconciliation remains PARTIAL; P6-V04 stays `PENDING_PHASE_19`.
+
+## Additional Phase 6 heartbeat DTO Set alias correction
+
+- Code commit `7e5b3fa6` — Preserve heartbeat DTO Set aliases.
+- Pinned Java 5.5.1 API cases now verify caller/setter/getter Set identity and mutations in both directions for `SubscriptionData.tagsSet/codeSet`, `ConsumerData.subscriptionDataSet`, and `HeartbeatData.producerDataSet/consumerDataSet`. They also verify the supplied `SubscriptionData`, `ProducerData`, and `ConsumerData` element identities where Java exposes mutable object elements.
+- Rust stores the Sets in `SharedValue` handles and wraps decoded elements. Nested `SubscriptionData` membership uses Java value equality; the top-level ProducerData/ConsumerData Sets use identity equality. DTO `Clone` retains deep owned-copy behavior, `_owned` setters remain available, and serde preserves the JSON arrays and null-member rules.
+- `fixtures/runtime/heartbeat.json` SHA-256: `7c50b6ff17d46cc6659ab69e75a69c56d28a7a187ea198440c093acefa1f39b3`.
+- Passed `cargo test -p rocketmq-classic-protocol --locked` (108 unit tests, integrations, 15 doctests), `cargo test --workspace --all-targets --locked` with local loopback access, strict `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`, pinned offline Maven `verify` (22 scenarios and Java cross-decodes), comparator self-test, 22-scenario manifest validation, formatting, and diff checks.
+- Added ADR-0074 and revised ADR-0058, the Phase 6 API map, runtime inventory, requirement audit, heartbeat audit, and Java compatibility evidence. The documentation commit is pending separate commit. Broader Phase 6 source/API/input and reverse-export reconciliation remains PARTIAL; no phase acceptance is claimed and P6-V04 stays `PENDING_PHASE_19`.

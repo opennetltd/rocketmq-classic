@@ -1,0 +1,45 @@
+Phase 18 Remoting callback failure continuation — 2026-10-16
+
+Context
+- Plan: `plan/2026/09/19-phase-18-compatibility-release-gate.md`; no plan edits.
+- Worktree was on `phase/19-phase-18-compatibility-release-gate`, based at
+  `5783de93`, with the previous semaphore API slice committed.
+- Java oracle: RocketMQ Java client 5.5.1, source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Actions and result
+- Compared `ResponseFuture.executeInvokeCallback` with the pinned Java source.
+  Added Java fixture cases for send, timeout, generic, and null-request failures.
+  Rust now retains error causes through `ErrorSource` for callback errors and
+  preserves the generic null-request pre-callback failure.
+- Initial Remoting test compile found a closure borrow/move error; replaced the
+  closure combinator with a `match`. The first fixed run passed.
+- `cargo fmt --all` passed; `cargo fmt --all -- --check` and `git diff --check`
+  passed.
+- `cargo test -p rocketmq-classic-remoting --all-features` passed: 106 unit,
+  8 codec, 1 fuzz regression, 7 security, 107 transport, and 10 doc tests.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings` passed.
+- `mvn -f compat/java-reference/pom.xml verify` passed (37 manifest scenarios,
+  Java runtime fixture probes, Remoting API fixture, and Java/Rust cross-decodes).
+  Maven reported existing Java `Unsafe` deprecation/reflection warnings.
+- Updated the compatibility crosswalk and release checklist for this narrow
+  behavior slice. The slice is validated; the broader P18-V01 audit is open.
+
+Remaining automatable work
+- Finish bidirectional P18-V01 API/configuration/input/error/control-flow and
+  reverse-export reconciliation. The current Remoting audit still needs
+  `ResponseFuture.toString` and `waitResponse` interruption semantics checked
+  and dispositioned.
+- Rerun the complete current-revision P18-V02 workspace gates after all P18
+  changes, obtain current-revision GitHub Ubuntu/P18-V04 evidence, and finish
+  Phase 19 Docker/Broker setup, local scenario execution, and release
+  version/dependency preflight.
+- Create `docs/owner-validation.md` for the genuinely non-local Phase 19 owner
+  checks. Production networking, organization-issued identity/ACL, production
+  HA/fault injection, representative capacity/soak, and any proven unavailable
+  deployment infrastructure remain owner-run manual evidence; local synthetic
+  TLS/auth, restart/failure, interoperability, and bounded stress stay automated.
+- Code and fixture slice committed as `b597ccda` (`fix(remoting): preserve
+  callback failure causes`). Compatibility crosswalk, release checklist, and
+  this execution record are being committed separately as evidence.

@@ -1,0 +1,6 @@
+# Phase 6 default-route API differential — 2026-10-10T21:30:54Z
+
+- Added `default_topic_route_api_matches_invoked_java_api_fixture` in `crates/rocketmq-classic-core/tests/runtime_lookup.rs`. It calls the public Rust `MQClientApi::get_default_topic_route` against an ephemeral scripted name server, compares request code/topic and decoded route fields with `defaultTopicRouteApiCase`, then checks Java `TOPIC_NOT_EXIST` code 17 and remark against Rust `RpcError::Response`.
+- The first focused run hit sandbox `PermissionDenied` while binding the localhost listener. Re-ran with reviewed escalation under the previously authorized Phase 6 scripted-peer test scope: `cargo test -p rocketmq-classic-core --test runtime_lookup default_topic_route_api_matches_invoked_java_api_fixture --locked`; 1 passed.
+- Strict focused Clippy (`cargo clippy -p rocketmq-classic-core --test runtime_lookup --all-features --locked -- -D warnings`), `cargo fmt --all -- --check`, and `git diff --check` pass.
+- Updated the API map and requirement audit item 26. The separate route-publication/clamp/error-body test remains unchanged. Whole Phase 6 source/input/platform reconciliation remains PARTIAL; P6-V04 stays `PENDING_PHASE_19`.

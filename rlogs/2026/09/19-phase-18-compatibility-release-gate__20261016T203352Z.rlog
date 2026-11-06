@@ -1,0 +1,42 @@
+# Phase 18 P18-V01 CheckClient inherited serialization
+
+Date: 2026-10-16
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md (unchanged)
+Branch: phase/19-phase-18-compatibility-release-gate
+Starting revision: f135278f
+Code commit: 9b169b5c
+
+## Source and finding
+
+- Java oracle checkout: /Users/bruce.tsai/Projects/3rd/rocketmq
+- Pinned Java source commit: efa1be59d6fc747ad220f036c86030f05f0419f9
+- CheckClientRequestBody.java SHA-256: 769c533d9d6940c97ffcca009b6b2089a1e2c6eb251b517b9dbb247f5085505a
+- The DTO already had field/accessor and Fastjson input coverage, but lacked Rust adapters for its inherited `RemotingSerializable` JSON and byte methods.
+
+## Changes
+
+- Added compact/pretty JSON, instance encode, static encode/toJson nullable adapters, decode/list decode, fromJson and nullable utility adapters to `CheckClientRequestBody`.
+- Extended the invoked Java fixture to pin constructors, declared/callable APIs and all nine inherited serialization signatures, with default, explicit-null and populated nested DTO serialization plus null utility cases.
+- Added a Rust differential comparing compact/pretty JSON, bytes, static utilities, decode/list decode/fromJson and null list members.
+- Updated the Phase 6 API map and Phase 18 release checklist. Plans were not modified.
+
+## Validation
+
+- Fixture regeneration: `mvn -o -q -f compat/java-reference/pom.xml compile exec:java -Dexec.args='runtime-lookup-fixtures /Users/bruce.tsai/Projects/trio/rocketmq-classic/fixtures/runtime/lookup.json'` passed.
+- Focused regression: `cargo test -p rocketmq-classic-protocol --locked check_client_inherited_remoting_serialization_matches_invoked_java -- --nocapture` passed.
+- Protocol suite: `cargo test -p rocketmq-classic-protocol --all-features --locked` passed (119 unit tests, all integration targets, 42 doctests).
+- Strict Protocol Clippy: `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features --locked -- -D warnings` passed.
+- Maven oracle/fixture and scenario gate: `mvn -o -q -f compat/java-reference/pom.xml verify` passed (37 scenarios and fixture checks).
+- `cargo fmt --all -- --check` and `git diff --check` passed after formatting.
+
+## Iteration notes
+
+- The first Rust assertion used source-like Java parameter text; the reflection fixture emits JVM descriptors (`[B` and `[L...;`). The assertion was corrected to the captured signatures and the focused test passed.
+- The initial format check identified Rustfmt-only differences in the new test; `cargo fmt --all` corrected them and the final format check passed.
+
+## Status
+
+- This closes the `CheckClientRequestBody` inherited no-feature serialization adapter slice.
+- The Java `encode(JSONWriter.Feature...)` overload is reflected and empty features are recorded, but non-empty writer options still need an API/behavior disposition. Other inherited DTO adapters remain under the broad P18-V01 source/API/input/reverse-export audit.
+- Full-workspace P18-V02 on the final revision, current-revision Ubuntu/Windows CI evidence, and Phase 19 Docker/Broker automation remain open.
+- No Docker/Broker, push, tag, publication or release action was performed.

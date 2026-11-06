@@ -1,0 +1,7 @@
+# Phase 6 nullable arbitrary-source putAll — 2026-10-10T19:30:13Z
+
+- Pinned Java 5.5.1 `TreeMap` sources visit `a-put-all-before-null-value`, `m-put-all-null-value`, then `z-put-all-after-null-value`. `ConcurrentHashMap.putAll` throws at the null value after retaining the first write and before applying the last.
+- Added `put_all_nullable_iter` to `FactoryTable`, `ProducerTable`, and `ConsumerTable`. The existing ordered slice adapter forwards to the generic iterator; BTreeMap-backed native differentials match all three Java table outcomes.
+- Code, Java fixture, and tests commit: `3a8e9cf9`. Twelve TreeMap outcomes were added to `client-config.json`; SHA-256: `fd34d154ef813646235c850ad21318c33e1052d31926db36cc2fa70429827d99`.
+- Full `cargo test --workspace --all-targets --locked`, strict all-target/all-feature Clippy, pinned offline `mvn -o verify` (22 scenarios, fixture verification, Java cross-decodes), comparator self-test/manifest22, fmt, and diff checks pass.
+- Broader Phase 6 source/API/input/platform reconciliation remains open; P6-V04 stays a Phase 19 handoff.

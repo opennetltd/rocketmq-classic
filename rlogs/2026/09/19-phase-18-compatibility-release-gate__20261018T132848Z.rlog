@@ -1,0 +1,64 @@
+# Phase 18 current-revision status and server-free gates — 2026-10-18T13:28:48Z
+
+- Branch: `phase/18-phase-18-compatibility-closure`; documentation HEAD
+  `cdd7ca8e`, source revision `3f435bab` (`fix(common): match Java message host byte failures`).
+- Java client fixture oracle remains RocketMQ 5.5.1, source marker
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; `compat/java-reference/pom.xml`
+  pins `org.apache.rocketmq:rocketmq-client:5.5.1`. The pinned source commit
+  resolves to the 5.5.1 release commit. The separate local Java checkout is
+  currently at `2238256de1d227a4384ba969dfa31473187b4d08` and has an unrelated
+  untracked broker test file; it was inspected read-only and left untouched.
+- Linux ARM64, `rust:1.85.0-bookworm`, offline Cargo dependencies, `/workspace`
+  source mount, `/build` target mount, Docker `--init`, and a temporary runner
+  that clears the inherited signal mask:
+  - `cargo test --workspace --locked --offline -- --test-threads=1`: PASS,
+    including integration targets and doctests.
+  - `cargo test --workspace --all-features --locked --offline --
+    --test-threads=1`: PASS, including integration targets and doctests.
+  - `cargo check --workspace --all-targets --all-features --locked --offline`:
+    PASS.
+  - `cargo clippy --workspace --all-targets --all-features --locked --offline
+    -- -D warnings`: PASS.
+- Current-tree supplements:
+  - Pinned offline Maven `verify` had already passed after source revision
+    `3f435bab`: 37 scenarios, fixture checks, typed-header/body cross-decodes.
+  - `python3 tests/differential/compare.py --self-test`: PASS;
+    `--validate-manifest`: PASS, 37 scenarios.
+  - `bash tests/stress/run-offline-smoke.sh`: PASS, 16 deterministic race/leak
+    cases × 3 repetitions.
+  - `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked
+    --offline`: PASS, 120 frame seeds, 11 message seeds, 2,096 bounded
+    mutations, 164 frame decodes and 120 message decodes.
+  - `cargo build -p rocketmq-classic --examples --release --locked --offline`:
+    PASS. `cargo bench --workspace --no-run --locked --offline`: PASS.
+    Offline benchmark PASS; Linux ARM64/Rust 1.85.0 observations:
+    frame encode/decode 1,422.8 ns/iteration, Zstd decode 726.7 ns, producer
+    request construction 804.5 ns, 128-entry route lookup 13.6 ns, and loopback
+    pending completion 5,723.0 ns. These are observations, not thresholds.
+  - Locked Cargo metadata and `scripts/check-workspace-metadata.py`: PASS.
+    Seven product `cargo package --list` results contain `LICENSE` and `NOTICE`.
+    Workspace metadata currently reports all eight packages at version 0.1.0
+    with `publish=[]`.
+  - Four Core Unique ID tests pass under both `TZ=UTC` and
+    `TZ=Asia/Taipei`. `cargo fmt --all -- --check` and `git diff --check`: PASS.
+- macOS workspace tests are not counted as passing: the earlier host run stalled
+  in local dyld/syspolicyd behavior. The serialized Linux container runs above
+  completed successfully. No remote CI, Broker, publication, tag, or deployment
+  was triggered.
+
+## Remaining work (excluding owner manual validation)
+
+- P18-V01: complete bidirectional Java/Rust source/API/settings/input/error/
+  control-flow reconciliation and reverse-export audit. The recent `Message`,
+  `MessageExt`, and POP header crosswalks close only those named slices.
+- P18-V03: complete final package/provenance and release-version / registry
+  dependency preflight. Packages are still marked non-publishable (`publish=[]`)
+  at development version 0.1.0; no release or publication claim is made.
+- P18-V04: current-revision GitHub Ubuntu and native Windows evidence is still
+  missing. Remote CI was not triggered.
+- Phase 19: 30 of 37 local Docker/Broker scenario runners, required multi-Broker,
+  TLS, ACL and feature profiles, and `run-local.sh --all` reconciliation remain
+  open. MAN-05 awaits the complete local matrix classification.
+
+- Existing Phase 19 README/runner worktree changes remain unstaged and untouched.
+  No plan was modified.

@@ -1,0 +1,41 @@
+# Phase 18 MessageQueueAssignment HashSet collision disposition
+
+- Recorded: 2026-10-23 21:53:35 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source baseline revision: `e19e7bc9`
+- Pinned Java source: `rocketmq-all-5.5.1` tag, `2ed890cd27b047cc124638aa3c80e391dde942b8`
+- Scope: Java `equals`/`hashCode` contract and `QueryAssignmentResponseBody` Set membership
+
+## Evidence and disposition
+
+Java `MessageQueueAssignment.equals` compares the queue only. Its `hashCode`
+also includes `MessageRequestMode.hashCode()` and attachments. Since the enum
+does not override `Object.hashCode`, the mode hash is process-local. The invoked
+fixture constructs an attachment whose hash cancels the mode-hash difference
+for that JVM; both assignments compare equal, have equal hash values, and the
+Java `HashSet` retains one. Ordinary same-queue/different-mode assignments
+with different hashes remain distinct.
+
+Rust's `java_equals` maps the public Java method. Rust `Eq`/`Hash` remains
+lawful and compares all fields. A Java Set serialized after insertion already
+contains the membership result chosen by that JVM. A raw JSON collection
+engineered to collide for one JVM cannot have stable cross-process semantics,
+so this local collection behavior is recorded as an implementation boundary,
+not a portable wire-flow mismatch. Compatibility and known-difference records
+now state the exact boundary.
+
+Pinned Java source SHA-256:
+
+- `MessageQueueAssignment.java`:
+  `7c3c9563e8bd0a2d8c14d188efac66703be87cec9b7892ecc5fd7b071a4f6b61`
+- `MessageRequestMode.java`:
+  `3b29c84d21cd16c02af8e1836cc4aa5dc0557e8b3e40022490506ef7dcba5c43`
+- `fixtures/runtime/lookup.json`:
+  `42af689aed0d150ee19fef5d8138627bb09db9085139b5221d579e57a0053283`
+
+## Verification and boundary
+
+- `cargo test -p rocketmq-classic-protocol assignment_set_hash_collision_oracle_records_the_java_boundary`: passed.
+- `git diff --check`: passed.
+- No source code or Java fixture changed; Maven verification was not rerun.
+- This disposition closes only the portable Set-flow question. Broad P18-V01 reconciliation remains PARTIAL; native Windows runtime and current-revision remote CI remain separate gates.

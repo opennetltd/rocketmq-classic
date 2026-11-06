@@ -1,0 +1,11 @@
+Session: 2026-10-10T01:48:40Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Pinned Java source correction for inbound code 40: `javap -p -c` on rocketmq-client 5.5.1 shows `ClientRemotingProcessor.notifyConsumerIdsChanged` decodes `NotifyConsumerIdsChangedRequestHeader`, logs its optional consumerGroup, invokes `MQClientInstance.rebalanceImmediately()`, catches Exception, and returns null. The header's `checkFields()` is empty. Rust no longer routes this code through a consumer-specific capability. A Running runtime now wakes its owned runtime-wide rebalance worker and returns no response. `ConsumerOperation::ConsumerIdsChanged` was removed because it described a Java behavior that does not exist.
+
+Implementation commit: `17ecacc3`. The paused-time unit test proves a notification carrying consumer-a wakes both consumer-a and consumer-b, then proves a notification without the optional group field does the same. The loopback test confirms code 40 sends no response on the wire. Existing group-keyed consumer routing now covers the four operations owned by later phases.
+
+Verification passed: `cargo test -p rocketmq-classic-core --lib runtime::inbound::tests --locked` (9 passed); `cargo test -p rocketmq-classic-core --test inbound --locked` (2 passed with local socket access); `cargo test --workspace --all-targets --locked` (exit 0, full output `/private/tmp/p6-workspace-test.log`); `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`; `python3 tests/differential/compare.py --self-test`; and `python3 tests/differential/compare.py --validate-manifest` (22 scenarios). The first default-sandbox loopback run was denied local socket access; the same test command passed with local access.
+
+The inbound matrix, requirement audit and Phase 6 child plan now describe the pinned source flow. The code 40 flow is closed at the Phase 6 runtime boundary. Full source/API/input and reverse-export reconciliation remains open; platform evidence for non-macOS and a real IPv6-only host remains open; P6-V04 remains `PENDING_PHASE_19`. No Java checkout, live server, home Maven cache, or deployment state was modified.

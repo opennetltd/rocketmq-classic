@@ -1,0 +1,61 @@
+# Phase 18 ProcessQueue expiry semantics and current-revision P18-V02 refresh — 2026-10-21T16:20:10Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `9147a902` (`fix(consumer): match expired message cleanup semantics`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Source finding and change
+
+Pinned `ProcessQueue.cleanExpiredMsg` reads the oldest cached message's
+`CONSUME_START_TIME` and invokes `Long.parseLong` before entering its send-back
+exception handler. A malformed non-empty timestamp therefore raises
+`NumberFormatException`, makes no send-back attempt, and leaves the message in
+the queue. The concurrent-service scheduled wrapper catches and logs any
+`Throwable`; the exception aborts that sweep and the next scheduled tick runs
+normally. When send-back itself fails, the direct method catches the failure
+and continues its original queue-size loop, retrying the same head at most 16
+times.
+
+Rust queue entries now retain missing, parsed, and malformed timestamp states.
+The public direct cleanup returns `ExpiredMessageCleanupError` for malformed
+input; the scheduled owner logs that error and defers the next attempt until
+its next tick. Direct send-back failures retry the same unchanged head through
+the original bounded loop. The pinned Java fixture now records malformed
+timestamp exception class, empty attempts, and unchanged queue count/bytes.
+Rust compares both direct and scheduled error paths, direct retry behavior,
+scheduled retry cap, and prior success/orderly cases.
+
+## Verification
+
+- PASS: focused Rust expiry fixture regression.
+- PASS: `cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked`.
+- PASS: strict workspace Clippy,
+  `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- PASS: pinned `mvn -q -f compat/java-reference/pom.xml verify`; all 37
+  scenarios, fixture drift checks, 83 typed-header and 16 typed-body
+  Rust/Java cross-decodes. Existing JDK Unsafe and reflective-final-field
+  warnings remain; Maven exited successfully.
+- PASS: differential comparator self-test and all 37 scenario-manifest rows.
+- PASS: offline stress smoke, 16 cases × 3 repetitions.
+- PASS: release fuzz smoke, 137 frame seeds, 11 message seeds, 2,368 bounded
+  mutations, 201 frame decodes and 118 message decodes.
+- PASS: release examples, workspace benchmark compilation, offline benchmark,
+  locked Cargo metadata, workspace license/dependency validation, and seven
+  package listings with `LICENSE` and `NOTICE`.
+- PASS: pinned Unique ID test under both UTC and Asia/Taipei.
+- PASS: formatting and `git diff --check` before commit.
+
+Benchmark observations are in
+`docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`; no threshold is
+asserted.
+
+## Remaining status
+
+Broad P18-V01 remains open, including raw Push consume-service replacement,
+the shared mutable stats-manager accessor, arbitrary application-defined
+`MessageExt` subclasses, and the remaining bidirectional API/settings/input/
+error/control-flow/reverse-export audit. P18-V04 current-revision GitHub Ubuntu
+and native Windows runtime evidence remain absent. No remote CI or push was
+performed. Phase 19 live Broker/Docker validation remains separate. Protected
+Phase 19 working-tree paths were left untouched and unstaged.

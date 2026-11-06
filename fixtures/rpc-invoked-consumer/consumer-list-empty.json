@@ -1,0 +1,1 @@
+{"case":"consumer-list-empty","mode":"SYNC","outcome":"clients=","provenance":{"client":"org.apache.rocketmq:rocketmq-client:5.5.1","entrypoint":"MQClientAPIImpl","serverBaselineContacted":false,"transport":"mock RemotingClient"},"request":{"code":38,"ext":{"consumerGroup":"consumer"}},"response":{"bodyBase64":"eyJjb25zdW1lcklkTGlzdCI6W119","code":0,"ext":{}}}

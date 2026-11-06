@@ -1,0 +1,30 @@
+Phase 9 compatibility audit continuation: pull response-size API and offset-store access.
+
+Source audit
+- Re-read the pinned Java 5.5.1 `DefaultMQPullConsumer`, `DefaultMQPullConsumerImpl` and `PullAPIWrapper` at commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- Confirmed the callback pull overload accepts `maxSizeInBytes`, rejects values `<= 0`, and passes the value to `PullMessageRequestHeader.maxMsgBytes`. The other pull overloads use `Integer.MAX_VALUE`.
+- Confirmed `DefaultMQPullConsumer.getOffsetStore()` exposes the configured or selected store.
+- Confirmed the local-store root comes from Java system property `rocketmq.client.localOffsetStoreDir`, defaulting to `${user.home}/.rocketmq_offsets`.
+
+Implementation
+- Added Future methods `pull_with_max_size` and `pull_with_max_size_and_timeout`. Existing pull methods preserve the `i32::MAX` default; a new typed error rejects zero and negative byte limits before Broker I/O.
+- The scripted Broker test verifies a custom 4096-byte `maxMsgBytes`, Java-default values on the subsequent master/slave requests, and rejection of zero without sending a request. Unit validation also covers negative values.
+- Added `PullConsumer::get_offset_store` for configured and model-selected stores, including access after shutdown.
+- Removed the public Rust-only `LocalFileOffsetStore::with_storage_dir` setter. Explicit root injection is private to unit tests; the production path honors the same-named process environment variable and home-directory fallback. Moved selected-queue persistence coverage into the local-store unit module.
+- Updated the English/Traditional Chinese Phase 9 plans and offline matrix with the max-size overload, consumer settings/defaults, local-path mapping and ownership of public methods assigned to later phases. The matrix records `getDefaultMQPullConsumerImpl()` as a full-surface compatibility item for Phase 18; Phase 9 does not claim the entire legacy Java class is complete.
+
+Verification
+- `cargo test -p rocketmq-classic-consumer --locked` — passed: 25 unit tests, 3 offset integration tests, 2 pull-facade tests, 7 pull-result tests.
+- `cargo fmt --all -- --check` — passed.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — passed.
+- `cargo test --workspace --locked` — passed, including doc tests.
+- `cargo build -p rocketmq-classic --examples --locked` — passed.
+- `git diff --check` — passed.
+- No fixtures or protocol header models changed; the existing Java fixture/verifier results remain applicable. No live Broker or Docker was contacted.
+
+Commits
+- `1652b199` — `fix(consumer): match Java pull size limits`
+- `8692a081` — `docs(consumer): audit phase 9 API mapping`
+
+Status
+- Phase 9 offline tasks P9-01 through P9-05 remain complete. P9-V01, P9-V02 and P9-U01 are unit-verified. P9-V03 remains `PENDING_PHASE_19` for the planned live 5.3.4 Broker run.

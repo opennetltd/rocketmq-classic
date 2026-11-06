@@ -1,0 +1,57 @@
+# Phase 18 caller-defined MessageExt metadata override follow-up — 2026-10-21T19:16:44Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `8425a30d` (`feat(common): dispatch subtype message metadata`)
+Documentation revision: `e19e3490` (`docs(compat): record subtype metadata parity`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `aa202880244ea5606fbebc63d8558965fddede4a95be58baacd56320f8f16571`.
+
+## Source audit and change
+
+- Added `MessageExtSubtype` getter/setter hooks for Java virtual born/store
+  timestamps, born host, sysFlag, body CRC, commit-log offset, store size and
+  prepared-transaction offset.
+- Routed the corresponding `MessageExt` accessors through those hooks with
+  stored-value fallback. Born-host string/name/bytes and store-host bytes
+  helpers continue to read the stored fields because the pinned Java
+  implementations do so directly; the virtual born/store host getters remain
+  independently dispatched.
+- Extended the invoked Java custom subtype with distinct metadata getters and
+  eight counted setters. Host overrides return `127.0.0.1:10913`, while their
+  setters store `127.0.0.1:10912` / `127.0.0.1:10911` in the base fields. The
+  fixture compares both virtual getter values and field-derived string/name/
+  IPv4-byte helper results.
+- Updated the Phase 6, Phase 10, Phase 18 and release checklist records.
+
+## Verification
+
+- PASS: pinned Java runtime fixture regeneration; 9 Running Info,
+  27 direct-consume and 15 reset cases.
+- PASS: focused `cargo test --locked -p rocketmq-classic-consumer --test
+  runtime_direct_consume` (3 tests).
+- PASS: `cargo test --workspace --locked --quiet` and
+  `cargo test --workspace --all-features --locked --quiet`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify`; 37 scenarios,
+  runtime direct-consumer fixture, fixture drift checks, 83 typed headers,
+  16 typed bodies and Java/Rust cross-decodes. Existing JDK Unsafe and
+  reflective-final-field warnings were emitted.
+- An initial fixture attempt called Java host-bytes helpers with subtype host
+  overrides whose setters did not populate the base host fields. The pinned
+  helpers threw in that case because they read the fields directly. The fixture
+  now uses overrides that call `super` for field storage, while differing
+  virtual getter values; Rust mirrors the resulting split, and the final
+  fixture/tests above pass.
+
+## Remaining status
+
+This closes the listed metadata getter/setter hooks only. Broad P18-V01
+source/API/settings/input/error/control-flow/reverse-export reconciliation,
+other inherited virtual methods and Java mutable `getProperties()` map identity
+remain open. Supplemental P18-V02 gates were refreshed on `f6cf78fc` and need a
+new refresh after this code change. Current-revision GitHub Ubuntu and native
+Windows P18-V04 runtime evidence remain absent. Phase 19 Broker/Docker
+validation remains separate. No push, remote CI, Broker or Docker run was
+performed. Pre-existing Phase 19 working-tree paths were left untouched and
+unstaged.

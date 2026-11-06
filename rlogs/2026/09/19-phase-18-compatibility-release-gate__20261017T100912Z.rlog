@@ -1,0 +1,93 @@
+# Phase 18 Remoting RPC-latency metrics continuation — 2026-10-17T10:09:12Z
+
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Java oracle: RocketMQ 5.5.1 source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; inspected pinned source read-only.
+- Scope: add the Remoting metrics manager and close request/response code-description
+  mapping needed by inbound response metrics. The Phase 18 plan was not changed.
+
+## Changes
+
+- Added a per-client `RemotingMetricsManager` with a Rust histogram adapter,
+  Java-compatible view boundaries, typed attribute keys, result mapping, and
+  optional base-attribute supplier. A missing supplier leaves base labels empty;
+  a supplied builder receives `protocol_type=remoting`.
+- Added request/response code-description mappings for 166 request and 68
+  response codes, with decimal-string fallback for unknown values.
+- Connected inbound response handling to record oneway, write success/failure,
+  cancellation, long-polling state, and executor-submit failure observations.
+- Added the invoked Java fixture and Rust API/metrics differentials, plus a
+  loopback transport regression for successful, unsupported, and oneway requests.
+- Java's OpenTelemetry `LongHistogram` is represented by a Rust adapter trait;
+  Java exceptions and Netty future objects are not recreated.
+
+## Validation
+
+- `cargo test -p rocketmq-classic-remoting --all-features --locked`: exit 0;
+  115 unit, 8 codec, 1 fuzz regression, 7 security, 107 transport, and 15
+  doctests passed.
+- The initial strict Clippy run found `await_holding_lock` in the new transport
+  test. The observation guard was scoped to a block. The targeted test
+  `cargo test -p rocketmq-classic-remoting --all-features --locked --test
+  transport p3_v03_inbound_dispatch_and_reordered_parallel_responses` then
+  passed, followed by strict Clippy:
+  `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings` (exit 0).
+- `cargo fmt --all -- --check` and `git diff --check`: exit 0.
+- Pinned Java fixture verification and cross-decode gate:
+  `TERM=dumb JAVA_TOOL_OPTIONS=-XX:ActiveProcessorCount=8 mvn -o -B -q
+  -Djline.terminal=jline.UnsupportedTerminal -Dstyle.color=never -f
+  compat/java-reference/pom.xml verify` (exit 0; 37 scenarios, fixture drift,
+  and Java/Rust header/body cross-decodes passed).
+
+## Commit and remaining work
+
+- Code/test/fixture commit: `0d72386c feat(remoting): record inbound RPC latency metrics`.
+- The release-checklist update and this log are prepared for a separate docs
+  commit.
+- This closes the named metrics and code-description slice only. Broad P18-V01
+  bidirectional source/API/settings/input/error/control-flow and reverse-export
+  reconciliation remains open. Multi-entry `RemotingCommand.toString()` order
+  and custom-header representation details also remain partial; the final
+  full-workspace P18-V02 gate, current-revision CI, P18-V03/V04, and Phase 19
+  locally runnable Broker/Docker scenarios remain outstanding. Owner-only
+  MAN-01–05 checks remain reserved for final manual validation.
+
+## Current-revision server-free P18-V02 gate — `bdf56557`
+
+- `cargo test --workspace --locked`: exit 0, including all workspace unit,
+  integration and documentation tests.
+- `cargo test --workspace --all-features --locked`: exit 0, including the
+  Remoting metrics and code-description fixture tests.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`: exit 0.
+- `cargo fmt --all -- --check`, `git diff --check`, and
+  `python3 tests/differential/compare.py --self-test`: exit 0.
+- `tests/differential/run.sh --list`: exit 0; all 37 scenario rows validated.
+- `bash tests/stress/run-offline-smoke.sh`: exit 0; 16 deterministic race/leak
+  cases each passed three repetitions.
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`:
+  exit 0; 105 frame seeds, 11 message seeds, 1,856 mutations, 146 frame
+  decodes, and 113 message decodes.
+- `cargo build -p rocketmq-classic --examples --release --locked` and
+  `cargo bench --workspace --no-run --locked`: exit 0.
+- `cargo bench -p rocketmq-classic --bench offline --locked`: completed on
+  Apple M5 Max (18 logical CPUs), macOS/aarch64, rustc 1.85.0, release profile.
+  Observed ns/iteration and allocation bytes/iteration: frame encode/decode
+  1,911.1 / 4,612; Zstd message decode 1,332.5 / 197,493; Producer send-request
+  construction 1,372.4 / 3,665; 128-entry route address lookup 19.4 / 0; loopback
+  pending-request completion 66,826.2 / 9,338. These are observations, not
+  acceptance thresholds.
+- `cargo metadata --locked --format-version 1 --no-deps`,
+  `python3 scripts/check-workspace-metadata.py`, and
+  `cargo package --workspace --list --locked --allow-dirty`: exit 0. The package
+  list command warned that the unpublished integration runner has no
+  description; all seven product packages have `LICENSE` and `NOTICE`.
+- Maven offline verify exited 0: 37 scenarios, fixture-drift checks, Java/Rust
+  cross-decodes, and pinned API/input probes passed. Maven reported existing
+  JDK `Unsafe` and reflective-final-field warnings.
+- This closes the server-free P18-V02 rerun on `bdf56557`. Any later source
+  change requires another current-revision run. P18-V01, platform CI/P18-V04,
+  P18-V03 registry resolution, and locally executable Phase 19 Broker/Docker
+  scenarios remain open. No push, tag, or publication occurred.

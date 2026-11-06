@@ -1,0 +1,28 @@
+# Phase 18 ProcessQueue declared-method crosswalk — 2026-10-23T01:37:29Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Audit result
+
+The pinned facade fixture records 32 declared public `ProcessQueue` methods.
+`PHASE_18_REBALANCE_PROCESS_QUEUE_API.md` now maps every method to its Rust
+owner implementation, including nullable-input adapters, live tree/counter
+handles, async expiry cleanup, and result-type wrappers. The new
+`every_pinned_java_process_queue_method_has_owner_mapping_or_disposition`
+regression verifies the fixture denominator, all Java method names, every
+crosswalk entry, and each Rust owner method.
+
+Facade fixture SHA-256 remains
+`29cc00f7cf9b8194f08007a12c5e75f0499a5601c140a78855b14cb244bef771`.
+
+## Validation
+
+- Focused ProcessQueue method crosswalk regression passed.
+- Strict all-target/all-feature Consumer Clippy passed.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+
+This closes the ProcessQueue declared-method inventory slice only. Broad
+P18-V01 source/API/settings/input/error/control-flow and reverse-export
+audit remains PARTIAL; remote Ubuntu CI, native Windows runtime execution,
+and Phase 19 Broker/Docker evidence remain open.

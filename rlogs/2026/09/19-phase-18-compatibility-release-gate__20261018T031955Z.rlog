@@ -1,0 +1,54 @@
+# Phase 18 P18-V01 `MqClientAdmin.deleteTopicInNameserver` — 2026-10-18T03:19:55Z
+
+## Scope and source
+
+- Continued on `phase/19-phase-18-compatibility-release-gate`; the pinned Java
+  oracle at `/Users/bruce.tsai/Projects/3rd/rocketmq` remained read-only.
+- Reconciled Java 5.5.1 `MqClientAdminImpl.deleteTopicInNameserver`: request
+  code 216, direct NameServer address, `DeleteTopicFromNamesrvRequestHeader`,
+  no body, null result on `SUCCESS`, and `MQClientException` with response
+  code/remark otherwise.
+- The Namesrv header has nullable `topic` and `clusterName` because
+  `checkFields()` is a no-op. It inherits `ns`, `nsd`, `bname`, `oway`, and
+  `lo`; inherited equality/hash only considers the four RPC base fields.
+
+## Implementation
+
+- Added the public Rust header, RPC-base equality semantics, nullable-field
+  validation and typed-header inventory/cross-decode coverage, plus
+  `MQClientApi::delete_topic_in_nameserver`.
+- Extended the invoked Java `MqClientAdmin` fixture with success and Nameserver
+  error cases; added scripted Core tests comparing request code/fields and
+  response code/remark. Code commit `fb1e43b5`:
+  `feat(admin): add delete topic in nameserver RPC`.
+- The source-backed `MqClientAdmin` inventory now has 8 of 19 methods
+  reconciled. Updated the Phase 17 matrix and release checklist; Phase 18 plan
+  remains unchanged.
+- Preserved the pre-existing uncommitted Phase 19 README, differential runner,
+  local runner, and its execution log; none were included in this slice.
+
+## Validation
+
+- `cargo test --locked -p rocketmq-classic-protocol --all-features` — exit 0:
+  132 unit tests, all integration targets (including header inventory and
+  validation), and 49 doctests.
+- `cargo test --locked -p rocketmq-classic-core --test admin_rpc` — exit 0;
+  all 34 tests passed, including the new success and NameServer-error fixture
+  comparisons.
+- `cargo clippy --locked -p rocketmq-classic-protocol
+  -p rocketmq-classic-remoting -p rocketmq-classic-core --all-targets
+  --all-features -- -D warnings` — exit 0.
+- `mvn -q -f compat/java-reference/pom.xml verify` — exit 0; 37 scenarios,
+  Java fixture drift checks, 62 typed-header cross-decodes and 14 typed-body
+  cross-decodes passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+## Remaining work
+
+- The other 11 `MqClientAdmin` methods and broad P18-V01 bidirectional
+  Java/Rust public API, configuration, input, error/control-flow and
+  reverse-export reconciliation remain open.
+- Full-workspace P18-V02, current-revision Ubuntu/native Windows evidence,
+  final P18-V03 package/provenance checks, and Phase 19 local Docker/Broker
+  scenarios/profiles and complete `run-local.sh --all` reconciliation remain
+  open. Owner-only production checks remain separate manual work.

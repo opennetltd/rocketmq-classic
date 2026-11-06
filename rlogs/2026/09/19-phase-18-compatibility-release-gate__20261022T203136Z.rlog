@@ -1,0 +1,18 @@
+P18-V01 compact inner-batch runtime subtype — 2026-10-22 20:31 UTC
+
+Pinned Java `MessageDecoder.decodeMessage(MessageExt,List)` constructs a
+`MessageClientExt` for every compact inner message. Rust `decode_inner_batch`
+previously returned base `MessageExt` values, losing the inherited virtual
+message-ID behavior. Code commit `adf93b21` marks each expanded result as the
+client subtype. The Java fixture now records the runtime class and exercises
+`setMsgId`, `setOffsetMsgId`, offset fallback, and live `UNIQ_KEY` precedence;
+Rust compares each outcome. Fixture SHA-256:
+`43a9740f697078e145e93eee6b9b3671482c4577a91a82d2fb72576b68feba65`.
+
+The focused Common regression and the full default and all-feature workspace
+tests pass. Strict all-target/all-feature workspace Clippy, formatting/diff
+checks, and pinned Maven verify pass; Maven verified 37 differential scenarios,
+36 route/VIP cases, 106 typed headers, and 19 typed bodies. Broad P18-V01
+reconciliation, current-revision remote Ubuntu CI, native Windows runtime, and
+Phase 19 Broker/Docker evidence remain open. Protected Phase 19 worktree paths
+were not staged. No external CI or push was run.

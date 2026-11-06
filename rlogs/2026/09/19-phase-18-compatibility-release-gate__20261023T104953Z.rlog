@@ -1,0 +1,45 @@
+# Phase 18 current server-free workspace gate
+
+- Recorded: 2026-10-23 10:49:53 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Code revision: `74c236ab`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Verification
+
+- `cargo test --offline --workspace --locked` — passed.
+- `cargo test --offline --workspace --all-features --locked` — passed.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked
+  -- -D warnings` — passed.
+- `mvn -q -o -f compat/java-reference/pom.xml verify` — passed; 37 scenarios,
+  including the updated `MQClientAPIFactory` shutdown and empty-pool fixtures.
+- `python3 tests/differential/compare.py --self-test` — passed.
+- `python3 tests/differential/compare.py --validate-manifest` — passed,
+  37 scenarios.
+- `python3 scripts/check-workspace-metadata.py` — passed workspace metadata,
+  package license-file, and dependency-direction checks.
+- `bash tests/stress/run-offline-smoke.sh` — passed 17 deterministic race/leak
+  cases × 3 repetitions.
+- `cargo run --offline -p rocketmq-classic-remoting --example fuzz_smoke
+  --locked` — passed 163 frame seeds, 11 message seeds, 2,784 bounded
+  mutations, 245 frame decodes, and 192 message decodes.
+- `cargo build --offline -p rocketmq-classic --examples --release --locked` —
+  passed.
+- `cargo bench --offline -p rocketmq-classic --bench offline --locked` —
+  passed on Apple M5 Max / macOS AArch64 / Rust 1.85.0; fixed fixture inputs
+  completed without adding an acceptance threshold.
+- `cargo check --offline -p rocketmq-classic-core --all-targets
+  --all-features --locked --target x86_64-pc-windows-gnu` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+The Windows check is cross-compilation only. Native Windows execution and
+remote Ubuntu CI were not run. No Broker/Docker validation, push, or remote CI
+was performed. Existing user-owned Phase 19 worktree paths were left
+untouched and unstaged:
+`integration-tests/README.md`, `tests/differential/run.sh`,
+`integration-tests/run-local.sh`, and
+`rlogs/2026/09/20-phase-19-docker-local-validation__20261017T224455Z.rlog`.
+
+Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export
+reconciliation remains partial; this gate does not close the overall Phase 18
+objective.

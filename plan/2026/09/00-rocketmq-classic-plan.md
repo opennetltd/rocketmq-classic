@@ -1576,7 +1576,7 @@ Preserve semantics for:
 
 Needed for broadcasting compatibility.
 
-Expose the Java-equivalent local-offset path configuration with its exact defaults and precedence; do not add a Rust-only storage setting. Match Java read/recovery/error semantics, using safe internal file ownership without changing observable behavior.
+Expose the Java-equivalent local-offset process-property configuration with its exact defaults and precedence; do not add a Rust-only per-instance storage setter. Match Java read/recovery/error semantics, using safe internal file ownership without changing observable behavior.
 
 ### P9-04 — Pull API
 
@@ -1586,9 +1586,10 @@ Public pull operation accepts:
 - expression/subscription;
 - offset;
 - max message count;
+- max response size in bytes;
 - timeout/suspend parameters.
 
-Route to the correct Broker ID using suggested broker logic.
+Expose configured/selected offset-store access, keep pull results separate from offset updates, and expose explicit persist/commit operations. Route to the correct Broker ID using suggested broker logic.
 
 ### P9-05 — Offset boundary helpers
 
@@ -2669,8 +2670,8 @@ Before claiming v1.0 compatibility, all of the following must be true:
 - [ ] Orderly consumption lock lifecycle passes multi-consumer tests.
 - [ ] Transaction commit/rollback/check works against Broker 5.3.4.
 - [ ] Request/reply completes exactly once under timeout races.
-- [ ] Runtime concurrent construction regression test passes.
-- [ ] start/shutdown stress tests show no owned-task/connection leaks.
+- [x] Runtime concurrent construction regression test passes.
+- [x] start/shutdown stress tests show no owned-task/connection leaks.
 - [ ] Every Java TLS/auth path has source/unit coverage and applicable Phase 19 interoperability evidence.
 - [ ] Every Java 5.5.1 public client setting/feature/flow is implemented with complete evidence; reverse audit finds no extra Rust public setting/feature.
 - [ ] All locally executable tests ran in Phase 19; required non-local manual evidence passed and no unresolved parity gap remains.

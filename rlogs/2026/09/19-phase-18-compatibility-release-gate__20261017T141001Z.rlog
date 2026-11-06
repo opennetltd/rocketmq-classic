@@ -1,0 +1,55 @@
+# Phase 18 — custom-header parity and current server-free gate
+
+- Repository branch: `phase/19-phase-18-compatibility-release-gate`.
+- Java oracle: RocketMQ client 5.5.1 at
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; the oracle checkout remained
+  read-only.
+- Added Java-equivalent custom-header `checkFields()` validation for create-
+  topic and transaction headers, with invoked fixture coverage for invalid
+  values and a custom validation header. Added public Rust Remoting header
+  prefix encoders for JSON and ROCKETMQ, including signed body-length wrapping,
+  no-argument encoding and append-to-buffer behavior. Fixed an admin test to
+  ignore an interleaved HEART_BEAT while waiting for QUERY_MESSAGE.
+- Fixture SHA-256:
+  `fixtures/remoting/response-future-api.json`:
+  `e5062756b7d2832b20820dfe7e6f67f8bfd911dfda2dd327d7a2a55a851b65a6`;
+  `fixtures/runtime/client-config.json`:
+  `ff544a4c0e25d744432f9fd8e1c8d8575457daf138ac49d12c88ccf318318d27`.
+- Server-free validation passed on the code worktree later committed as
+  `05448c25`: `cargo test --workspace --locked --offline` and
+  `cargo test --workspace --all-features --locked --offline` in
+  `rust:1.85.0-bookworm` using `--init`; host
+  `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`; `cargo fmt --all -- --check`; `git diff --check`; and
+  `env TERM=dumb mvn -f compat/java-reference/pom.xml verify` on OpenJDK 27.
+  Maven passed all 37 scenario checks, fixture drift checks and Java/Rust
+  cross-decodes.
+- `python3 tests/differential/compare.py --self-test` and `--validate-manifest`
+  passed; the manifest contains 37 scenarios. The Linux offline race/leak
+  script passed 16 cases × 3. Fuzz smoke passed with 105 frame seeds, 11
+  message seeds, 1,856 bounded mutations, 146 frame decodes and 113 message
+  decodes. The `rocketmq-classic` release examples and offline benchmark built
+  and ran. Four Core Unique ID tests passed with `TZ=Asia/Taipei`. Locked Cargo
+  metadata, `scripts/check-workspace-metadata.py`, and
+  `cargo package --workspace --list --locked --allow-dirty` passed.
+- Benchmark observation from Rust 1.85.0 on Linux AArch64: frame encode/decode
+  1,191.8 ns/iteration; message record Zstandard decode 697.3 ns/iteration;
+  Producer send construction 778.7 ns/iteration; 128-entry route lookup 12.9
+  ns/iteration; loopback pending completion 5,576 ns/iteration. These are
+  observations, not acceptance thresholds.
+- The first Docker test attempt used the wrong mounted Cargo home and failed
+  offline dependency resolution because `yaml_serde` was absent. Mounting the
+  existing cache at `/cache/cargo` corrected the setup; both workspace test
+  commands then passed. Maven verify completed successfully in this run; the
+  earlier zstd/JDK environment issue did not recur.
+- Code commits: `40ebb7ba fix(protocol): validate decoded custom headers`,
+  `fcc001a7 feat(remoting): expose header prefix encoders`, and
+  `05448c25 test(producer): ignore interleaved heartbeat in admin test`.
+  Documentation and this log are pending a separate documentation commit.
+- These changes close only the named header-validation and header-prefix
+  slices. Broad P18-V01 remains open; current-revision GitHub Ubuntu/native
+  Windows results for P18-V04 are absent. Thirty of the 37 Phase 19 local
+  Broker/Docker scenarios, required multi-Broker/TLS/ACL profiles, pre-
+  publication release-version and registry-resolution checks, and owner-run
+  final checks remain outstanding. No plan file changed; no push, tag,
+  publication, Broker operation or deployment occurred.

@@ -1,0 +1,35 @@
+# Phase 18 runtime NameServer provider export crosswalk
+
+- Recorded: 2026-10-23 13:26:28 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source revision before documentation commit: `b16c79a4`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Finding
+
+- Rustdoc JSON locates public `ClientRuntimeManager::with_top_addressing` at
+  `crates/rocketmq-classic-core/src/runtime/manager.rs:222`.
+- The API-map prose discussed the same-name factory seam, which is now private
+  under `#[cfg(test)]`, but omitted the public runtime-manager constructor from
+  the exact crosswalk.
+- Pinned Java `DefaultTopAddressing.loadCustomTopAddressing` invokes
+  `ServiceLoader.load(TopAddressing.class)` and stores its first provider.
+  The runtime-manager method supplies that capability explicitly per manager;
+  clones preserve the provider. Existing discovery/config tests exercise this
+  provider path.
+- The API map now distinguishes the runtime-manager SPI adapter from the
+  factory-only test seam. Requirement audit and release checklist record this
+  bounded crosswalk correction.
+
+## Verification
+
+- `RUSTDOCFLAGS='-Z unstable-options --output-format json' cargo +nightly doc --workspace --all-features --locked --no-deps` — passed; existing workspace `publish` and Consumer `AtomicU64::fetch_update` warnings remain.
+- Current distinct public-name counts: Common 439, Consumer 460, Core 747,
+  Producer 362, Protocol 1,524, Remoting 337.
+- `git diff --check` — passed.
+- No runtime code changed and no tests were run for this documentation-only
+  correction. No push or remote CI was run; existing Phase 19 user-owned paths
+  were not edited or staged.
+
+This closes one API-map omission only. Broad P18-V01 source/API/settings/input/
+error/control-flow reconciliation remains open.

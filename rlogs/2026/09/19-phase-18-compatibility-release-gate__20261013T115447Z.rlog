@@ -1,0 +1,9 @@
+# Phase 18 execution session — 2026-10-13T11:54:47Z
+
+- Continued the P18-V01 Pull implementation accessor audit. Completed direct `consumerRunningInfo` coverage and construction-time start timestamp mapping; set Pull's Java `enableStreamRequestType` default to true.
+- The first consumer-suite run after serializing Java's `socksProxyConfig` exposed a stale Push running-info test assertion that prohibited the value `secret`. Java 5.5.1's `MixAll.object2Properties` includes `socksProxyConfig`; replaced the contradiction with a check that the field is present.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (176 unit tests and all consumer integration/doc targets).
+- PASS: `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, invoked Java 5.5.1 fixtures including Pull implementation accessor).
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. Mutable implementation-state accessors (`get/setPullAPIWrapper`, `get/setServiceState`, `getRebalanceImpl`), broad Phase 6 bidirectional source/API/input/platform reconciliation, and P18-V01 remain open. Ubuntu CI evidence, Phase 19 local Docker automation/execution, and package-content/dependency provenance review are also outstanding; they are not owner-only final manual checks.

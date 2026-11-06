@@ -1,0 +1,49 @@
+# Phase 18 assignment stable HashSet bucket parity
+
+- Recorded: 2026-10-24 15:14:17 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Code revision: `cc49b573`
+- Host: macOS AArch64, Rust 1.85.0
+- Java reference: pinned offline Maven build
+
+## Change
+
+- Protocol JSON decoding now models Java `HashSet` equality checks within
+  stable `MessageQueueAssignment` hash buckets. Same-mode assignments with
+  equal queue and attachment-map hashes deduplicate even when their attachment
+  maps differ (the `Aa`/`BB` Java String-hash collision); duplicate null-queue
+  rows with matching hashes retain Java's `NullPointerException` behavior.
+- `MessageQueueAssignment` keeps lawful all-fields Rust `Eq`/`Hash`; the
+  decoder uses a separate Java bucket index. The Java lookup fixture adds the
+  stable collision, different-hash control, and null-queue cases. It also marks
+  the existing different-mode collision as `sameMode: false`.
+- The response input corpus now has 33 Set-field cases plus seven root-shape
+  cases. Source commit: `cc49b573 fix(protocol): match stable assignment set buckets`.
+
+## Verification
+
+- Focused Protocol differential and all 168 Protocol unit tests passed.
+- `cargo test --offline --locked --workspace --all-features`: passed, including
+  workspace test binaries and doctests.
+- `cargo test --offline --locked --workspace`: passed, including workspace test
+  binaries and doctests.
+- Strict all-target/all-feature host Clippy passed.
+- Offline Maven `verify` passed with 37 scenarios, 40 assignment response input
+  cases, 106 typed-header cross-decodes, 19 typed-body cross-decodes, and
+  fixture-drift verification.
+- Windows GNU all-target/all-feature workspace check and strict Clippy passed.
+  Windows GNU all-feature `cargo test --no-run` passed and linked all workspace
+  test executables; this is compile/link-only evidence.
+- `cargo fmt --all -- --check` and `git diff --check` passed before the final
+  documentation-only hash update. The hash update contains no whitespace
+  changes; checks are rerun for the final tree.
+
+## Remaining gates
+
+- Different-mode equal-hash results still depend on the receiving JVM's
+  process-local enum identity hashes; no cross-process outcome is claimed.
+- Broad P18-V01 method/overload/input/error/control-flow and reverse-export
+  reconciliation remains PARTIAL.
+- Native Windows runtime and current-revision remote Ubuntu CI remain
+  unverified. No push or remote CI was run.
+- Phase 19 user-owned paths remain unchanged and unstaged.

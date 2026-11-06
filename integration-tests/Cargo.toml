@@ -1,0 +1,22 @@
+[package]
+name = "rocketmq-classic-integration"
+version.workspace = true
+description = "Unpublished local Docker integration runner for the RocketMQ Classic Rust client."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "live_client"
+path = "src/bin/live_client.rs"
+
+[dependencies]
+rocketmq-classic.workspace = true
+rocketmq-classic-common.workspace = true
+rocketmq-classic-consumer.workspace = true
+rocketmq-classic-core.workspace = true
+rocketmq-classic-protocol.workspace = true
+rocketmq-classic-remoting.workspace = true
+tokio.workspace = true

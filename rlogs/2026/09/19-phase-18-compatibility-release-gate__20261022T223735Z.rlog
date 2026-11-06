@@ -1,0 +1,29 @@
+## P18-V01 POP in-flight callback after assignment removal — 2026-10-22
+
+Reviewed the pinned Java 5.5.1 POP callback and consume-request path. Java
+continues a `FOUND` callback that was already issued when rebalance removes the
+POP queue: it updates pull statistics, filters messages, ACKs filtered
+messages, and submits accepted messages. The consume request checks the
+dropped flag before listener dispatch. Rust previously aborted the POP task
+when removing the queue, discarding that response.
+
+Rust now removes the worker from the assignment map and retires its task while
+the issued response finishes. The POP loop observes the dropped queue before
+issuing another request. Shutdown and destroy also drain retired task handles.
+The new scripted regression removes the queue before releasing a FOUND reply
+with a filtered message and valid receipt, then verifies the Broker receives
+the filtered-message ACK and the retired worker exits.
+
+Verification:
+
+- `cargo test --offline -p rocketmq-classic-consumer --lib removed_pop_queue_finishes_inflight_found_callback_before_retiring --locked --quiet` — PASS.
+- `cargo test --offline -p rocketmq-classic-consumer --lib --locked --quiet` — PASS, 257 tests.
+- `cargo test --offline --workspace --all-features --lib --locked --quiet` — PASS; nonempty suites: 27, 257, 215, 154, 160 and 140 tests.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — PASS.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+
+No Java fixture changed. This closes the tested in-flight callback behavior for
+this assignment-removal case only. Broad P18-V01 source/API/configuration/flow
+and reverse-export reconciliation, current-revision remote Ubuntu CI, native
+Windows execution, and Phase 19 Broker/Docker evidence remain open. Protected
+Phase 19 worktree paths were left untouched.

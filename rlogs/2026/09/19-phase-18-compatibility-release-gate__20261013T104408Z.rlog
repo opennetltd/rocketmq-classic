@@ -1,0 +1,10 @@
+# Phase 18 execution session — 2026-10-13T10:44:08Z
+
+- Continued P18-V01's Phase 9 audit on `phase/19-phase-18-compatibility-release-gate`; the `resetTopic` change is already committed as `072812fd`.
+- Java 5.5.1 `subscriptionAutomatically` uses the exact supplied topic key, preserves existing entries, and inserts `FilterAPI.buildSubscriptionData(topic, "*")` otherwise. `unsubscribe` removes only that key from the implementation subscription map; it does not edit the facade's registered-topic set.
+- Added `PullConsumer::subscription_automatically` and `PullConsumer::unsubscribe`; the ordinary Pull path now uses the same automatic-subscription helper. Added Java fixture evidence and a Rust differential test for wildcard metadata, positive sub-version, no namespace wrapping, duplicate and custom-entry preservation, empty and raw namespaced topic keys, exact/missing-key removal, and facade registration retention.
+- Updated the Phase 9 method matrix. Rust `&str` cannot represent Java's null topic input; this type boundary is recorded.
+- PASS: Java fixture generation via `mvn -q -f compat/java-reference/pom.xml compile exec:java -Dexec.args="pull-implementation-accessor-fixture /Users/bruce.tsai/Projects/trio/rocketmq-classic/fixtures/consumer/pull-implementation-accessor.json"`; full `mvn -q -f compat/java-reference/pom.xml verify` passed, including 37 scenarios and accessor fixture verification.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (169 unit tests, 43 integration tests, doc tests); `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. This closes only `subscriptionAutomatically` and `unsubscribe`; remaining raw Pull API/state mappings, broad Phase 6 reconciliation, P18-V01 and P9-V03 remain open.
+- Implementation, fixture, matrix, and execution-log commit: pending.

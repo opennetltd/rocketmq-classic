@@ -1,0 +1,29 @@
+# Phase 18 P18-V01 Push manager accessors source review — 2026-10-21T15:50:48Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision reviewed: `659ec260` (`fix(consumer): map push implementation factory setter`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Pinned source findings
+
+- `DefaultMQPushConsumerImpl.get/setConsumeMessageService` returns/replaces the
+  `ConsumeMessageService` field. Startup installs the concurrent or orderly
+  service. `MQClientInstance.consumeMessageDirectly` calls the getter, while
+  the public service interface also exposes start/shutdown, pool sizing,
+  direct-consume and Push/POP request submission. The setter has no production
+  call site in this pinned tree, but it permits external custom-service
+  replacement. Rust owner flows cover built-in service behavior but do not
+  expose this replacement interface.
+- `MQClientInstance` constructs one `ConsumerStatsManager` and returns that
+  same instance. Its public methods record pull/consume RT and TPS and return
+  `ConsumeStatus`; `DefaultMQPushConsumerImpl` and all four built-in consume
+  services retrieve the manager through the runtime factory.
+- Rust stores an internal `ConsumerStatsManager` per `PushConsumer`, keyed by
+  client/group/topic. It feeds Push Running Info status but exposes neither
+  Java's manager identity nor its public mutation methods and does not share
+  the manager through `ClientRuntime`.
+
+Updated the Phase 10 matrix to label both raw accessor surfaces `PARTIAL` and
+spell out the missing service replacement and shared mutable stats-manager
+semantics. `git diff --check` passed. No tests were run for this source-only
+review. Both rows remain open P18-V01 work.

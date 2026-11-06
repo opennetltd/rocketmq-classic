@@ -1,0 +1,13 @@
+Execution session: 2026-10-10T15:02:36Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Initial state: `c171474e` after adding nullable `RouteSnapshot` broker-address lookup entry points and the fixture-backed native regression. Java oracle and Rust behavior commits were already present; the map and requirement audit needed the final gate record.
+
+Selected slice: pin null broker-name handling for `MQClientInstance.findBrokerAddressInAdmin`, `findBrokerAddressInPublish`, and `findBrokerAddressInSubscribe`. Actual Java 5.5.1 runtime invocations with a null broker name each return null before address-table lookup. The Rust nullable entry points return `None` for `None` and delegate named broker inputs to the existing selectors. Oracle/fixture commit `8be43939`; Rust/test commit `c171474e`; `fixtures/runtime/route.json` SHA-256 `864f45911570fed18cb5768b06094be1dc1c8e50e82151014ab2210b10c9d002`.
+
+Validation: `cargo test -p rocketmq-classic-core --test runtime_lookup null_broker_address_lookups_match_invoked_java_results --locked` passed; full `cargo test --workspace --all-targets --locked` passed; strict `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` passed. Pinned offline Maven verify passed with 22 scenarios, runtime fixture checks, and Rust-to-Java cross-decodes. Comparator self-test and manifest validation passed (22 scenarios); `cargo fmt --all -- --check` and `git diff --check` passed.
+
+Documentation update: `PHASE_6_API_CONFIG_MAP.md` records the nullable counterpart methods and Java null-to-None behavior. `PHASE_6_REQUIREMENT_AUDIT.md` records the actual runtime outcomes, route fixture digest, and all gates. This closes only these null broker-name inputs; full Phase 6 reconciliation remains open and P6-V04 remains `PENDING_PHASE_19`.
+
+Documentation/log commit: pending.

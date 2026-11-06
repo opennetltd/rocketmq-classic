@@ -1,0 +1,35 @@
+# Phase 18 factory public API reverse-export correction
+
+- Recorded: 2026-10-23 10:22:57 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source revision before this change: `be92b01f`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Change
+
+- Made `MQClientApiFactory::with_top_addressing` a private, test-only seam.
+  The pinned Java factory has no public custom-provider injection method.
+- Added a compile-fail Rustdoc example for the external API boundary.
+- Updated the API map and Phase 6 requirement audit. Broad P18-V01 remains
+  partial.
+- Left the existing Phase 19 worktree files untouched and unstaged.
+
+## Verification
+
+- `cargo test -p rocketmq-classic-core --lib --locked api::factory::tests` —
+  passed, 7 tests.
+- `cargo test -p rocketmq-classic-core --doc --locked` — passed, 20 doctests,
+  including the new compile-fail API guard.
+- `cargo clippy -p rocketmq-classic-core --all-targets --all-features --locked
+  -- -D warnings` — passed.
+- `RUSTDOCFLAGS='-Z unstable-options --output-format json' cargo +nightly doc
+  --workspace --all-features --locked --no-deps` — passed. The distinct public
+  item-name counts are Common 439, Consumer 460, Core 740, Producer 362,
+  Protocol 1,524, and Remoting 337. Core count remains 740 because the same
+  method name is public on a separate mapped runtime manager type.
+- `cargo fmt --all -- --check` — passed.
+- `git diff --check` — passed.
+
+Rustdoc emitted the existing workspace-manifest and Consumer deprecation
+warnings. No Java fixture changed, so Maven was not rerun. No remote CI or push
+was run.

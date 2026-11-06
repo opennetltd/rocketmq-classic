@@ -1,0 +1,9 @@
+Phase 6 continuation, 2026-10-09. Pinned Java source remains read-only at efa1be59d6fc747ad220f036c86030f05f0419f9.
+
+Input probes: commit 1695b9f adds high-precision numeric string values in assignment attachments. Commit 8f7ad7f adds route cases for broker address values and filter-server lists, plus a consumer-list case. The Java oracle shows the plain decimal token `9223372036854775807.123456789012345678901` is preserved exactly, while exponent `1e2` is converted to `100.0`. Before the decoder change, focused route and consumer-list differentials lost the plain decimal precision through f64 conversion.
+
+Implementation: commit 428dde9 retains raw JSON tokens while decoding nullable string maps, route string-list maps, and consumer string lists. Assignment response decoding also carries raw assignment objects through to the nested attachment map. Exponent forms use the previously established Java-compatible numeric formatting. Probe/test and implementation commits remain separate.
+
+Fixture inventory: route DTO input count 79, SHA-256 7b0cc6664b6b38a6d51ab42ac889e95e458d614c86577243046e4d124d38b4ed; lookup consumer-list count 13 and assignment-attachment count 7, SHA-256 ed97d76aac400d5aabc76c05f5d309f6ba8f73a56b614320781cbcdf93f1c04f; heartbeat input count 52, SHA-256 e183f318134bd5dfa85bcbd80276c3e85c444f3ca0ebbe8231696ef2b4305db7.
+
+Validation passed: `cargo test --workspace --all-targets --locked --quiet`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`; `mvn -o -q -f compat/java-reference/pom.xml verify` (22 scenarios, deterministic fixture regeneration); and `python3 tests/differential/compare.py --self-test`. Focused protocol tests pass (75 tests). No Broker, Docker, live server, deployment, plan, or pinned Java source was modified. Phase 6 remains incomplete; P6-V04 stays PENDING_PHASE_19.

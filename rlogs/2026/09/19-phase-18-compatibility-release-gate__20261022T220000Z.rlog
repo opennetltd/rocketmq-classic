@@ -1,0 +1,24 @@
+P18-V01 all-feature Rustdoc export-count refresh —
+2026-10-22 22:00 UTC
+
+Environment: macOS AArch64, Rust nightly Rustdoc JSON. Source includes
+`c7d8b20d` and `4248ce38` on
+`phase/18-phase-18-compatibility-closure`.
+
+Command:
+`RUSTDOCFLAGS='-Z unstable-options --output-format json' cargo +nightly doc --workspace --all-features --locked --no-deps`
+
+Result: PASS. The generated product-library Rustdoc JSON has the following
+number of distinct public names after excluding each synthetic crate-root
+marker:
+- Common 439; Consumer 445; Core 682.
+- Producer 362; Protocol 1,524; Remoting 337.
+
+These counts match the previously recorded current inventory. The generated
+Remoting JSON contains no public `decode_many` or `decode_many_as_client`; the
+Java-mapped `decode_many_compatible` and `decode_many_as_client_compatible`
+remain public. Existing workspace manifest and Consumer `fetch_update` warnings
+remain. This is an export-count/scope refresh, not evidence of full Java source,
+behavior, setting, input/error, or reverse-export reconciliation. No tests or
+external CI were run for this documentation-only check. Protected Phase 19
+worktree paths remain unstaged.

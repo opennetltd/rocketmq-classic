@@ -1,0 +1,23 @@
+# Phase 18 continuation — consumer facade API name crosswalk
+Session: 2026-10-14T19:35:21Z
+Branch: `phase/19-phase-18-compatibility-release-gate`
+Java oracle: `/Users/bruce.tsai/Projects/3rd/rocketmq`, source commit `efa1be59d6fc747ad220f036c86030f05f0419f9` (read-only).
+Plan files left unchanged.
+
+Changes
+- Added `pinned_java_consumer_callable_method_names_have_phase_crosswalks` to the consumer facade API integration test. It inventories all 548 callable methods across the pinned Push, Pull, Lite Pull, and MQAdmin facades/inherited interfaces and fails when any Java method name lacks a phase-matrix crosswalk.
+- Added exact Java bean/accessor method names and Rust owner/config mapping notes to the Phase 9 Pull, Phase 10 Push, and Phase 13 Lite matrices. The pinned fixture exposed 112 unique names missing from the prior matrix text. Existing behavior evidence remains associated with the owning phase tests; the new check verifies crosswalk inventory, not input/branch behavior.
+- The selector `pullBlockIfNotFoundWithMessageSelector` sync and callback overloads are mapped to Rust's Future-returning `pull_block_with_selector`; async completion differences remain stated.
+
+Validation
+- PASS: `cargo test -p rocketmq-classic-consumer --test facade_api_surface --locked` — 2 tests.
+- PASS: `cargo fmt --all -- --check`.
+- PASS: `git diff --check`.
+- The first format check reported two formatting changes in the new test; `cargo fmt --all` applied them, and the rerun passed.
+
+Remaining
+- P18-V01 is still open for the wider Java/Rust per-overload input, error, control-flow, inherited/trait, and Rust reverse-export/configuration audit; this commit closes only the consumer callable-name crosswalk.
+- P18-V04 still lacks current-revision GitHub Ubuntu evidence for the Java address profile.
+- Phase 19 local Docker/Broker scenarios and release-version/registry-resolution checks remain outstanding. Windows, non-macOS BSD, and real IPv6-only-host runtime evidence remain platform validation items.
+
+No plan edit, Java oracle write, Broker/Docker execution, push, publication, or tag was made.

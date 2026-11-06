@@ -1,0 +1,49 @@
+2026-10-15 19:57 UTC — aligned TLS decryptor registration with pinned Java
+5.5.1 and reran the server-free P18-V02 gate.
+
+The pinned client source is `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Rust now exposes process-wide `register_decryption_strategy`, whose callback
+takes a key path and client/server role, matching Java's public nested
+`TlsHelper.DecryptionStrategy` signature. Passing `None` preserves Java's null
+registration state and makes a later key load fail. Removed per-config
+strategy injection and the extra password callback argument. The invoked Java
+fixture records the nested interface visibility, register method, callback
+signature, default strategy, observed callback values, and null-registration
+error behavior. Fixture SHA-256:
+
+- `fixtures/security/tls-settings-defaults.json`:
+  `1ef41b86ef30bb65c912889b091924c7c15390a460eaf0c74aef6bd10e539db1`
+- `fixtures/security/tls-settings-system-properties.json`:
+  `c0267cd68a2dd32cb6adb9b9bdc17d6340220928d2090d970a5223df9de8b5a7`
+
+Code/Java fixture/JSON fixture commit: `d163a143`.
+
+Validation passed on that code revision:
+
+- `cargo test --workspace --locked`
+- `cargo test --workspace --all-features --locked`
+- `cargo check --workspace --all-targets --all-features --locked`
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+- `mvn -f compat/java-reference/pom.xml verify` — 37 scenarios and fixture checks
+- `python3 tests/differential/compare.py --self-test`
+- `python3 tests/differential/compare.py --validate-manifest` — 37 scenarios
+- `bash tests/stress/run-offline-smoke.sh` — 16 race/leak cases × 3
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` —
+  105 frame seeds, 11 message seeds, 1,856 bounded mutations
+- `cargo build -p rocketmq-classic --examples --release --locked`
+- `cargo bench -p rocketmq-classic --bench offline --locked --no-run`
+- `cargo metadata --locked --format-version 1` and
+  `scripts/check-workspace-metadata.py`
+- `cargo package --workspace --list --locked --allow-dirty`; all seven package
+  listings contain LICENSE and NOTICE
+- `TZ=Asia/Taipei cargo test -p rocketmq-classic-core --lib
+  unique_id::tests::public_unique_id_helpers_match_the_pinned_java_fixture --locked`
+- `cargo fmt --all -- --check` and `git diff --check`
+
+P18-V02 passes locally for `d163a143`. P18-V01 remains open for Java
+property-file reload timing and the broad source/API/settings/overload/input/
+error/control-flow/inherited/reverse-export reconciliation. Current-revision
+GitHub Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker automation, and
+pre-publication version/registry resolution remain open. Owner-run deployment
+and live Broker checks remain Phase 19 manual validation. No push, tag,
+publication, deployment, Docker, or live Broker action occurred.

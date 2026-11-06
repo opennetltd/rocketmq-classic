@@ -1,0 +1,37 @@
+# Phase 18 MessageClientExt message-ID overrides — 2026-10-21T22:15:39Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Test revision: `5e12a174` (`test(common): cover client subtype message ID overrides`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Common message fixture SHA-256:
+`d0cdfbf2599adb0242a1df0dfa8523818a018c35cb34dac2b8418f8ce4bc972d`.
+
+## Coverage
+
+- A Java `MessageClientExt` subclass overrides `getMsgId` and `setMsgId`.
+- Its getter bypasses the base `UNIQ_KEY` lookup, including after the unique
+  property is set.
+- Its setter stores subtype-owned state for both a string and null; the
+  physical offset ID remains unchanged.
+- Rust's `MessageExtSubtype::message_id` and `set_message_id` hooks match those
+  virtual method calls.
+
+## Verification
+
+- `cargo test -p rocketmq-classic-common --test message_decode --locked` —
+  passed, 26 tests.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+  — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- Pinned `mvn -q -f compat/java-reference/pom.xml verify` — passed: 37
+  scenarios, 9 Running Info, 29 direct-consume, 15 reset cases, 85 typed
+  headers, 16 typed bodies, and Java/Rust cross-decodes. Existing JDK/Netty
+  `Unsafe` and reflective-final-field warnings were emitted.
+
+## Remaining work
+
+Broad P18-V01 source/API/settings/input/error/control-flow/reverse-export
+reconciliation remains open. The full current-revision supplemental P18-V02
+refresh and GitHub Ubuntu/native Windows P18-V04 evidence remain open. No
+remote CI, Broker, or Docker run was performed; protected Phase 19 paths remain
+unstaged.

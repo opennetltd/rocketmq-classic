@@ -1,0 +1,35 @@
+Goal: close the pinned Java 5.5.1 public `MQHelper` timestamp-reset API slice
+within Phase 18, on branch `phase/18-phase-18-compatibility-closure`.
+
+Pinned source: `efa1be59d6fc747ad220f036c86030f05f0419f9`,
+`client/src/main/java/org/apache/rocketmq/client/MQHelper.java`.
+
+Changes:
+- Added `MqHelper::reset_offset_by_timestamp` for Java's deprecated overload;
+  it selects instance `DEFAULT`.
+- Added `reset_offset_by_timestamp_with_instance`, which creates and starts a
+  Pull consumer, traverses queues in `MessageQueue`/Java `TreeSet` order,
+  searches the lower timestamp bound, applies nonnegative results, persists the
+  fetched queue set, and shuts down after the operation.
+- Re-exported `MqHelper` from the consumer crate and top-level facade.
+- Pinned both Java overloads in the consumer facade reflection fixture and
+  recorded the Rust mapping in the Phase 10 and Java 5.5.1 compatibility
+  inventories.
+
+Verification passed:
+- `cargo test -p rocketmq-classic-consumer --all-features --locked`
+  (239 unit tests, all integration targets, 13 doctests).
+- `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`
+- `cargo test -p rocketmq-classic --test facade_public_types --locked`
+- `mvn -q -f compat/java-reference/pom.xml exec:java@verify-consumer-facade-api-fixture`
+- `cargo fmt --all -- --check`
+- `git diff --check`
+
+Fixture: `fixtures/consumer/facade-api.json`, SHA-256
+`6d38837ca80e7012a35069800144888fa0980c5e2783785b7e998c1d2efa2b1c`.
+
+This closes only the MQHelper utility API slice. Broad P18-V01
+source/API/settings/input/error/flow and reverse-export reconciliation,
+current-revision P18-V02/P18-V03, and current GitHub Ubuntu/native Windows
+P18-V04 evidence remain open. No CI, Broker, Docker, registry or release action
+was taken. Phase 19 working-tree files were left unstaged and unchanged.

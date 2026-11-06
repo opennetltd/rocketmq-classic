@@ -1,0 +1,77 @@
+# P18-V01 Remoting ProcessTimer identity follow-up — 2026-10-17T14:49:35Z
+
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Java oracle: RocketMQ client 5.5.1 commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; inspected read-only.
+- Pinned Java `RemotingCommand.getProcessTimer()` exposes Guava `Stopwatch`,
+  whose equality and hash code are inherited from `java.lang.Object`. The
+  invoked fixture records equal stopped state, same-object getter behavior,
+  distinct-instance inequality, and two entries in a `HashSet`.
+- Rust `ProcessTimer` no longer implements structural `PartialEq`/`Eq`. Added
+  a compile-fail rustdoc assertion and used pointer identity in the getter
+  identity test. Fixture SHA-256:
+  `2680e925aa7c21cd5f2f5ea8055ee986bec5fc174601c612cb8ae469481d2cf0`.
+- Code/test/fixture commit: `4858ebdd fix(remoting): align process timer
+  identity semantics`.
+
+## Verification
+
+- `cargo test -p rocketmq-classic-remoting --all-features --locked` in
+  `rust:1.85.0-bookworm` with `docker run --init`: PASS.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings` in the same Linux container: PASS. The offline
+  attempt first reported a missing cached `yaml_serde`; retrying online fetched
+  the missing package and completed.
+- `mvn -f compat/java-reference/pom.xml verify`: PASS; fixture drift
+  checks, all 37 scenarios, and Java/Rust cross-decodes completed.
+- `cargo fmt --all -- --check` and `git diff --check`: PASS.
+- `cargo test --workspace --all-features --locked` on macOS did not complete:
+  Rust compiler processes remained without CPU activity or new output for more
+  than eight minutes. The command was interrupted (exit 130) and is not counted
+  as a pass. The current-revision workspace P18-V02 rerun remains open.
+
+## Remaining work
+
+- Broad P18-V01 bidirectional source/API/settings/input/error/flow and
+  reverse-export reconciliation remains open.
+- Current-revision GitHub Ubuntu/native Windows evidence for P18-V04 remains
+  open.
+- Phase 19 local Docker/Broker automation and the remaining 30 Broker/Docker
+  scenarios, including multi-Broker/TLS/ACL profiles, remain automatic work.
+- Release version and registry dependency-resolution checks remain open.
+- Owner-only final manual validation remains a separate handoff. No plan files
+  were changed; no push, tag, publication, Broker operation, or deployment
+  occurred.
+
+## Current-revision server-free gate and Linux jstack follow-up — 2026-10-17
+
+- The first default workspace test run on the ProcessTimer revision exposed
+  `No such process` from Linux `/proc/self/task` iteration during concurrent
+  stack capture. Fixed transient disappeared-task handling in
+  `crates/rocketmq-classic-consumer/src/stack.rs`; unrelated I/O errors still
+  propagate. Code commit: `ac0a16f3 fix(consumer): ignore transient task exit
+  in jstack`.
+- The focused disappearing-task classification test and concurrent jstack
+  capture regression pass. Default and all-feature workspace tests pass on
+  Rust 1.85.0 in Linux ARM64 Docker with `--init`; all-target/all-feature
+  workspace Clippy, host format check, and diff check pass.
+- `mvn -f compat/java-reference/pom.xml verify` passes fixture drift checks,
+  37 scenarios, and Java/Rust cross-decodes. Comparator self-test and manifest
+  validation pass (37 cases). Race/leak smoke passes 16 cases × 3; fuzz smoke
+  passes 105 frame seeds, 11 message seeds, 1,856 mutations, 146 frame decodes,
+  and 113 message decodes.
+- Release examples build; the offline benchmark runs on Linux AArch64 with
+  Rust 1.85.0. Observations: frame encode/decode 1,239.7 ns/iteration and
+  4,676 bytes/iteration; Zstandard message decode 707.3 ns and 197,493 bytes;
+  Producer send construction 811.1 ns and 3,665 bytes; 128-entry route lookup
+  13.0 ns and zero bytes; pending completion 5,504.8 ns and 9,442 bytes.
+- Locked Cargo metadata, `scripts/check-workspace-metadata.py`, seven package
+  file listings with `LICENSE`/`NOTICE`, and the four `TZ=Asia/Taipei` Unique
+  ID tests pass. The complete local P18-V02 server-free gate is closed on
+  `ac0a16f3`.
+- Broad P18-V01 remains PARTIAL. Current-revision GitHub Ubuntu/native Windows
+  evidence for P18-V04, 30 Phase 19 local Docker/Broker scenarios and required
+  multi-Broker/TLS/ACL profiles, and release version/registry checks remain
+  open. The macOS workspace run remained stalled and is not counted; the
+  successful Linux ARM64 container runs provide the workspace evidence.

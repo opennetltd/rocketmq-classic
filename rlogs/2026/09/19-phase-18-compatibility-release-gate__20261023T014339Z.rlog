@@ -1,0 +1,25 @@
+# Phase 18 current server-free gates — 2026-10-23T01:43:39Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `533d9713`
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Validation
+
+- `cargo test --offline --workspace --locked` passed.
+- `cargo test --offline --workspace --all-features --locked` passed.
+- Strict all-target/all-feature workspace Clippy passed.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+- Full offline Maven `verify` passed, including 37 differential scenarios,
+  106 Java-decoded typed headers, 19 Java-decoded typed bodies, and the updated
+  Consumer facade and expired-message fixture checks.
+- The exact 32-method ProcessQueue mapping regression passed in both workspace
+  suites.
+
+The current Consumer null-input/removal behavior and ProcessQueue method
+crosswalk pass these local gates. Fuzz, race/leak, release-example, and offline
+benchmark results are recorded at `c3b53fcb` and were not rerun here. Broad
+P18-V01 Java source/API/settings/input/error/control-flow and Rust
+reverse-export reconciliation remains PARTIAL. Current-revision remote Ubuntu
+CI, native Windows runtime execution, and Phase 19 Broker/Docker evidence remain
+open.

@@ -1,0 +1,35 @@
+# Recorded: 2026-10-23 01:22:03 UTC
+# Code revision: bb167942
+
+## Oracle finding
+
+Pinned Java `ProcessQueue.removeMessage(null)` updates
+`lastConsumeTimestamp`, computes `queueOffsetMax + 1` for a nonempty ready map,
+then catches the null-list exception. The queue entries and count/size values
+remain unchanged. Rust now exposes `remove_message_nullable`; `None` updates the
+consume timestamp and returns the current next offset without modifying the
+queue.
+
+The invoked Java facade fixture and Rust comparison check next offset,
+timestamp update, count, size, and tree. Fixture SHA-256:
+`357c266f6bea2c4df5b066d334b75b28314202d1d198a34bd270115345b9096f`.
+
+## Commits
+
+- `bb167942 fix(consumer): match null ProcessQueue removal`.
+- Compatibility/API audit records and this execution log are in the following
+docs-only commit.
+
+## Validation on code revision bb167942
+
+- Focused `process_queue_public_methods_match_pinned_java_behavior` facade test — PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml exec:java@verify-consumer-facade-api-fixture` — PASS.
+- Strict Consumer all-target/all-feature Clippy — PASS.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+
+## Remaining Phase 18 status
+
+Broad P18-V01 Java source/API/settings/input/error/control-flow and Rust
+reverse-export reconciliation remains PARTIAL. Thirty live handoff scenarios
+remain `PENDING_PHASE_19`; current-revision remote Ubuntu CI, native Windows
+runtime, and Phase 19 Broker/Docker evidence remain open.

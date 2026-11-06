@@ -1,0 +1,37 @@
+Phase 18 CheckForbidden hook retry parity — 2026-10-14 11:35 UTC
+
+Scope
+- Continued the active P18 compatibility pass on branch `phase/19-phase-18-compatibility-release-gate`, based on `3695b821`.
+- Java oracle remains pinned to RocketMQ client 5.5.1 source commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- No plan files or Java oracle checkout were modified.
+
+Implementation and evidence
+- Added an invoked Java `checkForbiddenRetry` case: one configured sync retry produces two CheckForbidden calls, no send-hook calls, and a final `MQClientException` with response code 10003 and the two-attempt message.
+- Updated the Java fixture helper to share the same routed Producer setup between retry cases. Fixture SHA-256: `ec20ff084ee066fc71de15e9d744bc091aaced07d1038a8389f12a79d5985b08`.
+- Default-route sync send now retries a CheckForbidden hook error only when another attempt remains and the overall send deadline has not expired. The original error is returned when retries are exhausted. Explicit/direct and future paths continue to use their single-attempt/mode-specific flow.
+- Added `default_sync_send_retries_check_forbidden_hook_errors_like_java`, which compares the Java fixture, retry count, preserved Rust error, and absence of scripted RPC attempts. Updated Phase 6 audit, Phase 7 Producer matrix, and release checklist.
+
+Validation
+- PASS: focused CheckForbidden retry and two per-request timeout regressions.
+- PASS: `cargo test -p rocketmq-classic-producer --locked` (135 unit tests, 55 integration tests, doc target); strict Producer Clippy.
+- PASS: sequential `cargo test --workspace --locked --quiet` and `cargo test --workspace --all-features --locked --quiet`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, fixture drift and cross-decodes).
+- PASS: comparator self-test and 37-scenario manifest validation.
+- PASS: offline deterministic race/leak smoke (16 cases × 3); fuzz smoke (104 frame seeds, 10 message seeds, 1,824 mutations).
+- PASS: release examples build, offline benchmark compilation, Cargo metadata, and workspace metadata checks.
+
+Commits
+- `776bd95e` — Java oracle and fixture.
+- `601953a2` — Rust implementation and regression.
+- `5383e392` — compatibility docs and release checklist.
+- The execution log is recorded separately.
+
+Remaining work (not final owner manual validation)
+- P18-V01 remains PARTIAL: broad Java/Rust per-overload input, error, control-flow, inherited/trait, and reverse-export reconciliation is still open.
+- No current-revision GitHub Ubuntu CI result exists for the Linux-specific address profile.
+- Phase 19's local automated Docker/Broker environment and complete live scenario matrix have not been implemented or run; no `integration-tests/run-local.sh` exists.
+- Release preflight still needs confirmation of the intended `0.1.0` version set and registry dependency resolution; packages remain unpublished.
+- Production topology, organization credentials/CA, production-specific failover, capacity/soak, and other genuinely non-local checks remain owner manual items for final validation.
+
+Final tree at log creation: `5383e392`; working tree clean before adding this log.

@@ -1,0 +1,7 @@
+# Phase 6 execution log — 2026-10-09T14:07:23Z
+
+- Continued heartbeat DTO input reconciliation on `07-phase-06-runtime-routing-heartbeat`.
+- Added 28 direct Java Fastjson 2.0.63 observations: empty object, null, empty/singleton array, number, Boolean, and string roots for `SubscriptionData`, `ProducerData`, `ConsumerData`, and `HeartbeatData`. Java accepts empty object and JSON null (returning a null value); arrays and scalar roots reject with `JSONException`.
+- Expanded `heartbeat_dto_inputs_match_invoked_java_fastjson` from 213 to 241 cases. Native `Option<T>` decoding and `HeartbeatData::java_from_json_nullable` match. The empty SubscriptionData comparison removes its wall-clock `subVersion`; the oracle fixture generator also omits that field for this single case to keep bytes deterministic. No production behavior changed. Fixture SHA-256: `385fc38890b6f18fc9ea74a4a4d2a47f52c27bae5ffc7851064c594cef426803`.
+- Validation passed: focused heartbeat differential; full `cargo test --workspace --all-targets --locked`; strict all-target/all-feature Clippy; pinned offline Maven verify (22 scenarios and fixture drift/cross-decodes); comparator self-test and manifest22; formatter and diff checks.
+- Updated ADR-0015, heartbeat/API compatibility evidence, runtime inventory, and the Phase 6 requirement audit. No plan files changed. Broader DTO/method/source/reverse-export reconciliation remains open; P6-V04 stays `PENDING_PHASE_19`.

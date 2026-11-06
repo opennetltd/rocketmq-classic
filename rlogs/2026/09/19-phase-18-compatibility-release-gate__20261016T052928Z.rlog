@@ -1,0 +1,16 @@
+P18-V01 Remoting channel no-deadline write follow-up (2026-10-16)
+
+- Rechecked pinned Java 5.5.1 source at `efa1be59d6fc747ad220f036c86030f05f0419f9`: `NettyRequestProcessor.processRequest` and `RequestPipeline.execute` receive `ChannelHandlerContext`; channel writes use `Channel.writeAndFlush` and return local completion futures without an operation deadline.
+- Identified that public Rust `ChannelHandle` only offered deadline-bound writes; the no-deadline path existed only via `RequestContext`. Added `ChannelHandle::write_and_flush_without_deadline` and routed `RequestContext::write_and_flush` through it.
+- Added loopback coverage for both deadline-bound and no-deadline channel writes and local future completion. Added request-context assertions for open/active/writable state and close semantics; the context pipeline test verifies its no-deadline write future resolves successfully.
+- Code commit: `0b873da1` (`feat(remoting): add no-deadline channel writes`). Prior test-only follow-up: `102cce40` (`test(remoting): verify request context channel operations`).
+- Passed: `cargo test -p rocketmq-classic-remoting --all-features p18_channel_handle_writes_commands_and_closes_its_connection`; `cargo test -p rocketmq-classic-remoting --all-features request_context`; `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- Updated the Remoting inventory, Java compatibility summary, ADR, and release checklist. No plan files or Java reference files were changed.
+- Remaining: generic Netty handler-context method disposition and broad P18-V01 audit; final-revision full-workspace P18-V02 gates; current-revision GitHub Ubuntu/P18-V04 evidence; Phase 19 local Docker/Broker automation; pre-publication version/registry resolution.
+
+Reverse API mapping follow-up (2026-10-16 05:32 UTC)
+
+- Updated the Remoting reverse-export inventory to record `ChannelHandle::write_and_flush_without_deadline` as the Rust-shaped mapping for Java `Channel.writeAndFlush(RemotingCommand)`; retained the deadline-bound Rust write as an explicit adapter. Updated ResponseFuture, callback, and request-context rows with the public API and test IDs.
+- Corrected the stale event-handler row that described channel events as address-only; it now cites shared handle identity and the channel-operation loopback tests.
+- Rechecked the exact pinned `NettyRemotingAbstract.writeResponse` source: it calls `channel.writeAndFlush(response)` and observes its `ChannelFuture` result without an operation deadline.
+- Broader P18-V01 remains open for generic Netty method disposition and the cross-crate API/settings/flow reverse audit.

@@ -1,0 +1,13 @@
+# Phase 18 current-revision release gates — 2026-10-13T16:53:55Z
+
+- Revision: `95e1fad8` (`feat(consumer): expose owned push task scheduling`), branch `phase/19-phase-18-compatibility-release-gate`.
+- PASS: `cargo test --workspace --all-features --locked`; prior same-revision default workspace tests and Maven verify (37 scenarios, fixture drift, Java cross-decodes) are recorded in the 16:47 continuation log.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- PASS: `python3 tests/differential/compare.py --self-test`; `--validate-manifest` (37 scenarios).
+- PASS: `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` — 104 frame seeds, 10 message seeds, 1,824 bounded mutations, 144 frame decodes, 107 message decodes.
+- PASS: `bash tests/stress/run-offline-smoke.sh` — all 16 deterministic race/leak cases passed 3 repetitions each.
+- PASS: `cargo build -p rocketmq-classic --examples --release --locked`.
+- PASS: `python3 scripts/check-workspace-metadata.py`; `cargo metadata --format-version 1 --no-deps --locked`.
+- PASS: `cargo bench -p rocketmq-classic --bench offline --locked` on macOS AArch64, Apple M5 Max (18 logical CPUs), rustc 1.85.0. Fixed-input observations: Remoting encode/decode 427 B, 20,000 iterations, 1,854.5 ns/op, 39 allocation calls and 4,612 B/op; Zstd message decode 146 B, 10,000 iterations, 1,237.6 ns/op, 20 calls and 197,407 B/op; send construction 512 B, 20,000 iterations, 966.7 ns/op, 43 calls and 3,247 B/op; route lookup with 128 entries, 100,000 iterations, 14.3 ns/op, zero allocations; local-TCP pending completion 128 B, 500 iterations, 66,048.8 ns/op, 77 calls and 9,234 B/op. One run is an observation, not a threshold or stable comparison.
+- Outstanding non-Phase-19 closure items: the broad Phase 6 Java source/API/input and Rust reverse-export behavior audit is still `PARTIAL`; a current Ubuntu CI result has not been obtained; release versions and registry-resolvable dependency requirements remain undecided pending release preparation. Windows/BSD runtime enumeration and a real IPv6-only host also lack evidence per `docs/compatibility/PHASE_6_REQUIREMENT_AUDIT.md`.
+- Phase 19 Broker/Docker scenarios remain pending and are tracked separately in the scenario manifest; no Docker or live Broker was used in this run.

@@ -1,0 +1,303 @@
+# Phase 6 execution log — 2026-10-10T04:31:05Z
+
+## Session start and authoritative state
+
+- Objective remains full Phase 6 completion on the existing phase branch, with one branch per phase and independently committed changes.
+- Current branch `07-phase-06-runtime-routing-heartbeat`; worktree clean at `f908130d` with the prior heartbeat Set alias code/docs commits present.
+- Re-read both Phase 6 plans, the `coding-general` workflow, execution index, and current requirement/API audit. P6-V01/V02/V03/U01 have unit gates, P6-V04 correctly remains `PENDING_PHASE_19`; full public API/config/source/input/reverse-export reconciliation still explicitly blocks Phase 6 acceptance.
+- The requested Java checkout `/Users/nanashi07/Projects/3rd/rocketmq` is absent in this environment. The repository-pinned 5.5.1 Maven artifacts and invoked Java fixture remain available; preserve that provenance and do not claim checkout-based source inspection.
+- A concrete API audit candidate is mutable reference aliasing in route DTO collection fields. The existing route fixture invokes getters/setters by value but currently records no identity/mutation checks for `TopicQueueMappingInfo.currIdMap` and other route collections. Inspect pinned Java behavior first, then correct native API if confirmed.
+
+## Current work
+
+- No Phase 6 acceptance claim. Continue to append commands/results, findings, and independently committed code/documentation checkpoints in this file.
+
+## Route DTO alias evidence
+
+- The pinned Java artifact's public APIs expose `BrokerData.setBrokerAddrs/getBrokerAddrs` and `TopicQueueMappingInfo.setCurrIdMap/getCurrIdMap`. New direct invoked cases establish both setter-to-getter identity, stable getter identity, caller-side mutation visibility, and getter-side mutation visibility for each mutable map.
+- Added `routeDtoReferenceAliases` to `RuntimeRouteFixtures` and regenerated `fixtures/runtime/route.json`; SHA-256 is `bf3ce0cb617989cf7e331dabfd738b8fc5a650cdc4b36037eae30f8add8960d3`.
+- Pinned Java compile and direct fixture regeneration passed. The explicit `--verify` route-fixture invocation passed. Maven's default RocketMQ log target was initially outside the writable roots; reran with `-Drocketmq.log.root=/private/tmp/p6-rocketmq-logs`, and subsequent Java invocations used that writable target.
+- These source-backed cases reveal two mutable route-map API alias gaps in native route DTOs; implementation and Rust regression coverage are next. This is not a full route DTO alias audit or Phase 6 completion.
+
+## Route DTO alias implementation and validation
+
+- Implemented in `65cdabce` (`Preserve route DTO map aliases`) on `07-phase-06-runtime-routing-heartbeat`. `BrokerData.broker_addrs` and `TopicQueueMappingInfo.curr_id_map` now use `SharedValue` map handles; named getters/setters preserve caller/getter identity, while `_owned` setters retain an owned-map path. DTO clone remains deep and equality remains content-based. Runtime route cache and DTO consumers were adapted to shared map reads/snapshots.
+- Java oracle commit `eaccafe0`; direct `RuntimeRouteFixtures` verification confirms setter retention, stable getter identity, and caller/getter mutation in both directions for both map fields. `fixtures/runtime/route.json` SHA-256: `bf3ce0cb617989cf7e331dabfd738b8fc5a650cdc4b36037eae30f8add8960d3`.
+- `cargo test --workspace --all-targets --locked`: passed (including runtime lookup loopback tests); run with reviewed network/socket permission after the sandbox-only run denied bind access.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`: passed.
+- `mvn -o -q -Dmaven.repo.local=/private/tmp/p6-maven-repository -Drocketmq.log.root=/private/tmp/p6-rocketmq-logs -f compat/java-reference/pom.xml verify`: initial sandbox run reached and verified the updated route fixture but the config fixture then returned `Operation not permitted`; rerun with reviewed permission completed exit 0, verified all runtime fixtures and 22 scenarios, and Java cross-decoded Rust-generated fixtures.
+- `python3 tests/differential/compare.py --self-test` and `--validate-manifest`: passed; manifest retains 22 scenarios and P6-V04 as `PENDING_PHASE_19`.
+- `cargo fmt --all -- --check` and `git diff --check`: passed after implementation and audit edits.
+- Added ADR-0075 and updated the route/API/requirement audits. Only the two map alias findings close here; full Phase 6 method/field/branch/reverse-export reconciliation remains open, the general matrix is PARTIAL, and P6-V04 remains `PENDING_PHASE_19`.
+- The requested source checkout `/Users/nanashi07/Projects/3rd/rocketmq` remains absent; Java evidence continues to come from the locally cached pinned 5.5.1 artifacts and direct invocations.
+
+## TopicRouteData collection alias oracle
+
+- The existing route DTO accessor fixture compared collection values after setter/getter calls but did not test collection or nested-object identity. Extended `RuntimeRouteFixtures.routeDtoReferenceAliasCases` to exercise Java `TopicRouteData.setQueueDatas/getQueueDatas`, `setBrokerDatas/getBrokerDatas`, `setFilterServerTable/getFilterServerTable`, and `setTopicQueueMappingByBroker/getTopicQueueMappingByBroker` directly.
+- All recorded identity and mutation effects are true: queue/broker list identity and element identity; filter map and nested filter-list identity; mapping map and mapping-object identity; stable getter identity; caller-side and getter-side container mutations; and nested DTO/list mutations visible through caller-held values.
+- Pinned Java compile and direct route-fixture generation plus explicit `--verify` pass. Updated `fixtures/runtime/route.json` SHA-256: `960d8c5d82cefa1a4dc0eeddfee74693ea64e2d7ac679f396e06a20c3dfadd4b`.
+- Rust parity has not yet been changed or validated for these four `TopicRouteData` collections. Continue from this oracle; the previous `BrokerData.brokerAddrs` and `TopicQueueMappingInfo.currIdMap` alias correction remains independently committed.
+
+## TopicRouteData collection alias implementation and validation
+
+- Implemented the four `TopicRouteData` collection alias corrections in `45b8a5fc` (`Preserve TopicRouteData collection aliases`): queue/broker list elements, filter-server nested lists, and mapping DTO values now preserve Java-style identity through shared handles. DTO `Clone` remains deep; cache/conversion read paths take owned snapshots.
+- Direct pinned Java oracle is `e47f4517`; `routeDtoReferenceAliasCases` verifies setter/getter identity and caller/getter mutation visibility for each collection and nested value. Updated `fixtures/runtime/route.json` SHA-256: `960d8c5d82cefa1a4dc0eeddfee74693ea64e2d7ac679f396e06a20c3dfadd4b`.
+- `cargo test --workspace --all-targets --locked`: passed, including core/protocol integration cases and loopback suites.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`: passed after replacing two boolean `assert_eq!` calls with `assert!`.
+- Pinned offline Maven `verify` initially passed the route fixture then failed at the config fixture with sandbox `Operation not permitted`. The same command with reviewed escalation completed successfully: 22 scenarios verified; invoked route/VIP fixture cases and Java cross-decodes passed, including 38 P4 headers and 14 typed body fixtures.
+- `python3 tests/differential/compare.py --self-test` and `--validate-manifest`: passed; manifest validated 22 scenarios. `cargo fmt --all -- --check` and `git diff --check`: passed.
+- Added ADR-0076 and updated route/API/requirement audits. `TopicSnapshot.route` receives a deep copy detached from raw DTO aliases, but nested shared handles are locally mutable; documentation now calls out that callers should treat it as a value snapshot and not mutate route handles after publication.
+- The Java source checkout `/Users/nanashi07/Projects/3rd/rocketmq` remains absent; evidence is from locally cached pinned 5.5.1 artifacts and actual fixture invocations. This correction closes only these four alias rows. Full Phase 6 API/config/source/input/reverse-export reconciliation is still open, the audit remains PARTIAL, and P6-V04 remains `PENDING_PHASE_19`.
+
+## TopicRouteData raw-to-published alias implementation and validation
+
+- Added actual Java runtime fixture cases in oracle commit `827f6510`. On an unstarted runtime, a successful route refresh leaves separate outer queue, broker, mapping, and filter containers in the API input, raw route table, and published route DTO, while the nested QueueData/BrokerData rows and filter-server lists retain identity across those copies. Current `fixtures/runtime/route.json` SHA-256: `d01c51ec40fdcf96931dd0191271a2b23fc396ec00f18f949aa629e678172e2b`.
+- The Rust cache now inserts `TopicRouteDataHandle::new(topic_snapshot.route.java_copy_constructed())` (`a87e3726`), preserving the same outer-container separation and nested shared handles observed from Java. The native regression `accepted_empty_route_keeps_route_presence_separate_from_publish_queue_ok` asserts the API/raw/published `ptr_eq` relationships; `TopicRouteData::Clone` remains a deep value clone.
+- Validation passed: full `cargo test --workspace --all-targets --locked` with reviewed loopback access; strict all-target/all-feature Clippy; pinned offline Maven verify (22 scenarios and Java cross-decodes); comparator self-test and manifest validation (22 scenarios); `cargo fmt --all -- --check`; and `git diff --check`.
+- Updated ADR-0077 and the API, route, and requirement audits with the runtime oracle and corrected historical wording about nested values and publication snapshots. Route collection ADR-0076 points to the current fixture hash.
+- The Java checkout `/Users/nanashi07/Projects/3rd/rocketmq` remains absent; evidence comes from locally cached pinned 5.5.1 artifacts and direct fixture invocations. These route alias rows are closed only; the Phase 6 matrix remains PARTIAL and P6-V04 remains `PENDING_PHASE_19`.
+- A broader route-audit reread found the earlier blanket “immutable publication” wording still conflicted with the new nested alias oracle. Updated it to distinguish coherent Arc-level generation replacement/no partial cache publication from intentionally shared mutable nested Java DTO handles.
+- Marked the earlier collection-alias fixture digest as historical in the route and requirement audits; `d01c51ec40fdcf96931dd0191271a2b23fc396ec00f18f949aa629e678172e2b` is the current whole-file route fixture digest.
+
+## ConcurrentMap entry `setValue` oracle
+
+- Extended `RuntimeRouteFixtures.runtimeTopicRouteTable` to invoke `Map.Entry.setValue` on entries obtained from the real Java route table. All six outcomes are true: return the captured previous value, update the entry's own value, update the table, retain the entry's value after a separate map replacement, return that entry-local captured value on a second set, and overwrite the current mapping unconditionally.
+- Regenerated `fixtures/runtime/route.json`; whole-file SHA-256 is `35027b576c05eb456edd937f8475c121923c012c8297777a27e9657fbed3b116`. Pinned offline Java `compile exec:java` generation and `--verify` both pass.
+- The existing `retained_raw_topic_table_matches_invoked_java_primitives_and_cached_queries` Rust differential now fails on exactly the six newly added Java outcomes because the native entry-set API has no entry value replacement representation yet. Other recorded raw table outcomes remain true.
+
+## Raw route map `Map.Entry.setValue` implementation and validation
+
+- Implemented `TopicRouteEntryHandle` and `TopicRouteEntrySetView::entry_snapshots()` in `7832c140`. Each detached entry keeps its captured value; `set_value()` replaces that capture, writes to the backing `TopicRouteTable`, and returns the value captured before the call, matching pinned `ConcurrentHashMap.MapEntry` behavior. Replacing the table mapping elsewhere does not refresh existing entry snapshots.
+- The native differential now covers all six direct Java outcomes and passes. Before implementation it failed to compile on the missing `entry_snapshots()` API and, with only the oracle fixture updated, the prior exact-map comparison showed those six outcomes missing.
+- Validation passed: focused route-table regression; full `cargo test --workspace --all-targets --locked` with reviewed loopback access; strict all-target/all-feature Clippy; pinned offline Maven verify (22 scenarios, Java cross-decodes 38 headers and 14 bodies); comparator self-test and manifest validation (22 scenarios); `cargo fmt --all -- --check`; and `git diff --check`.
+- Added ADR-0078 and updated the route/API/requirement audits. Current `fixtures/runtime/route.json` SHA-256: `35027b576c05eb456edd937f8475c121923c012c8297777a27e9657fbed3b116`.
+- This closes the invoked `Map.Entry.setValue` cases for `MQClientInstance.getTopicRouteTable()` only. The wider Phase 6 API/input/reverse-export reconciliation remains PARTIAL and P6-V04 remains `PENDING_PHASE_19`.
+
+## Registry and manager entry `setValue` oracles
+
+- Extended `RuntimeConfigFixtures` for `MQClientInstance.getProducerTable()`, `getConsumerTable()`, and `MQClientManager.getFactoryTable()`. Each direct Java `ConcurrentHashMap` case confirms the same six `Map.Entry.setValue` outcomes as the route table, including stale entry capture after independent replacement.
+- Pinned offline Java `compile exec:java` generation passed with reviewed local socket access. `fixtures/runtime/client-config.json` SHA-256 is `172bf979f0f0aa5ee715c52064ebb6c90740d04fb4aa2b5d43eaab3c5d0437f6`.
+- Native registry and manager entry-snapshot APIs and focused regressions are next; these Java map surfaces currently have put/replace behavior but do not expose entry snapshot handles.
+- Implemented `ProducerEntryHandle`, `ConsumerEntryHandle`, and `FactoryEntryHandle` with entry-local captured values and backing-table `set_value`; focused registry and factory-table differential tests pass. Implementation commit: `eca1d066` (`Match runtime map entry setValue semantics`). The first compile found the factory-table key requires `&str`; the borrow was corrected before the focused tests passed.
+- Full verification passed after the implementation: `cargo test --workspace --all-targets --locked` with reviewed loopback access; strict `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; pinned offline Maven verify (22 scenarios, Java cross-decoded 38 headers and 14 typed bodies); differential comparator self-test; manifest validation (22 scenarios); `cargo fmt --all -- --check`; and `git diff --check`.
+- Added ADR-0079 and updated the Phase 6 API map, requirement audit, runtime inventory, and this append-only log. Docs/log commit is separate. The API-entry cases for these three maps are closed; broader Phase 6 source/API/input/reverse-export reconciliation remains active, and P6-V04 remains `PENDING_PHASE_19`.
+
+## Async entry replacement cancellation correction
+
+- The follow-up audit found that the first Rust implementation updated an entry's cached value before awaiting its live registry-table write. In `running_table_writes_wait_for_unregister_and_cancelled_queue_writes_do_not_commit`, the new assertion reproduced the inconsistency: canceling a `set_value` blocked behind unregister left the backing mapping unchanged but changed the retained entry snapshot.
+- Updated producer, consumer, and factory entry handles to serialize calls through cloned handles, await the live-table write, and only then publish the new cached entry value. The cancellation regression is green; a subsequent successful call returns the original captured value, updates the entry, and replaces the mapping.
+- Follow-up implementation commit: `cb42bee3` (`Keep async entry updates cancellation safe`). The scoped API audit remains in the separate docs commit `2e002baa` and was amended for this cancellation result.
+- Reverification passed: full `cargo test --workspace --all-targets --locked` with reviewed loopback access; strict all-target/all-feature Clippy; pinned offline Maven verify (22 scenarios; 38 Java-decoded headers and 14 typed bodies); comparator self-test; manifest validation (22 scenarios); formatting; and `git diff --check`.
+- Phase 6 source/API/input/reverse-export reconciliation remains active. P6-V04 remains `PENDING_PHASE_19`.
+
+## Route audit consistency pass
+
+- Updated the route audit summary row to use the current 65-outcome raw-table oracle (including `Map.Entry.setValue`) and narrowed a stale generic "enum/model fields" statement to the verified remaining route gap: uninvoked malformed input combinations and source branches. No implementation or fixture changed; P6-V04 remains `PENDING_PHASE_19`.
+
+## Route outer-collection interaction matrix
+
+- Added `runtimeRouteCollectionMatrix` to the pinned Java `RuntimeRouteFixtures`: all 4^4 combinations of absent, null, empty, and populated `queueDatas`, `brokerDatas`, `filterServerTable`, and `topicQueueMappingByBroker`, each invoked through an unstarted real `MQClientInstance.updateTopicRouteInfoFromNameServer`. All 256 calls succeed and record changed/cached status plus normalized cached collection sizes. Oracle commit: `9ddbacaf`; `fixtures/runtime/route.json` SHA-256: `50a6a0220141c81a78fa3fdd67d0ad328c97e38c260dea1680cc2953cf60ebd3`.
+- Added `route_collection_state_product_matches_invoked_unstarted_java` in `route/cache.rs`; it checks all 256 outcomes and collection sizes. Focused differential passes. Native regression commit: `9630f66e`.
+- Full verification passed: `cargo test --workspace --all-targets --locked` with reviewed loopback access; strict workspace/all-target/all-feature Clippy; pinned offline Maven verify (22 scenarios; 38 Java-decoded headers and 14 typed bodies); comparator self-test; manifest validation (22 scenarios); formatting; and `git diff --check`.
+- Updated the route/API/requirement audits and ADR-0078's current whole-file hash reference. This closes the four outer-collection state combinations for runtime publication; nested malformed combinations and full Phase 6 source/API/input/reverse-export reconciliation remain open. P6-V04 remains `PENDING_PHASE_19`.
+
+## Route nested collection interaction oracle
+
+- Added `runtimeRouteNestedCollectionMatrix` to the pinned Java `RuntimeRouteFixtures`, invoking real unstarted `MQClientInstance.updateTopicRouteInfoFromNameServer` across all 16 combinations of populated or null nested values in `queueDatas`, `brokerDatas`, `filterServerTable`, and `topicQueueMappingByBroker`.
+- Java accepts null queue rows in ordinary/static route conversions, null filter lists, and null mapping values; null BrokerData rows fail before cache publication. Interactions are recorded with changed/cached state and all four cached collection sizes. Fixture SHA-256: `3ad583764e466bcfe1f827aad49a9e3207a1465f3adb44e7edaa48211b578fad`.
+- Generated with pinned offline Maven Java 5.5.1. The first `exec:java` invocation targeted the wrong entrypoint and was corrected to use `runtime-route-fixtures`; the generator then completed all runtime cases. Rust differential and full verification remain pending.
+
+## Route nested collection oracle correction
+
+- The first oracle fixture pass omitted map entries whose values were null because Fastjson serialization lacked `WriteMapNullValue`; its apparent acceptance of null mapping values was not valid evidence. Added that feature and regenerated the fixture. Current `route.json` SHA-256: `cde0010fa221bc97e11da23b872abe671fa96b4dfd610e75ec85796584901d49`.
+- Correct Java outcomes: null BrokerData rows and null static mapping values fail without publication; null filter lists publish; null QueueData rows publish in the cases with a valid static mapping. The corrected 16-case native differential passes all outcomes and four cached sizes. No production change was required.
+
+## Route nested collection native differential
+
+- Added `route_nested_collection_state_product_matches_invoked_unstarted_java` in `route/cache.rs` against all 16 corrected Java cases. It compares success/failure, changed state, raw cache publication, and all four cached collection sizes. The focused Rust test passes; no production conversion change was needed. Formatting and `git diff --check` pass. Full local gates remain pending.
+
+## Route nested collection validation
+
+- Full local gates passed after the corrected oracle and native differential: `cargo test --workspace --all-targets --locked` (with reviewed loopback access); strict all-target/all-feature Clippy; pinned offline Maven verify (22 scenarios, 38 Java-decoded headers and 14 typed bodies); comparator self-test; manifest validation (22 scenarios); fmt and diff checks. The sandboxed Maven run stopped at RocketMQ's configured external log path; the reviewed local filesystem rerun passed.
+
+## Route nested collection audit documentation
+
+- Updated the route branch audit, P6-05 requirement row, route DTO API/input row, and ADR-0078 with the corrected current `route.json` hash and the 16-case nested-value matrix. The audit keeps broader malformed route/source/API/input reconciliation open and leaves P6-V04 `PENDING_PHASE_19`.
+- Documentation review and `git diff --check` pass.
+
+## Route collection outer/nested state product
+
+- Expanded `runtimeRouteNestedCollectionMatrix` to the complete 5^4 product for `queueDatas`, `brokerDatas`, `filterServerTable`, and `topicQueueMappingByBroker`: absent, explicit null, empty, populated, or the field-appropriate null nested element/value. The pinned Java runtime produced 625 outcomes: 210 successful publications and 415 `NullPointerException` failures without cache publication. Fixture SHA-256: `0039e6b09608894bd1d0d6f4d9192ad58539bc73f3f4c88701510a9130c373f5`.
+- Expanded the Rust differential to all 625 cases. Focused test passes, comparing publication outcome, changed state, cache state, and all collection sizes. Full gates remain pending for this expansion.
+
+## Route collection nested product validation
+
+- Expanded 625-case native differential passes within `cargo test --workspace --all-targets --locked` with reviewed loopback access. Strict workspace/all-target/all-feature Clippy passes. Pinned offline Maven verify passes (22 scenarios; 38 Java-decoded headers and 14 typed bodies); comparator self-test and manifest validation (22 scenarios) pass; fmt and diff checks pass.
+
+## Route collection five-state audit documentation
+
+- Updated the route branch audit, P6-05 requirement row, route DTO API/input row, and ADR-0078 to report the 625-case five-state product and current `route.json` SHA-256. The Phase 6 audit remains PARTIAL; broader malformed route/source/API/input reconciliation remains open and P6-V04 stays `PENDING_PHASE_19`.
+- Documentation diff and stale-hash checks pass.
+
+## Registered-consumer nested route oracle
+
+- Added `runtimeRouteNestedCollectionConsumers` to invoke real Java route refresh with a registered `MQConsumerInner` for a populated control and null queue-row, broker-row, filter-list, and static-mapping-value cases.
+- Java publishes the populated, null-queue-row static, and null-filter-list routes and calls `updateTopicSubscribeInfo` once in each; null BrokerData rows and null static-mapping values fail before caching or consumer callbacks. Every case records `isSubscribeTopicNeedUpdate` and update callback counts. Fixture SHA-256: `d342d5b80077220113b89415d722a55350e7d6f5d316c5e8cbac3f7e8ddf265e`. Native real-RPC differential remains pending.
+
+## Registered-consumer nested route differential
+
+- Added `registered_consumer_nested_route_collection_outcomes_match_invoked_java` using a scripted loopback route RPC and five pinned Java cases. It compares publication outcome, cached collection sizes, `isSubscribeTopicNeedUpdate` call count, and `updateTopicSubscribeInfo` count; the focused test passes.
+- Full gates passed: workspace/all-target tests with reviewed loopback access; strict all-target/all-feature Clippy; pinned offline Maven verify (22 scenarios, 38 Java-decoded headers, 14 typed bodies); comparator self-test; manifest validation (22 scenarios); fmt and diff checks.
+
+## Registered-consumer route audit documentation
+
+- Updated the route branch audit, P6-05 requirement row, route DTO API/input row, and ADR-0078 for the five registered-consumer cases and current fixture hash. This narrows only the documented route callback boundary; broader Phase 6 reconciliation remains open and P6-V04 stays `PENDING_PHASE_19`.
+- Documentation diff and stale-hash checks pass.
+
+## macOS address-enumeration check
+
+- On Darwin 25.6.0 arm64, a live call to the pinned RocketMQ 5.5.1 `NetworkUtil.getLocalInetAddressList()` returned nine candidates matching `fixtures/runtime/client-config.json` exactly. Oracle JAR SHA-256: `6a15b581269c0e06d9508d284c84c05a8578ffa1b16db3e60ce837c97f684b97`.
+- `cargo test -p rocketmq-classic-core --locked local_address::tests::` passed all eight focused tests, including the macOS native `getifaddrs` candidate-order, selected-address, and IPv6 fallback comparison against that list.
+- This verifies the available macOS host path only. Windows runtime enumeration, non-macOS Unix enumeration, and behavior on an actual IPv6-only host remain open; the general Phase 6 source/API/input/reverse-export audit remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## Concurrent-heartbeat setting source map
+
+- Pinned `rocketmq-client-5.5.1.jar` bytecode shows the `MQClientInstance` constructor creates the concurrent fixed pool only when enabled and uses the configured thread count at that time; `sendHeartbeatToAllBrokerWithLock` reads the live enable flag on each call.
+- Focused tests passed: `concurrent_v1_uses_parallel_peers_and_busy_heartbeat_gate_skips_a_round`, `enabling_concurrent_heartbeat_after_construction_has_no_executor`, `rebalance_wrapper_uses_serial_v1_even_when_concurrent_heartbeat_is_enabled`, and `p6_v02_failed_construction_can_retry_and_stale_removal_preserves_replacement`. Together they exercise actual two-peer concurrency, constructor-snapshot width, late-enable no-send behavior, serial wrapper behavior, and nonpositive pool-size rejection/retry.
+- These cases close only the concurrent-heartbeat setting branches. Other settings activation paths and full Phase 6 source/API/input/reverse-export reconciliation remain open; P6-V04 stays `PENDING_PHASE_19`.
+
+## Java admin registration oracle
+
+- Extended the direct `MQClientInstance.registerAdminExt/unregisterAdminExt` invocation to capture null group/admin rejection, strong owner retention, duplicate preservation, empty-group acceptance, missing-group removal, group-key re-registration, and null-key removal failure.
+- Pinned offline `RuntimeConfigFixtures` generation passed. All 15 direct Java observations are recorded under `registryTables.adminRegistration`; updated `client-config.json` SHA-256: `14885daa5c6f2669c2443b9b9d5720ea2fa8e93945a620d03b1cc65a7274f38b`. Native parity remains pending.
+
+## Java admin registration implementation and validation
+
+- Implemented in `c60cbba8` (`Match Java admin registration ownership`): `GroupRegistry` now keeps a strong, opaque owner for each `registerAdminExt` group, rejects null/duplicate registration with `false`, retains the first owner, and removes unconditionally by group. Identity-lease registration remains independently supported. Rust maps Java's null unregister key exception to `RuntimeError::InvalidRoute("null admin group")`; concrete admin methods remain Phase 17.
+- Added `admin_registration_retains_owner_and_matches_invoked_java`, which compares all 15 fixture outcomes (including the empty-table check after null-input rejection) and verifies owner retention and release with `Weak` references. The test assertion follow-up is `83a75070`; Java fixture commit is `78eff96c`; fixture SHA-256 remains `14885daa5c6f2669c2443b9b9d5720ea2fa8e93945a620d03b1cc65a7274f38b`.
+- Focused differential, core all-target tests, workspace all-target tests, strict core/workspace Clippy, pinned offline Maven verify (22 scenarios), comparator self-test/manifest22, formatting, and diff checks pass. The Phase 6 matrix remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## Admin registration shutdown-gate differential
+
+- Pinned bytecode confirms `MQClientInstance.shutdown()` returns before state cleanup when `adminExtTable` is nonempty. Added a real invoked Java flow that starts an unconnected manager-owned runtime with an empty NameServer setting, registers an admin owner, invokes shutdown, verifies the factory map still points to the running runtime, unregisters by group, then verifies shutdown removes the mapping.
+- Java oracle and fixture commit: `18fc5709`; native lifecycle differential: `0ca939d3`. The fixture adds three observations under `registryTables.adminRegistration.shutdownGate`; combined client-config SHA-256: `0a4cc9a10fa0a42149da9014713ee648bf915a5968c312fbb1d5d47d7063aed0`. No production change was needed; existing `GroupRegistry::has_active_users` behavior matched Java.
+- `cargo test --workspace --all-targets --locked` passed, including lifecycle (5 tests). Strict workspace all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and fixture drift), comparator self-test/manifest22, fmt, and diff checks passed. Admin shutdown gating closes this additional P6-03/P6-04 unit boundary only; overall Phase 6 reconciliation remains PARTIAL and P6-V04 remains `PENDING_PHASE_19`.
+
+## Admin owner destructor re-entry correction
+
+- A new red/green private registry test makes the final retained admin owner re-enter `register_admin_ext` from its Rust `Drop`. Before the fix, both direct unregister and startup-failure `GroupRegistry::clear` timed out because the destructor ran while the registry mutex was held.
+- Implemented in `bbc05ff9` (`Drop admin owners outside registry locks`): `unregister_admin_ext`, lease/group removal paths, duplicate-owner rejection and `clear` release admin values only after unlocking. The two re-entry tests now pass.
+- Full workspace all-target tests pass (core unit module now 109 tests); strict workspace all-target/all-feature Clippy, fmt, and diff checks pass. The Java fixture did not change; pinned Maven verify for oracle `18fc5709` already passed. This closes a Rust-specific P6-04 ownership edge; broader Phase 6 reconciliation remains PARTIAL and P6-V04 remains `PENDING_PHASE_19`.
+
+## Admin owner back-reference cycle guidance
+
+- Updated `ClientRuntime::register_admin_ext` docs to require a `Weak<ClientRuntime>` for owner back-references. The started-runtime differential now uses an admin owner holding only a Weak handle and proves the runtime's Weak becomes un-upgradeable after admin removal, shutdown and dropping manager/runtime handles.
+- Commit `bcc98f46`; focused `admin_registration_blocks_shutdown_until_owner_is_unregistered` and strict core Clippy pass, along with formatting/diff checks. The registry still retains the admin owner strongly as Java does; caller-provided owner types must avoid strong back-reference cycles. Full Phase 6 remains PARTIAL; P6-V04 stays `PENDING_PHASE_19`.
+
+## Runtime lookup invocation continuation
+
+- Added direct calls through pinned Java 5.5.1 `MQClientInstance.findConsumerIdList/queryAssignment`, with a recorder replacing only `MQClientAPIImpl`. The fixture records one route refresh, selected Broker address, query fields, 3000ms consumer timeout, explicit assignment timeout, ordered consumer IDs, empty assignment Set, swallowed consumer RPC failure and propagated assignment RPC failure.
+- Java oracle/fixture commit `a5d9a91c`; `fixtures/runtime/lookup.json` SHA-256 `df8d77e566ed706002ba5f09e7ea80869e929973ba7ed7b680e61ce6ab45c649`. Rust differential commit `cb37ec00` feeds the Java consumer IDs and assignment arguments into the existing loopback peer and compares the emitted request.
+- Focused `cargo test -p rocketmq-classic-core --test runtime_lookup uncached_consumer_lookup_refreshes_once_and_assignment_reuses_raw_topic_broker --locked` passed; then all five `runtime_lookup` integration tests passed after aligning their client IP with the Java oracle. Full pinned offline Maven verify passed with reviewed loopback access, including all 22 scenarios, fixture drift checks, and Java cross-decodes. `cargo fmt --all -- --check` and `git diff --check` passed. No production runtime code changed.
+- This closes direct runtime-entrypoint invocation evidence for the two lookup methods only. Full API/source/input/reverse-export reconciliation remains PARTIAL; P6-V04 stays `PENDING_PHASE_19`.
+
+## Runtime lookup no-Broker branch
+
+- Extended the same direct Java runtime oracle with an empty `brokerDatas` route. Each method refreshes the route, returns null and makes no Broker API call; added independent snapshots so later setup changes cannot rewrite earlier call evidence.
+- Oracle extension `7c7965ba`; Rust differential `8a9fe417`. `missing_broker_returns_none_and_expired_assignment_emits_no_frame` now consumes the Java null results and verifies the Java two-refresh/no-call observation alongside the existing native peers. `lookup.json` SHA-256 at that checkpoint: `e7e1e0c7ccde975ad7af491caafefba0b4bc4ad0f78c812273233a1df943b2dc`.
+- All five `runtime_lookup` integration tests pass. Direct RuntimeLookup fixture drift verification and full pinned offline Maven verify pass, including all 22 scenarios and Rust/Java cross-decodes. Formatting and diff checks pass. The whole Phase 6 source/API/input/reverse-export audit remains PARTIAL; P6-V04 stays `PENDING_PHASE_19`.
+
+## Signed assignment timeout forwarding
+
+- Extended the Java direct runtime oracle to call `MQClientInstance.queryAssignment` with `0` and `-1`; the injected API recorder observes both signed values unchanged. Rust uses those Java-recorded values in its expired-deadline cases and confirms neither reaches the Broker socket.
+- Java oracle commit `c3c71d04`; Rust differential commit `16e6f153`; `lookup.json` SHA-256 at that checkpoint `b133d3cd549191797c205d410e61d4928f2c922e33bd8fbeb8bf0a9cf993b6bf`.
+- All five `runtime_lookup` integration tests pass. Direct RuntimeLookup fixture drift verification and full pinned offline Maven verify pass, including all 22 scenarios and Java cross-decodes. Formatting and diff checks pass. The entire Phase 6 matrix remains PARTIAL; P6-V04 remains `PENDING_PHASE_19`.
+
+## Java boot timestamp getter oracle
+
+- Added an actual pinned Java `MQClientInstance.getBootTimestamp()` invocation to `RuntimeLookupFixtures`. Its captured value falls between wall-clock samples immediately before and after runtime construction and remains stable after the fixture's route/API calls; nondeterministic epoch values are not persisted.
+- Java oracle commit `0b8ac492`; Rust differential commit `3ab4e236`. The existing constructor-window/lifecycle test now consumes both Java observations. Current `lookup.json` SHA-256: `19d33e027294c631b729b27a59ba8ec4099067a6117048818e041a797ab68fe7`.
+- Focused `boot_timestamp_is_constructor_wall_clock_and_stable_across_shared_lifecycle` passed. Full pinned offline Maven verify passed with all 22 scenarios, fixture drift and Java cross-decodes. Formatting and diff checks pass. This closes direct getter invocation evidence only; full Phase 6 source/API/input/platform reconciliation remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## Heartbeat listener setting activation
+
+- The direct pinned Java fixture now constructs `MQClientInstance` with `enableHeartbeatChannelEventListener` false and true, inspects the actual `NettyRemotingClient` listener, flips the same config afterward, and records that listener presence/identity does not change. Java oracle `27cb60bf`; `fixtures/runtime/heartbeat.json` SHA-256 `7ff0e28d36ed191002871ac36f00a60ecee5edc64f183565b93e4161fa71032b`.
+- Rust differential commit `ab1c3949` consumes those observations in `disabled_or_unknown_channel_does_not_send_unsolicited_heartbeat` and compares both listener presence and `Arc` identity across post-construction setting mutations. The focused test passed.
+- Full pinned offline Maven verify passed, including all 22 scenarios, fixture drift and Java cross-decodes; `cargo fmt --all -- --check` and `git diff --check` pass. The source-time listener setting boundary is covered; full Phase 6 reconciliation remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## Runtime client-ID snapshot
+
+- `RuntimeConfigFixtures.managerSharing` now records `MQClientInstance.getClientId()` before and after mutating the runtime's retained ClientConfig client IP, instance name and unit name. The Java runtime ID stays at its construction value while `buildMQClientId()` reflects the new config. Java fixture commit `6c58ec1d`; `client-config.json` SHA-256 `cf4d7191c787efa2f08afb956ee456368d35159c1766b6c79006a43e43fcd4ce`.
+- Native differential commit `dc79903d`; `runtime_client_id_remains_constructor_snapshot_after_config_mutation` consumes both Java IDs and passed. Full workspace all-target tests and strict all-target/all-feature Clippy passed.
+- Pinned offline Maven verify passed all 22 scenarios, fixture drift and Java cross-decodes. Differential comparator self-test/manifest22, formatting and diff checks pass. This closes the runtime identity mutation boundary only; whole Phase 6 remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## NameServer active-list setting snapshot
+
+- Pinned `MQClientInstance` constructor bytecode calls `MQClientAPIImpl.updateNameServerAddressList` once when the initial `ClientConfig.getNamesrvAddr()` is non-null. Direct invoked `getNameServerAddressList()` cases show that post-construction mutation leaves an initial address unchanged and does not populate an initially absent list. Java oracle commit `b2cc4e21`; current `client-config.json` SHA-256 `b3001689346cae2ff4749fcd9db9100eb944d801062c21ff811c1fe05a59fca1`.
+- Native differential commit `b790edc2`; `active_nameserver_addresses_remain_constructor_snapshot_after_config_mutation` compares both actual list states before and after config mutation. Config integration17 and strict core all-target/all-feature Clippy pass.
+- Full pinned offline Maven verify passed all 22 scenarios, fixture drift and Java cross-decodes. Comparator/manifest22, formatting and diff checks pass. Pinned Java `start()` bytecode reads the current null setting before discovery, but the fixture does not invoke `start()`; startup after a post-construction change remains under audit. Phase 6 remains PARTIAL; P6-V04 stays `PENDING_PHASE_19`.
+- An attempted direct `MQClientInstance.start()/shutdown()` probe started the internal producer and left the Maven Java process alive after shutdown, even though both active-address observations were recorded. The probe was removed from the committed fixture; only the constructor/list mutation oracle is claimed, with the start branch reported from pinned bytecode. The normal constructor-only fixture generator then exited successfully.
+
+## Live VIP lookup activation
+
+- The direct Java fixture now calls `MQClientInstance.findConsumerIdList/queryAssignment` through a real `MQClientAPIImpl` backed by a capturing remoting proxy. Both calls use `127.0.0.1:10913` while the retained `ClientConfig.vipChannelEnabled` is false, then use `127.0.0.1:10911` after it changes to true. Java oracle and generated `lookup.json` committed as `4945f123`; fixture SHA-256 `c58bda7b7f80109eaea602003033294224b51ad6aa816e15e00238546434f78d`.
+- Rust test commit `995596ff` consumes all four Java observations, verifies the runtime starts with VIP disabled, mutates the retained config after construction, and confirms both requests reach the loopback listener through the translated port. All five focused `runtime_lookup` tests pass.
+- Full `cargo test --workspace --all-targets --locked` passed with local socket access; strict all-target/all-feature Clippy passed; pinned offline Maven verify passed all 22 scenarios, including lookup fixture drift and Java cross-decodes; comparator self-test and 22-scenario manifest validation passed; formatting and diff checks passed. Compatibility-map and requirement-audit documentation now records this branch only. Overall Phase 6 remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## Live runtime API timeout mutation
+
+- `RuntimeLookupFixtures` now mutates the retained Java `ClientConfig` after construction: direct `MQClientInstance.findConsumerIdList` recording changes from the 3000ms default to 150ms. Java oracle and generated `lookup.json` committed as `74c12165`; current fixture SHA-256 `aadc780284fd8fe5f5b51d33e45bc62c6bf88607ba2fec38db69be0fef5133b3`.
+- Rust test commit `9b30acb3` consumes the observed 150ms value, changes the live runtime config from 3000ms, and waits for a successful Broker response delayed to 450ms; the lookup returns the Java-matching timeout outcome. All six focused `runtime_lookup` tests pass.
+- After this fixture/test change, full workspace all-target tests with local socket access, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture drift and Java cross-decodes), comparator self-test, manifest22, formatting and diff checks all pass. The compatibility map and requirement audit record only the post-construction lookup timeout branch; full Phase 6 remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## Live heartbeat V1-to-V2 setting
+
+- The Java heartbeat fixture now invokes `MQClientInstance.sendHeartbeatToBroker` twice with a replaced recording `MQClientAPIImpl`: it observes `sendHeartbeat` while `useHeartbeatV2=false`, mutates the same retained config, then observes `sendHeartbeatV2` while true. Both Java calls succeed. Oracle and `heartbeat.json` commit `1688e167`; SHA-256 `c4eb61ad100b22414ed510061929e2c3bae22f3077fcd901947d56dba2214805`.
+- Rust test commit `ea65afc4` consumes the recorded `V1`/`V2` sequence and checks `MQClientInstance` parity through the matching direct single-Broker runtime entrypoint. The peer observes fingerprint zero before mutation and a computed V2 fingerprint after; all 14 heartbeat tests pass. Follow-up commit `8f24c067` aligned the native call from the all-Broker wrapper to this Java direct entrypoint.
+- The first native test draft moved away its producer `Arc`; the runtime keeps producer owners weakly, so prepared heartbeat data was empty and no frame was sent. Retaining the owner fixed the setup; the test asserts the prepared producer row and route before exercising the setting.
+- Full workspace all-target tests passed after the entrypoint alignment with local socket access; strict all-target/all-feature Clippy passed. The complete pinned offline Maven verify passed after adding the Java oracle and fixture (22 scenarios, fixture drift and cross-decodes); comparator self-test, manifest22, formatting and diff checks passed after the native alignment. The API map and requirement audit cover this live V2 selection branch only; Phase 6 remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## Both live NameServer startup mutation directions
+
+- Expanded the forked Java start oracle so each child invokes two independently constructed `MQClientInstance` runtimes. The probe preserves the original API's constructor-seeded address list when it swaps in the discovery recorder. Null→configured still observes zero discovery calls and an absent active list; configured→null observes one `fetchNameServerAddr` call and retains `configured-at-construction:9876`. Both starts reach RUNNING and both shutdown calls return.
+- Java oracle commit `ff06d4b8`; `fixtures/runtime/start.json` SHA-256 `ae2ad5f193e4082a4c8e3c4bfb17165d0437b306d4bf6aaa8599daf8e5941b6c`. Native differential commit `6998cdfb`; `start_fetches_nameserver_after_live_address_is_cleared_but_keeps_active_snapshot` consumes the reverse-case values and injects a Java-blank provider result so discovery is counted without HTTP fallback. The existing null→configured test now reads the nested fixture case.
+- Probe guard commit `88de2cb7` checks both start/shutdown outcomes before fixture verification or regeneration and halts the fork with a failure code, so a failed case cannot write a bad fixture or leave Maven waiting on runtime worker threads. Its targeted Java compile and fixture drift check pass.
+- Both focused start tests and full workspace all-target tests pass; strict all-target/all-feature Clippy and full pinned offline Maven verify pass, including the two-case forked fixture, all 22 scenarios and Java cross-decodes. Comparator self-test/manifest22, formatting and diff checks pass. Both post-construction NameServer startup mutation directions now have direct Java/Rust invocation evidence; other Phase 6 gaps remain and P6-V04 stays `PENDING_PHASE_19`.
+
+## Registered consumer with null queue list and static mapping
+
+- Extended the direct pinned Java registered-consumer route cases with `queueDatas=null`, populated Broker/filter collections, and a valid static queue mapping. `updateTopicRouteInfoFromNameServer("topic")` returns true, publishes the route with its queue list still null, skips `isSubscribeTopicNeedUpdate`, and calls `updateTopicSubscribeInfo` once.
+- Java oracle/fixture commit `816658be`; `route.json` SHA-256 `d04a6a5d407230fc773eac04eec63faf14bb7e7129c2b79cbc365181c6ef093e`. Rust differential commit `be83c42e`; the existing `registered_consumer_nested_route_collection_outcomes_match_invoked_java` loop now checks six cases, replaying the Java route body over a local remoting peer and matching cache state, collection sizes, and consumer callback counts.
+- The focused differential, full workspace all-target tests, strict all-target/all-feature Clippy, full pinned offline Maven verify (22 scenarios, route fixture drift and Java cross-decodes), comparator self-test/manifest22, formatting and diff checks pass. This closes the null outer queue-list/static-mapping callback interaction only; broader route malformed-input and Phase 6 reconciliation remain open; P6-V04 stays `PENDING_PHASE_19`.
+
+## Registered consumer with null Broker address map
+
+- Added a direct Java route-refresh case with a non-null BrokerData whose `brokerAddrs` map is null, alongside populated QueueData, filter, and static-mapping state and a registered `MQConsumerInner`. Java throws `NullPointerException`, does not cache the route, and invokes neither the need-update check nor the subscription-info callback.
+- Java oracle/fixture commit `eef46440`; route fixture SHA-256 `30a80b5e3caf7bf6855acfced83638bf1b6d542f65c84bae0a5d7ad48b76362e`. Rust differential commit `34e9448d`; the seven-case loopback test replays the Java route body and confirms rejection, no cache, zero checks, and zero updates.
+- Focused route differential, full workspace all-target tests, strict all-target/all-feature Clippy, full pinned offline Maven verify (22 scenarios, route fixture drift and cross-decodes), comparator self-test/manifest22, formatting and diff checks pass. This adds the null address-map callback suppression edge only; broader malformed route inputs and Phase 6 remain open; P6-V04 stays `PENDING_PHASE_19`.
+
+## NameServer startup discovery after config mutation
+
+- Closed the invoked-start branch that was left open by the constructor-only active-list oracle. A forked pinned Java child constructs `MQClientInstance` with `namesrvAddr=null`, replaces its API with a discovery-call recorder, mutates the retained config to `late-after-construction:9876`, invokes actual `MQClientInstance.start()` and `shutdown()`, writes observations, then halts the child so Java worker threads cannot keep Maven alive. The Java observation has zero `fetchNameServerAddr` calls, absent active NameServer addresses, `RUNNING` start, and successful shutdown.
+- Java oracle/fixture commit `36d680d5`; native differential commit `9af93678`; `start.json` SHA-256 `ff712c3d6d16c12cb3866bd166b17169743fe601f5acf309f4c9e50f0c19aa42`. `start_uses_live_nameserver_null_check_but_keeps_constructor_address_snapshot` confirms Rust follows the same null-to-configured path and retains the constructor's absent active list.
+- Full workspace all-target tests, strict all-target/all-feature Clippy, full pinned offline Maven verify (22 scenarios including the forked fixture and Java cross-decodes), comparator self-test, manifest22, formatting and diff checks passed. This closes null-at-construction→configured-before-start only; configured-at-construction→null-before-start and full Phase 6 remain under audit; P6-V04 remains `PENDING_PHASE_19`.
+
+## Scheduled-task registration reads live config
+
+- Extended the direct Java `MQClientInstance.startScheduledTask()` oracle with two post-construction mutations. A runtime built with null `namesrvAddr` then configured before registration omits discovery; a configured runtime then cleared to null adds discovery. Each also changes the route/heartbeat/persist intervals from 23/47/59ms to 71/83/97ms, and Java records the mutated values at registration.
+- Java oracle/fixture commit `b9544aad`; `lookup.json` SHA-256 `c69e8f62f0d8d5d6198b3c93e91f3540b444ecb2d3193f36340ec1bdebfbac5c`. Rust differential commit `a5fa6f96`; `scheduled_task_delays_and_periods_match_invoked_java_registration` now compares the four direct Java registration lists against native scheduling derived from the post-mutation config.
+- The focused scheduler unit, full workspace all-target tests, strict all-target/all-feature Clippy, full pinned offline Maven verify (22 scenarios, lookup fixture drift and Java cross-decodes), comparator self-test/manifest22, formatting and diff checks pass. These settings are verified when scheduled tasks register; broader P6-06 acceptance and Phase 6 reconciliation remain open; P6-V04 stays `PENDING_PHASE_19`.
+
+## Registered consumer retains route after a malformed second refresh
+
+- Extended `runtimeNullBrokerMap` so one pinned Java runtime performs two direct refreshes with a registered `MQConsumerInner`. A valid first DTO changes/publishes the route and invokes one subscription callback; a second DTO with `BrokerData.brokerAddrs=null` throws `NullPointerException`, retains the prior raw route DTO, and leaves both callback counters unchanged.
+- Java oracle extension commit `8d0a696f`; `route.json` SHA-256 `7cc17ef57754595f2d7292c8374148640a41a6ec9bf973e775d7c77f6a48783b`. Rust commit `49ff2c1d` adds a two-reply loopback test consuming both Java DTOs and comparing outcome, cache snapshot identity, and need-check/update counts. Focused differential passed.
+- Full workspace all-target tests, strict all-target/all-feature Clippy, full pinned offline Maven verify (22 scenarios, fixture drift and Java cross-decodes), comparator self-test/manifest22, formatting and diff checks pass. This closes cache retention and callback non-invocation for this malformed route continuation only; wider Phase 6 and P6-V04 remain open.
+
+Producer and consumer callbacks remain unchanged after malformed route refresh (2026-10-10): extended `runtimeNullBrokerMap` to register actual `MQProducerInner` and `MQConsumerInner` proxies. The valid first refresh calls `updateTopicPublishInfo` and `updateTopicSubscribeInfo` once each; a second route with null `brokerAddrs` throws `NullPointerException`, retains the previous route, and leaves both counts at one. Java oracle/fixture commit `7cbda1d8`, Rust differential commit `c25ff661`, route fixture SHA-256 `3f5566c986850f40a2e1e36f9fa53df90ab1dcb4272c32d1e20bd3681c147c46`. Focused route differential, workspace/all-target tests, strict all-feature Clippy, pinned offline Maven verify (22 scenarios including route fixture drift and cross-decodes), comparator self-test/manifest22, formatting, and diff checks pass. This proves callback retention for this malformed continuation only; broader Phase 6 route gaps remain; P6-V04 stays `PENDING_PHASE_19`.
+
+Consumer-demand republication of equal route data (2026-10-10): added a direct pinned Java case whose consumer's `isSubscribeTopicNeedUpdate` result changes between two refreshes with equal route DTO values. On the second refresh Java returns true, performs one need-check, and calls both producer and consumer update callbacks again despite unchanged cached route data. Oracle/fixture commit `f941287a`; Rust two-response loopback differential commit `f9cc0474`; current route fixture SHA-256 `2f3f8d919a4eebef5beb79797bc8841fb2ef9d561d93bb43d00bfdb42233d9c0`. Focused differential, full workspace/all-target tests, strict all-feature Clippy, full pinned offline Maven verify (22 scenarios with fixture drift and cross-decodes), comparator self-test/manifest22, formatting and diff checks pass. This closes the equal-route demand update branch only; broader route/source/API reconciliation remains open; P6-V04 stays `PENDING_PHASE_19`.
+
+Route refresh recovery after a malformed second response (2026-10-10): extended `runtimeNullBrokerMap` with a third direct Java refresh using a valid `recovery-broker` route. It returns changed=true, publishes `recovered:10911`, and increments both producer and consumer update callbacks from one to two; the intermediate NPE retains the prior route and does not increment either callback. Java oracle/fixture commit `0d4c4d43`, Rust three-response differential commit `062a6bd7`, route fixture SHA-256 `559cc22ba4dd37d7e03292614bc79a48b0d2adab812ac7cbc16c3f7bc0098d7b`. Focused differential, full workspace/all-target tests, strict all-feature Clippy, pinned offline Maven verify (22 scenarios with route fixture drift and cross-decodes), comparator self-test/manifest22, formatting and diff checks pass. This closes recovery after this null-address-map failure only; Phase 6 remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+Broker publish-address visibility through route failure/recovery (2026-10-10): direct Java `findBrokerAddressInPublish` reads show `broker -> old:10911` after the malformed refresh and still after the later successful route that adds `recovery-broker -> recovered:10911`. Rust verifies both old/new lookups in the same route snapshot. Java fixture extension commit `af3903fe`, Rust assertion commit `356189b0`, route fixture SHA-256 `a356ccfd8021f3e7795a4db62d4d41a4d864ccb6f87fed3b068bd427c2e6c38b`. Focused route differential, workspace/all-target tests, strict all-feature Clippy, full pinned offline Maven verify (22 scenarios and fixture drift/cross-decodes), comparator self-test/manifest22, formatting and diff checks pass. This records address lookup retention for this failure/recovery sequence only; broader route and Phase 6 reconciliation remain open; P6-V04 stays `PENDING_PHASE_19`.

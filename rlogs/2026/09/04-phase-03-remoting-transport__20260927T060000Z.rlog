@@ -1,0 +1,40 @@
+# Phase 3 remoting transport parity review — 2026-09-27T06:00:00Z
+
+## User decision and scope
+- User explicitly chose to retain Rust shutdown/drain semantics and cap shutdown waiting at 90 seconds to match the Java ServiceThread join bound.
+- Implement one shared 90-second absolute deadline across owned task, connection, and callback worker joins; abort remaining Tokio async tasks at expiry. Synchronous callbacks already running in `spawn_blocking` cannot be forcibly stopped, so this is a bound on `shutdown().await`, not a guarantee that arbitrary user code ends.
+- Continue automatable parity review after this focused shutdown change; do not modify either Phase 3 plan, declare Phase 3 complete early, or start Phase 4.
+
+## Plan
+1. Implement shared shutdown deadline and bounded joins with a short injectable/private test duration.
+2. Add a deterministic blocking-callback test demonstrating drain-before-deadline and bounded return after timeout.
+3. Run targeted and full Rust validation; update compatibility ledger and rlog; review and commit the shutdown change separately.
+4. Continue remaining parity inventory and plan acceptance audits in follow-up work.
+
+## Changes
+- Added a single absolute 90-second shutdown deadline shared by owned task, connection, and callback worker joins. On expiry, remaining async task handles are aborted; completed and pending invokes are still failed during shutdown initiation.
+- Added `Connection::join_until` and `Connection::abort_task` for deadline-bounded connection shutdown.
+- Preserved owned callback draining before the deadline. Documented that `spawn_blocking` user callbacks cannot be forcibly terminated, though shutdown returns after the async worker is aborted.
+- Changed shutdown ledger rows from `MAPPED` to `PARTIAL` to reflect the bounded lifecycle difference and added test coverage.
+- Added a deterministic unit test with an intentionally blocked callback and a short private timeout; it verifies shutdown returns at the limit while the underlying user callback remains blocked, then releases it to avoid leaking test work.
+
+## Verification
+- `cargo test -p rocketmq-classic-remoting shutdown_ --offline` — passed (6 unit tests, 3 transport tests).
+- `cargo test --workspace --offline` — passed (all workspace tests).
+- `cargo clippy --workspace --all-targets --offline -- -D warnings` — passed.
+- `cargo fmt --all --check` — passed.
+- `python3 scripts/check-workspace-metadata.py` — passed.
+- `python3 tests/differential/compare.py --self-test` — passed.
+- `git diff --check` — passed.
+
+## Remaining
+- Additional Java `requestFail`/`failFast` source review confirmed pending connection-failure categories, including a local malformed-command encoding error occurring after pending registration. The per-invoke send path already classifies this as send-request failure; the separate async connection writer now includes a malformed-frame error in the same classification. Tightened the malformed-peer test to await request arrival before trusting the response classification, so an early connect error cannot pass it accidentally.
+- This only implements and verifies the user's shutdown-timeout decision plus a focused send-failure classification correction. Phase 3 parity review, public API/config dual-inventory, partial-item disposition, and bilingual plan acceptance audit remain open; do not declare Phase 3 complete or start Phase 4.
+
+## Public configuration audit progress
+- Read the entire English and Traditional Chinese Phase 3 plans again. Neither plan was modified. The scripted/unit/loopback gates P3-V01, V02, V03, U01 have broad named coverage; P3-V04 remains explicitly assigned to Phase 19 and is not passed here.
+- Reviewed the complete Java `NettyClientConfig` declaration/accessors and `NettySystemConfig` properties against the Rust `ClientConfig` inventory, including defaults and validation. The inventory currently claims the dual-surface audit is closed, but acceptance also requires settings source/precedence/effect timing; exact per-property verification is still in progress.
+- Confirmed Java `NettyRemotingAbstract` paths: `processResponseCommand` removes the response-table entry before executing callback or releasing sync waiter; timeout scan removes before callback; `requestFail` removes, sets send-false, puts null response, invokes callback and releases; `failFast(channel)` delegates matching channel futures through `requestFail`. Rust uses one remove-and-complete operation for terminal owners and wrapper-visible async send metadata is separately aligned.
+- Confirmed local malformed-frame send-classification correction is tested with a request-arrival barrier; the prior version could race an initial connect failure. Added malformed-frame input to the async writer classification test.
+- Found a shutdown implementation detail while checking the 90s guarantee: after the deadline, `Connection::abort_task` must issue abort without awaiting JoinHandle completion; otherwise a task stuck in non-yielding synchronous code could violate the wait bound. Tokio `abort()` is asynchronous, and `spawn_blocking` user callbacks cannot be forcibly stopped. The non-awaiting abort behavior is part of the shutdown implementation in commit `11b7484`.
+- Updated KNOWN_DIFFERENCES to describe the 90-second behavior accurately.

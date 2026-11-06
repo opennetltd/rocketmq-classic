@@ -1,0 +1,16 @@
+P18-V01 MessageDecoder message-ID scratch-buffer disposition — 2026-10-22 20:17 UTC
+
+Resolved the `createMessageId(ByteBuffer,ByteBuffer,long)` cursor-side-effect
+review item by checking pinned RocketMQ 5.5.1 source at
+`efa1be59d6fc747ad220f036c86030f05f0419f9`. Java advances the address buffer
+and output buffer, but its production call sites in `MessageDecoder.decode`,
+`DefaultMessageStore`, and both `DLedgerCommitLog` append paths use local
+scratch buffers and retain only the returned message-ID string. Rust's
+`create_message_id_from_host_bytes` preserves the returned IPv4/IPv6 ID and
+uses immutable host bytes, so the Java-only scratch cursor mutations are a
+source-confirmed API-shape adaptation rather than a missing production flow.
+The API map and requirement audit now record this disposition. This docs-only
+update did not run tests. Broad P18-V01 reconciliation, current-revision remote
+Ubuntu CI, native Windows runtime, and Phase 19 Broker/Docker evidence remain
+open. Protected Phase 19 worktree paths were not staged. No external CI or push
+was run.

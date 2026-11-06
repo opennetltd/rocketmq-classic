@@ -1,0 +1,49 @@
+# Phase 18 MessageExt flag override follow-up — 2026-10-21T18:47:26Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `a24fba3a` (`feat(common): dispatch MessageExt subtype flags`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `8afd6c83b5085d3c74cbcdd919bca3257514abbde3c7f3ec70847dd08a1a2f7f`.
+
+## Source audit and change
+
+- Java `Message.getFlag()` and `setFlag(int)` are virtual. Push retry and
+  send-back paths read `msg.getFlag()` when creating retry messages. Rust
+  previously resolved `MessageExt::flag()` and `set_flag()` through the base
+  `Message` fields, ignoring caller-defined subtype overrides.
+- Added `MessageExtSubtype` hooks for `getFlag` and `setFlag`; `MessageExt`
+  now dispatches those methods and falls back to its stored base message when
+  the subtype uses the defaults.
+- The invoked Java custom subtype returns flag `71` and counts setter calls.
+  The direct-consume fixture invokes `setFlag(5)` and records the callback's
+  flag. Rust compares the callback value and custom setter count. The runtime
+  fixture now emits the flag for all 27 direct-consume cases.
+- Updated the Phase 6, Phase 10 and Phase 18 compatibility records and the
+  release checklist. Arbitrary subtype overrides and the broader P18-V01
+  audit remain open.
+
+## Verification
+
+- PASS: focused
+  `cargo test --locked -p rocketmq-classic-consumer --test runtime_direct_consume`
+  (3 tests).
+- PASS: `cargo test --workspace --locked --quiet`.
+- PASS: `cargo test --workspace --all-features --locked --quiet`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify`: 37 scenarios, 83
+  typed headers, 16 typed bodies and Rust/Java cross-decodes. Runtime consumer
+  fixtures verify 9 Running Info, 27 direct-consume and 15 reset cases.
+  Existing JDK Unsafe and reflective final-field warnings were emitted.
+- Supplemental differential, stress, fuzz, examples, benchmark, metadata,
+  package-content and time-zone P18-V02 gates have not been refreshed on this
+  code revision.
+
+## Remaining status
+
+This closes `getFlag`/`setFlag` dispatch for the mapped subtype adapter only.
+Broad P18-V01 source/API/settings/input/error/control-flow/reverse-export
+reconciliation remains open, as do current-revision GitHub Ubuntu and native
+Windows P18-V04 runtime evidence. Phase 19 Broker/Docker validation remains
+separate. No push, remote CI, Broker or Docker run was performed. Pre-existing
+Phase 19 worktree paths were left untouched and unstaged.

@@ -1,0 +1,9 @@
+# Phase 3 remoting transport audit — 20260928T014658Z
+
+- Resumed from the existing Phase 3 working tree; preserved all uncommitted code and rlogs, including historical untracked `20260927T085045Z.rlog`.
+- Re-read the Rust execution skill and both Phase 3 plans. Contract: complete Java 5.5.1 client behavior, no Rust-only public feature, do not edit plans, defer P3-V04 to Phase 19.
+- Completed focused bidirectional public API review of `RemotingClient`, `RemotingService`, `NettyRemotingClient`, `NettyRemotingAbstract`, Rust public declarations, processor dispatch, and NameServer invocation.
+- Confirmed Rust-only default processor fallback was removed. In pinned Java client, fallback field is protected and uninitialized; there is no public installation method/call site. Unknown inbound codes return `REQUEST_CODE_NOT_SUPPORTED`; test `p3_unknown_processor_code_is_unsupported_but_exact_registration_runs` checks unknown and exact registrations. Rust method name `invoke_name_server` is a convenience counterpart to Java null-address invocation, not another wire operation.
+- Updated inventory for the renamed processor-executor test, classified default fallback as not applicable, and clarified mapped inbound behavior/framework-only remark differences. Expanded error/cause/remark rows with per-path dispositions and test evidence; no control-flow waiver.
+- Checks so far: focused test `p3_unknown_processor_code_is_unsupported_but_exact_registration_runs` and `p3_processor_specific_executors_route_or_reject_tasks` passed in prior continuation context; `git diff --check` passed after current edits.
+- Current source/docs modifications are uncommitted. Full workspace tests, fmt, Clippy, metadata/differential checks, final plan audit, and commit review remain to be run. Phase 3 is not accepted; do not start Phase 4.

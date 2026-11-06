@@ -1,0 +1,28 @@
+# Phase 18 MQClientInstance public declaration recount
+
+- Recorded: 2026-10-23 16:06:24 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Java baseline: RocketMQ client 5.5.1, source commit `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Java artifact: cached `org.apache.rocketmq:rocketmq-client:5.5.1`
+
+## Read-only audit
+
+- Re-ran `javap -public` for `org.apache.rocketmq.client.impl.factory.MQClientInstance`
+  against the cached 5.5.1 client/remoting/common artifacts.
+- Count: 53 public declarations including two constructors; 51 method
+  declarations across 49 distinct names. The two overloaded method groups are
+  `sendHeartbeatToBroker` and `updateTopicRouteInfoFromNameServer`.
+- The current Phase 6 API map records the same 53/49 inventory and maps the
+  method-name surface. This recount found no declaration-name discrepancy.
+- This check verifies the declaration inventory only; it is not evidence that
+  all input, error, and control-flow branches are equivalent. No tests were
+  run, and no product code changed.
+
+## Status
+
+P18-V01 remains open for the broader Java source/API/settings/input/error/
+control-flow and Rust reverse-export reconciliation. Native Windows runtime,
+current-revision remote Ubuntu CI, and Phase 19 Broker/Docker evidence remain
+outside this local audit. The protected Phase 19 worktree paths were not
+modified or staged.

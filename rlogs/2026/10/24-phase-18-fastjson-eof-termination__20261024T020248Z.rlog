@@ -1,0 +1,225 @@
+# Phase 18 Fastjson U+001A end-of-input semantics
+
+- Recorded: 2026-10-24 02:02:48 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Code/test revision: `12de24745efdf63f546a1b9f36df680c533c7cf2`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Host: macOS 26.6.1, AArch64
+- Rust: `rustc 1.85.0 (4d91de4e4 2025-02-17)`
+- Heartbeat fixture SHA-256:
+  `3841442edc031bc70a028f0c2476f8b77f9ead0ec2eb959ace5a1ab2bad3f9c6`
+
+## Compatibility change
+
+- Added 108 invoked Java heartbeat DTO cases covering each of 54 C0/Unicode
+  separator values after U+001A and between repeated U+001A markers. Added two
+  more cases for trailing text and a second JSON object after the marker. Java
+  accepts all 110; the earlier native differential failed on the 108 separator
+  cases.
+- The heartbeat DTO corpus now contains 1,221 cases. Rust truncates at the
+  first raw U+001A after syntax and string normalization. Raw U+001A within a
+  quoted string remains part of the decoded value.
+- This closes the tested Fastjson end-of-input boundary only. Broad P18-V01
+  source/API/settings/input/error/control-flow and reverse-export
+  reconciliation remains PARTIAL.
+
+## Verification
+
+- Pinned Java fixture generation after compiling the fixture runner — passed.
+- `heartbeat_dto_inputs_match_invoked_java_fastjson` — passed for all 1,221
+  Java/Rust DTO inputs.
+- `fastjson_eof_marker_ends_the_document_and_ignores_the_suffix` — passed.
+- `cargo test --offline --locked --workspace` — passed, including doctests.
+  The only later change before the all-features attempt was replacing a test
+  `format!` with an equivalent owned string literal; strict Clippy passed on
+  that final source state.
+- `mvn -o -f compat/java-reference/pom.xml verify` — passed: 37 scenarios,
+  fixture drift checks, 11 message fixtures, 106 typed headers, and 19 typed
+  bodies cross-decoded.
+- `cargo fmt --all -- --check`, `git diff --check`, and strict workspace
+  all-target/all-feature Clippy — passed.
+- `cargo test --offline --locked --workspace --all-features` passed through
+  the 167-test Protocol library suite and several Remoting integration
+  targets, then stalled launching
+  `target/debug/deps/codec-353268327739c6fb`. The process stayed in macOS
+  `dyld` for over two minutes with only the loader image, no test threads, and
+  a 96 KiB physical footprint. Running the same binary with `--list` also
+  stalled in `dyld`. Both processes were stopped with SIGTERM. This gate is
+  unverified on the current revision; no Rust test assertion failed.
+
+Native Windows runtime and current-revision remote Ubuntu CI remain
+unverified. Phase 19 Broker/Docker validation is separate. No push or remote
+CI was run. The four protected Phase 19 worktree items remain unchanged and
+unstaged.
+
+## Phase 18 ConsumerRunningInfo Fastjson raw decoder continuation
+
+- Recorded: 2026-10-24 02:23:37 UTC
+- Code revision: `9180556a2f694b43ffc2ecd0417b6f51430ccf5e`
+- Fixture: `fixtures/consumer/running-info.json`, SHA-256
+  `495f040623c010c13a4d70f004db4d0529bd8fcda93530671015c69cb49f1e06`
+
+The pinned Java `RemotingSerializable.decode(byte[], ConsumerRunningInfo.class)`
+calls Fastjson `parseObject`. Rust's typed decoder first converted special
+object-valued `MessageQueue` map keys but did not normalize Fastjson input.
+Four invoked cases now cover trailing text and a second document after raw
+U+001A, a raw marker inside a string, and single-quoted input with a trailing
+comma. Rust matches Java acceptance and encoded fields; a populated Java body
+also round-trips through the typed decoder. Set-valued fields are compared
+without imposing iteration order.
+
+## Verification
+
+- The focused `consumer_running_info_raw_inputs_match_invoked_java_fastjson`
+  test passed, including the populated object-key body.
+- `cargo test --offline --locked --workspace` passed, including doctests. The
+  Remoting `codec` executable had a long launch delay, then completed all eight
+  tests successfully.
+- `cargo clippy --offline --locked --workspace --all-targets --all-features -- -D warnings` passed.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+- `mvn -o -f compat/java-reference/pom.xml verify` passed: 37 scenarios,
+  fixture-drift checks, 11 message fixtures, 106 typed headers, and 19 typed
+  bodies.
+- The current revision's all-features workspace test was not rerun. The prior
+  attempt stalled during macOS `dyld` launch of the Remoting `codec` binary,
+  leaving that test gate unverified. Native Windows runtime and current-
+  revision remote Ubuntu CI remain unverified. No push or remote CI was run.
+  Four protected Phase 19 worktree paths remain unchanged and unstaged.
+
+## Phase 18 consumer-list response Fastjson decoder continuation
+
+- Recorded: 2026-10-24
+- Code revision: `99f12b9832c3ebca0f9e570c57055cebc375ffd9`
+- Fixture: `fixtures/runtime/lookup.json`, SHA-256
+  `b3b2efa341e83f40d9b18f345ee175796d8891d84208b2f396f6cf8da162ee33`
+
+The three Core consumer-list response variants previously decoded the DTO via
+generic Serde, bypassing the DTO's Java Fastjson adapter. They now call
+`ConsumerListByGroupResponseBody::java_decode`, which applies the pinned
+`RemotingSerializable.decode` input rules. The invoked DTO differential covers
+18 raw inputs plus seven root-shape inputs (25 total). Two Java cases exercise
+ordinary trailing text and a second JSON document after raw U+001A. Core sync
+and future loopback calls both accept these suffixes and return the prefix
+consumer list.
+
+## Verification
+
+- The focused `consumer_list_inputs_match_invoked_java_fastjson` Protocol
+  differential passed.
+- The focused
+  `consumer_list_reply_uses_pinned_java_fastjson_eof_rules` Core loopback test
+  passed for the sync and future APIs.
+- Full locked Protocol and Core package tests passed, including doctests.
+- `cargo clippy --offline --locked --workspace --all-targets --all-features -- -D warnings` passed.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+- `mvn -o -f compat/java-reference/pom.xml verify` passed: 37 scenarios,
+  fixture-drift checks, 11 message fixtures, 106 typed headers, and 19 typed
+  bodies.
+- The current revision's all-features workspace test was not rerun. The prior
+  attempt stalled during macOS `dyld` launch of the Remoting `codec` binary,
+  leaving that test gate unverified. Native Windows runtime and current-revision
+  remote Ubuntu CI remain unverified. Phase 19 Broker/Docker validation is
+  separate. No push or remote CI was run. The four protected Phase 19 worktree
+  paths remain unchanged and unstaged.
+
+## Phase 18 typed RPC response Fastjson decoder continuation
+
+- Recorded: 2026-10-24 06:44 UTC
+- Code revision: `9a13acb7`
+- Fixture: `fixtures/runtime/lookup.json`, SHA-256
+  `85c4496ce6e9055da78b4f7624e6713115b90d8c4e7beea60a332c810b5e5bf2`
+
+Audit of Core response decoding found nine typed RPC response variants still
+using generic Serde despite pinned 5.5.1 methods calling
+`RemotingSerializable.decode`. They now pass the corresponding DTO Java
+Fastjson decoder into the shared response helper. The affected types are
+QueryAssignmentResponseBody, QueryConsumeTimeSpanBody, LockBatchResponseBody,
+GroupList, TopicList, QuerySubscriptionResponseBody, and
+ConsumeMessageDirectlyResult. The missing `java_decode` adapters for GroupList
+and QuerySubscriptionResponseBody now use the shared Fastjson input layer.
+
+The same audit found controller sync-state, epoch-cache, and election response
+bodies going through `serde_json::from_slice`. Their nullable body helper now
+uses the shared Java Fastjson decoder, preserving JSON `null` roots as `None`.
+The pinned fixture has 14 EOF suffix cases across the seven RPC DTOs and six
+across BrokerReplicasInfo, EpochEntryCache, and BrokerMemberGroup. Sync-state,
+epoch-cache, and election Core loopback replies also exercise raw U+001A
+followed by trailing text.
+
+## Verification
+
+- `cargo test --offline --locked -p rocketmq-classic-protocol` passed: 168 unit
+  tests, 165 doctests, and all package integration tests.
+- `cargo test --offline --locked -p rocketmq-classic-core` passed, including
+  doctests. The controller API integration suite passed all nine tests.
+- `cargo clippy --offline --locked --workspace --all-targets --all-features -- -D warnings` passed.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+- `mvn -o -f compat/java-reference/pom.xml verify` passed: 37 scenarios,
+  fixture-drift checks, 11 message fixtures, 106 typed headers, and 19 typed
+  bodies.
+- The all-features workspace test gate remains unverified on this revision.
+  The preceding attempt stalled during macOS `dyld` launch of Remoting `codec`.
+  Native Windows runtime and current-revision remote Ubuntu CI remain
+  unverified. Phase 19 Broker/Docker validation is separate. No push or remote
+  CI was run; the four protected Phase 19 paths remain unchanged and unstaged.
+
+## Phase 18 getUser response Fastjson decoder continuation
+
+- Recorded: 2026-10-24 06:55 UTC
+- Code revision: `41854b80`
+- Fixture: `fixtures/producer/core.json`, SHA-256
+  `ac4d435472279c6cdfefadf2811422359bc927223733c3521484c1c533d31f36`
+
+The Core API audit found `getUser` still decoded its nullable `UserInfo` body
+through generic Serde. It now calls `UserInfo::java_decode_nullable`, matching
+the Java Fastjson path while preserving absent-body and JSON-null results. The
+invoked `getUser` oracle adds trailing-text and second-document cases after
+raw U+001A; Java returns the same populated DTO for both.
+
+## Verification
+
+- `cargo test --offline --locked -p rocketmq-classic-core --test admin_rpc get_user_matches_java_requests_responses_and_outcomes` passed all ten cases.
+- `cargo clippy --offline --locked --workspace --all-targets --all-features -- -D warnings` passed.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+- `mvn -o -f compat/java-reference/pom.xml verify` passed: 37 scenarios,
+  producer-core fixture drift, 11 message fixtures, 106 typed headers, and 19
+  typed bodies.
+- Full Core package tests and the all-features workspace test gate were not
+  rerun on this revision. The earlier all-features attempt stalled during
+  macOS `dyld` launch of Remoting `codec`. Native Windows runtime and
+  current-revision remote Ubuntu CI remain unverified. Phase 19 Broker/Docker
+  validation is separate; no push or remote CI was run. The four protected
+  Phase 19 paths remain unchanged and unstaged.
+
+## Phase 18 JSON remoting header Fastjson input continuation
+
+- Recorded: 2026-10-24 07:10 UTC
+- Code revision: `d897a9e2`
+- Fixture: `fixtures/remoting/response-future-api.json`, SHA-256
+  `f0b5433e0c7c9f4566dee85048196860c47b948e4204cb08aa09b062bb628c0c`
+
+The pinned 5.5.1 `RemotingCommand.headerDecode` source delegates JSON header
+bytes to `RemotingSerializable.decode`. Rust `json_header::decode` now uses
+the shared Fastjson-compatible `Value` decoder. The Java fixture invokes
+`RemotingCommand.decode` for EOF trailing text, a second JSON document after
+raw U+001A, and single-quoted fields with a trailing comma; Rust codec tests
+compare decoded code, opaque ID, and remark.
+
+## Verification
+
+- `cargo test --offline --locked -p rocketmq-classic-remoting --test codec` passed: 9 tests.
+- `cargo test --offline --locked -p rocketmq-classic-remoting` passed 143 unit
+  tests and the 9 codec tests, then stalled launching `fuzz_regressions` at
+  macOS `_dyld_start`; that process was interrupted, leaving later package
+  tests unverified.
+- `mvn -o -f compat/java-reference/pom.xml verify` passed: 37 scenarios,
+  response-future API fixture drift, 11 message fixtures, 106 typed headers,
+  and 19 typed bodies.
+- Direct rustfmt checks and `git diff --check` passed. Workspace and
+  package-level Clippy attempts stalled while rustc enumerated its dependency
+  search directory (`getdirentries64`); Clippy is unverified on this revision.
+- Native Windows runtime, current-revision remote Ubuntu CI, and the full
+  all-features workspace test gate remain unverified. No push or remote CI was
+  run; the four protected Phase 19 worktree paths remain unchanged and
+  unstaged.

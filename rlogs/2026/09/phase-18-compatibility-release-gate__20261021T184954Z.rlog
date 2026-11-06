@@ -1,0 +1,45 @@
+# Phase 18 MessageExt property override follow-up — 2026-10-21T18:49:54Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `d70771a2` (`feat(common): dispatch subtype message properties`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `2a70e2a142e6adfa8b43baf7e396515630fcd6dc2231e8d8867e8eab3a4b2db4`.
+
+## Source audit and change
+
+- Java `ProcessQueue.putMessage` calls virtual `Message.getProperty(MAX_OFFSET)`
+  on the final message in each insertion batch and uses its value to update
+  `msgAccCnt`. Rust previously read the base message's property map directly.
+- Added `MessageExtSubtype::property` and explicit `MessageExt::get_property` /
+  `get_nullable_property` dispatch. The hook distinguishes no override from an
+  explicit Java null and otherwise falls back to base properties.
+- The Java custom subtype overrides only `MAX_OFFSET` to return
+  `987654333` while its virtual queue offset is `987654321`. Java and Rust
+  `ProcessQueue.putMessage` both report `msgAccCnt=12`; the fixture also
+  compares the property getter invocation count, dispatch, message count,
+  cached byte size and queue-tree key.
+- Updated Phase 6, Phase 10 and Phase 18 compatibility records and the release
+  checklist. This closes only the ProcessQueue backlog-accounting property
+  read; other inherited virtual methods remain open.
+
+## Verification
+
+- PASS: focused
+  `cargo test --locked -p rocketmq-classic-consumer --test runtime_direct_consume`
+  (3 tests).
+- PASS: pinned Java fixture regeneration through
+  `mvn -q compile exec:java -Dexec.args="runtime-consumer-operations-fixtures ..."`;
+  runtime consumer oracle verifies 9 Running Info, 27 direct-consume and 15
+  reset cases. Existing JDK Unsafe warnings were emitted.
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- Full workspace tests, Maven `verify`, strict Clippy, and supplemental P18-V02
+  differential/stress/fuzz/example/benchmark/metadata/time-zone gates have not
+  been rerun on this revision; refresh them after the remaining local changes.
+
+## Remaining status
+
+Broad P18-V01 source/API/settings/input/error/control-flow/reverse-export
+reconciliation remains open, as do current-revision GitHub Ubuntu and native
+Windows P18-V04 runtime evidence. Phase 19 Broker/Docker validation remains
+separate. No push, remote CI, Broker or Docker run was performed. Pre-existing
+Phase 19 worktree paths were left untouched and unstaged.

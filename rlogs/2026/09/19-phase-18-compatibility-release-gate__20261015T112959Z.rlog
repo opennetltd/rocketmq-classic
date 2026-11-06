@@ -1,0 +1,32 @@
+# Phase 18 Netty frame-limit setting parity — 2026-10-15T11:29:59Z
+
+- Audited the pinned Java 5.5.1 `NettyDecoder`: its class initializer reads
+  `com.rocketmq.remoting.frameMaxLength` with default `16777216`. Rust had used
+  a fixed 16 MiB limit and did not read the setting.
+- Added first-connection resolution of the same-named process environment
+  setting, Java `Integer.parseInt`-compatible signed decimal parsing, positive
+  limit validation, and the Java default. Each connection retains the resolved
+  value for inbound decoding and outbound request/response encoding.
+- Added `fixtures/runtime/netty-frame-limit.json`, a Java probe run in separate
+  default/configured JVMs, and a Rust child-process loopback test. The Rust test
+  confirms a configured `4096` limit reaches a new connection and rejects an
+  oversized outbound frame.
+- PASS: `cargo test -p rocketmq-classic-remoting --locked` (84 unit, 6 codec,
+  1 fuzz regression, 5 security, and 86 transport tests); strict all-target,
+  all-feature Remoting Clippy; `mvn -f compat/java-reference/pom.xml verify`
+  (37 scenarios, both frame-limit probes, Java decoding 2 Rust-generated base
+  frames, 54 typed headers, and 14 typed bodies); `cargo fmt --all -- --check`;
+  `git diff --check`.
+- Code commit: `754d5050 fix(remoting): honor Java Netty frame limit property`.
+- Updated the Phase 2 compatibility row and Phase 18 release checklist. This
+  closes the frame-limit setting slice only; broad P18-V01 remains open.
+- Remaining non-manual work: complete broad bidirectional P18-V01 source/API,
+  setting, input/error/control-flow, inherited API and Rust reverse-export
+  reconciliation; rerun all current-revision P18-V02 server-free gates after
+  this commit; obtain current-revision GitHub Ubuntu address-profile evidence
+  for P18-V04; and implement/run Phase 19 local Docker/Broker automation.
+  Release-version confirmation and registry dependency-resolution checks also
+  remain before publication. Owner-run deployment/live Broker checks remain in
+  Phase 19 and are separate from these local tasks.
+- The pinned Java source repository was read-only. No plan, push, tag, release,
+  or Broker validation was performed.

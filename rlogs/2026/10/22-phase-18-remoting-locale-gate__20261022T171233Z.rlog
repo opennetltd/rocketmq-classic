@@ -1,0 +1,57 @@
+Phase 18 remoting code-description locale parity and current local gate —
+2026-10-22 17:12 UTC
+
+Code revision: `a4136667`. Branch: `phase/18-phase-18-compatibility-closure`.
+Environment: macOS AArch64, Apple M5 Max, 18 logical CPUs, Rust 1.85.0.
+Pinned Java reference: RocketMQ client 5.5.1, commit
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Compatibility slice:
+- Pinned `RemotingHelper` initializes public request/response code maps by
+  applying no-argument `String.toLowerCase()` to Java field names. Rust code
+  descriptions now use a one-time locale snapshot from `LC_ALL`, `LC_CTYPE`,
+  then `LANG`, and produce the Turkish/Azeri dotless `ı` mapping for ASCII `I`.
+- The Java fixture sets `Locale` to `tr-TR`, compares all 166 request and 68
+  response code descriptions and unknown-code fallbacks, and restores the
+  original locale in `finally`. Fixture SHA-256:
+  `f6f8ebff1b2cfb33bd7234d8268b5747583f18f98f57fa4017d2af4f204a2573`.
+- One Maven run exposed that the fixture needed to restore global JVM locale:
+  typed-header scenario IDs were generated with Turkish uppercase. The fixture
+  now restores locale on success and failure. A full offline Maven verify
+  passes and leaves all unrelated typed-header fixtures clean.
+
+PASS:
+- `cargo test --workspace --locked`
+- `cargo test --workspace --all-features --locked`
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+- `cargo fmt --all -- --check`; `git diff --check`
+- `mvn -o -q -f compat/java-reference/pom.xml
+  -Dproducer.core.fixture.verify=true verify`: 37 scenarios, 36 runtime
+  route/VIP cases, Java decoding of 106 typed headers and 19 typed bodies;
+  locale fixture included
+- `python3 tests/differential/compare.py --self-test`
+- `python3 tests/differential/compare.py --validate-manifest`: 37 scenarios
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`:
+  163 frame seeds, 11 message seeds, 2,784 bounded mutations, 245 frame
+  decodes, 112 message decodes
+- `bash tests/stress/run-offline-smoke.sh`: 16 deterministic race/leak cases
+  x 3 repetitions
+- `cargo build -p rocketmq-classic --examples --release --locked`
+- `cargo bench -p rocketmq-classic --bench offline --locked`
+- `cargo clippy -p rocketmq-classic --bench offline --all-features --locked
+  -- -D warnings`
+- `python3 scripts/check-workspace-metadata.py`; locked Cargo metadata:
+  8 workspace members, 216 packages; seven product `cargo package --list`
+  checks each include `LICENSE` and `NOTICE`
+- Four Core Unique ID tests under each of `TZ=UTC` and `TZ=Asia/Taipei`
+- Windows GNU Core all-target check and Consumer stack-capture `--no-run`
+  cross-compilation
+
+Benchmark observations are appended to
+`docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`. This sample does
+not directly measure metric-label description lookup and sets no threshold.
+
+Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export
+reconciliation remains open. Current-revision remote Ubuntu CI and native
+Windows execution remain unverified. No push, external CI, Broker, or Docker
+run was performed. Protected Phase 19 worktree files remain unstaged.

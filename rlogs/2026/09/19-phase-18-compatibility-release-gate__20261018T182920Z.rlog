@@ -1,0 +1,38 @@
+# Phase 18 admin header visibility and inherited lo — 2026-10-18 18:29 UTC
+
+- Branch: `phase/18-phase-18-compatibility-closure`.
+- Pinned Java 5.5.1 API inventories confirm that
+  `QueryConsumeTimeSpanRequestHeader`, `GetTopicStatsInfoRequestHeader`,
+  `DeleteTopicRequestHeader`, `DeleteTopicFromNamesrvRequestHeader`, and
+  `DeleteSubscriptionGroupRequestHeader` expose no public fields. Rust fields
+  are crate-private; Java-mapped accessors and compile-fail guards were added.
+- Source review found `QueryConsumeTimeSpanRequestHeader` extends
+  `TopicRequestHeader`; Rust previously omitted its inherited nullable `lo`.
+  Rust encode/decode, the Java typed-header fixture, and the header-validation
+  matrix now cover `lo=true`. Query-admin API inventory fixture SHA-256:
+  `6e92e3d073dcb3b13abbc9c93b94955fd306a5b47576b5c8c52c472a7f668655`.
+- Code commit: `3b475951 fix(protocol): align admin request header visibility`.
+
+## Validation
+
+- PASS: workspace all-target/all-feature `cargo check`.
+- PASS: Protocol header integration tests (15), header equality/hash test,
+  and Protocol doctests (88, including compile-fail visibility guards).
+- PASS: Remoting Java query-admin decode-mode/API inventory differential.
+- PASS: Core `admin_rpc` integration tests (50), Core consume-time-span tests
+  (2), and Consumer consume-time-span test (1).
+- PASS: strict all-target/all-feature Clippy for Protocol, Remoting, Core and
+  Consumer.
+- PASS: offline Maven `verify`; 37 scenarios, fixture drift, 66 typed-header
+  and 15 typed-body cross-decodes.
+- PASS: `cargo fmt --all -- --check` and `git diff --check`.
+
+## Remaining work
+
+- Broad P18-V01 Java/Rust source/API/settings/input/error/flow and reverse-
+  export reconciliation remains open.
+- Re-run the full server-free P18-V02 gate after final code changes.
+- Current-revision GitHub Ubuntu address-profile evidence and native Windows
+  stack-runtime evidence are still absent for P18-V04.
+- Phase 19 still needs 30 of 37 local Broker/Docker scenario runners and
+  required profiles; owner-environment checks remain a separate handoff.

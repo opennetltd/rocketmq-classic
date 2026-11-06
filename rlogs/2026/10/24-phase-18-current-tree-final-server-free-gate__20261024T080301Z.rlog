@@ -1,0 +1,36 @@
+# Phase 18 current-tree supplemental server-free gate
+
+- Recorded: 2026-10-24 08:03 UTC
+- Branch: phase/18-phase-18-compatibility-closure
+- Code/test revision: 719e5aa3
+- Documentation head before this record: 93bbe93fcdea76a7430256c1454efc33a0704628
+- Pinned Java source: RocketMQ 5.5.1, efa1be59d6fc747ad220f036c86030f05f0419f9
+- Host: macOS 26.6.1, AArch64, Apple M5 Max, 18 logical CPUs
+- Rust: rustc 1.85.0 (4d91de4e4 2025-02-17)
+- Cargo target directory: /tmp/rocketmq-phase18-target
+
+## Verification
+
+- Locked default and all-feature workspace tests/doctests — passed on revision 719e5aa3; suites were sequential.
+- Strict all-target/all-feature workspace Clippy — passed.
+- Release facade examples — passed.
+- Race/leak smoke: `CARGO_NET_OFFLINE=true bash tests/stress/run-offline-smoke.sh` — passed 20 cases x 3 repetitions.
+- Bounded fuzz smoke: `cargo run --offline -p rocketmq-classic-remoting --example fuzz_smoke --locked` — passed 163 frame seeds, 11 message seeds, 2,784 mutations, 564 frame decodes, 192 message decodes.
+- Offline benchmark `cargo bench --offline --locked -p rocketmq-classic --bench offline` — passed. Measurements and allocation counts are in `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+- Strict benchmark Clippy — passed.
+- Workspace metadata, dependency direction, package license checks — passed.
+- Offline `cargo package --list` checks for the seven product crates — each contains `LICENSE` and `NOTICE`. An initial all-workspace package-list attempt stopped at the integration package because its user-owned Phase 19 files are uncommitted; no `--allow-dirty` override was used, and the seven product crates were checked separately.
+- Windows GNU all-target/all-feature workspace check and strict Clippy — passed as compile-only evidence.
+- Differential comparator self-test and `--validate-manifest` — passed; 37 scenarios validated.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- Pinned offline Maven `verify` — passed fixture drift validation, 37 scenarios, 11 message fixtures, 106 typed headers, and 19 typed bodies.
+
+## Scope
+
+This refresh closes the current-tree local P18-V02 test, race, fuzz, benchmark,
+package-list, and Windows cross-compilation gates. Broad P18-V01
+source/API/settings/input/error/control-flow and reverse-export reconciliation
+remains PARTIAL. Native Windows runtime and current-revision remote Ubuntu CI
+remain unverified. Phase 19 Broker/Docker validation remains separate. No push
+or remote CI was run; the four protected Phase 19 worktree paths were not
+staged or modified by this work.

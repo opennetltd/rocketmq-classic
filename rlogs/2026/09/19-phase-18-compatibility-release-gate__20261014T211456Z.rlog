@@ -1,0 +1,31 @@
+Phase 18 continuation — nullable query-consume-time-span group
+Session: 2026-10-14T21:xxZ
+Branch: `phase/19-phase-18-compatibility-release-gate`
+Code revision: `633b94bc`
+Java oracle: `/Users/bruce.tsai/Projects/3rd/rocketmq`, pinned source commit `efa1be59d6fc747ad220f036c86030f05f0419f9` (read-only).
+Plan files left unchanged.
+
+Change
+- Pinned Java `QueryConsumeTimeSpanRequestHeader` stores nullable topic/group and `RemotingCommand.makeCustomHeaderToNet` omits null values. Rust now models both fields as `Option<String>` and preserves null during encode/decode.
+- Push `query_consume_time_span` now passes the current group directly; a loopback request after setting the running facade group to null confirms the `group` ext field is absent.
+- Java Push fixture records null-group omission. Fixture SHA-256: `$(shasum -a 256 fixtures/consumer/push-implementation-accessor.json | cut -d' ' -f1)`.
+
+Validation
+- PASS: `cargo test -p rocketmq-classic-protocol --locked` (114 unit tests plus all protocol integration targets and doctests).
+- PASS: `cargo test -p rocketmq-classic-core --locked query_consume_time_span` (the matching Core API regression).
+- PASS: `cargo test -p rocketmq-classic-consumer --all-features --locked query_consume_time_span_queries_fresh_route_in_order_and_uses_vip_addresses` (fresh route order, VIP, and null-group wire omission).
+- PASS: strict Clippy for Protocol/Core/Consumer, all targets and all features.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, fixture verification, and Java/Rust cross-decodes).
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- Initial strict Clippy rejected two bool comparisons in the new test; changed them to negated assertions and reran successfully.
+
+Remaining
+- P18-V01 remains open for the complete bidirectional Java/Rust API, configuration, overload/input/error/control-flow, inherited API, and reverse-export audit. Other post-start nullable-group paths still require source-based review.
+- Full workspace P18-V02 gates have not yet been rerun on the current latest revision.
+- P18-V04 has no current-revision GitHub Ubuntu address-profile result. The local branch was not pushed.
+- Phase 19 automated Broker/Docker scenarios, platform runtime evidence, and pre-publication checks remain later gates. No push, publication, or tag action was taken.
+
+Append-only correction
+- Session timestamp: 2026-10-14T21:15:07Z (the initial entry used a placeholder).
+- Push implementation fixture SHA-256: `e18c119ce584e769e078568468c76910191a97ab5560c37771ad75122e674db1` (the initial entry retained an unevaluated shell expression).
+- A first attempt to update these fields used a literal shell variable in a quoted Python heredoc and failed with FileNotFoundError; the original entry is preserved and this correction is appended.

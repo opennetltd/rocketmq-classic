@@ -1,0 +1,59 @@
+# Phase 18 full current-tree server-free gate after ResponseFuture rendering
+
+- Recorded: 2026-10-24 17:40:02 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Gate checkpoint: `38a7bd83`; latest code/test change: `669d8a0c`
+- Host: macOS AArch64, Apple M5 Max, 18 logical CPUs, Rust 1.85.0
+- Fresh Cargo target: `/tmp/rocketmq-phase18-current-gates-20261024T172656Z`
+- Pinned Java reference: RocketMQ 5.5.1, source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Verification
+
+- Fresh-target locked default workspace tests/doctests:
+  `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-current-gates-20261024T172656Z cargo test --offline --locked --workspace` — PASS.
+- Fresh-target locked all-feature workspace tests/doctests:
+  `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-current-gates-20261024T172656Z cargo test --offline --locked --workspace --all-features` — PASS.
+- Strict host Clippy:
+  `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-current-gates-20261024T172656Z cargo clippy --offline --locked --workspace --all-targets --all-features -- -D warnings` — PASS.
+- Focused regression:
+  `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-current-gates-20261024T172656Z cargo test --offline --locked -p rocketmq-classic-remoting --lib response_future_display_preserves_java_to_string_state_fields` — PASS, 1 test.
+- Windows GNU workspace check and strict Clippy — PASS:
+  `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-current-gates-20261024T172656Z cargo check --offline --locked --target x86_64-pc-windows-gnu --workspace --all-features`;
+  `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-current-gates-20261024T172656Z cargo clippy --offline --locked --target x86_64-pc-windows-gnu --workspace --all-targets --all-features -- -D warnings`.
+- Windows GNU test-harness compile/link:
+  `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-current-gates-20261024T172656Z cargo test --offline --locked --target x86_64-pc-windows-gnu --workspace --all-features --no-run` — PASS. Windows executables were not run.
+- Pinned offline Maven verification:
+  `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS; fixture drift checks, 37 scenarios, 11 message fixtures, 106 typed headers, 19 typed bodies, and Java/Rust cross-decodes passed.
+- Differential self-test and manifest:
+  `python3 tests/differential/compare.py --self-test` and
+  `python3 tests/differential/compare.py --validate-manifest` — PASS; 37 scenarios validated.
+- Deterministic race/leak smoke:
+  `CARGO_NET_OFFLINE=true bash tests/stress/run-offline-smoke.sh` — PASS, 20 cases × 3 repetitions.
+- Fixed-seed fuzz:
+  `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-current-gates-20261024T172656Z cargo run --offline --locked -p rocketmq-classic-remoting --example fuzz_smoke` — PASS; 163 frame seeds, 11 message seeds, 11 property seeds, 2,960 mutations, and 564/192/176 frame/message/property decoder calls.
+- Release examples, benchmark, and strict benchmark Clippy all PASS:
+  `cargo build --offline --locked --release -p rocketmq-classic --examples`;
+  `cargo bench --offline --locked -p rocketmq-classic --bench offline`;
+  `cargo clippy --offline --locked -p rocketmq-classic --bench offline --all-features -- -D warnings`.
+  The benchmark sample is in `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+- Workspace metadata/license/dependency-direction check:
+  `python3 scripts/check-workspace-metadata.py` — PASS.
+- `cargo package --offline --locked -p <product-crate> --list` — PASS for the facade, Common, Consumer, Core, Producer, Protocol, and Remoting crates. Each listing contains `LICENSE` and `NOTICE`.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+
+## Execution note and remaining scope
+
+- The first full-workspace host test attempt using the repository's accumulated
+  Cargo target stopped before the Remoting codec harness entered `main`; process
+  inspection showed it suspended in the macOS dynamic loader. That attempt was
+  stopped and is not counted as a pass or test failure. Repeating both complete
+  workspace suites against the isolated fresh target above passed.
+- Broad P18-V01 public method/overload/input/error/control-flow and
+  reverse-export reconciliation remains PARTIAL. `MessageQueueAssignment`
+  different-mode HashSet collision outcomes still depend on JVM-process-local
+  enum identity hashes. Native Windows runtime and current-revision remote
+  Ubuntu CI remain unverified; no push or remote CI ran.
+- The four pre-existing Phase 19 user-owned worktree paths remained untouched
+  and unstaged. Phase 19 Broker/Docker validation was not run.

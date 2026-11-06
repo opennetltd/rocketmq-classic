@@ -1,0 +1,77 @@
+# Phase 18 caller-defined MessageExt subtype adapter — 2026-10-21T18:07:38Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `7fd89286` (`feat(common): preserve custom MessageExt subtypes`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `4246e4a2563d79e9c8e78b2405941a850ad904d48e121e0b3fe009e9ae366263`.
+
+## Source audit and change
+
+- Pinned `MQClientInstance.consumeMessageDirectly` passes the same
+  `MessageExt` instance through the selected Push consume service. The Java
+  callback and `resetRetryAndNamespace` call virtual topic, queue ID, broker,
+  message ID, setter and display methods.
+- Added public `MessageExtSubtype` with downcastable custom fields and hooks
+  for those selected virtual methods. `MessageExt::clone` shares the runtime
+  adapter; serialization/deserialization omit it. Exported the trait from the
+  Common crate and `rocketmq-classic` facade.
+- Added an invoked Java custom subclass and matching Rust direct-consume case.
+  It exercises initial topic assignment, retry-topic restoration, namespace
+  removal, queue/broker/message getters and setters, custom fields, and
+  `toString`. All 27 direct-consume cases compare successfully.
+- Updated the Phase 6, Phase 10 and Phase 18 crosswalks and the release
+  checklist. The broader inherited `Message`/`MessageExt` override inventory
+  remains open.
+
+## Verification
+
+- PASS: `cargo test --workspace --locked --quiet` and
+  `cargo test --workspace --all-features --locked --quiet` on the final code
+  tree. Focused Common and full Consumer package suites also pass; Consumer has
+  247 unit tests and all package integration tests pass.
+- PASS: strict workspace Clippy with all targets/features and `-D warnings`;
+  `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: pinned Maven `verify` (37 scenarios, fixture drift, 83 typed headers,
+  16 typed bodies and Rust/Java cross-decodes). The runtime consumer fixture
+  verifies 9 Running Info, 27 direct-consume and 15 reset cases. Existing JDK
+  Unsafe and reflective-final-field warnings were emitted.
+- PASS: differential self-test and 37-scenario manifest validation; offline
+  deterministic stress smoke (16 cases × 3); release fuzz smoke (137 frame
+  seeds, 11 message seeds, 2,368 mutations, 201 frame decodes, 118 message
+  decodes).
+- PASS: release workspace examples and workspace bench compilation. Offline
+  benchmark on macOS AArch64, Apple M5 Max, Rust 1.85.0: frame encode/decode
+  2,317.5 ns/iteration; zstd message decode 1,179.8 ns; producer request
+  construction 1,230.0 ns; 128-entry route lookup 13.8 ns; pending completion
+  66,515.8 ns. These are observations, not thresholds.
+- PASS: workspace metadata/dependency/license checks; locked metadata (8
+  workspace members, 216 total packages, 208 registry packages); all seven
+  product package listings contain `LICENSE` and `NOTICE`; four Unique ID
+  tests pass with both `TZ=UTC` and `TZ=Asia/Taipei`.
+- The first Java compile attempt used pattern matching unsupported by the
+  harness's Java 11 source level; the fixture was changed to Java 11 syntax.
+  An initial Rust comparison used a stale compiled Java fixture and was
+  rerun after compilation/regeneration. Initial strict Clippy found an
+  unnecessary lazy fallback; the code was corrected. The first metadata
+  inspection assumed Cargo's source field was always a string; the check was
+  corrected to handle workspace packages with no source. All final checks
+  above pass.
+
+## Remaining status
+
+This closes the direct-consume custom-field and selected-override slice only.
+Broad P18-V01 source/API/settings/input/error/control-flow/reverse-export work
+and inherited method overrides outside the adapter hooks remain open. Current
+GitHub Ubuntu and native Windows P18-V04 runtime evidence is absent. Phase 19
+Broker/Docker validation remains separate. No remote CI, push or Broker/Docker
+run was performed. The pre-existing Phase 19 working-tree paths were left
+unstaged and untouched.
+
+## Post-commit recheck — 2026-10-21T18:11:05Z
+
+- Re-ran `mvn -q -f compat/java-reference/pom.xml verify` after the final
+  facade re-export commit `7fd89286`; all 37 scenarios, the 27-case direct
+  consume fixture, 83 typed headers, 16 typed bodies and cross-decodes passed.
+- Re-ran `cargo bench -p rocketmq-classic --bench offline --locked` on the
+  committed tree. The current measurements are recorded in
+  `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.

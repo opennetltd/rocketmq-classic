@@ -1,0 +1,153 @@
+# Phase 19 local route differential continuation — 2026-10-17T05:04:59Z
+
+- Started on `phase/19-phase-18-compatibility-release-gate` at `c48f1b65`;
+  the source tree initially had an uncommitted integration package and Java
+  route probe. Java reference checkout `/Users/bruce.tsai/Projects/3rd/rocketmq`
+  remained read-only. The Phase 19 plan was not modified.
+- Added unpublished `rocketmq-classic-integration`, a Rust route probe, a Java
+  5.5.1 route probe, Maven execution ID `live-route-probe`, workspace package
+  metadata handling, and a manifest-backed fail-closed `run.sh` selector.
+  Code commits: `72266b44` and `0fa704f8`.
+- The first formatter check found one rustfmt-only line wrap in
+  `live_client.rs`; `cargo fmt --all` fixed it. Formatting and `git diff --check`
+  then passed.
+- `cargo check -p rocketmq-classic-integration --locked` and strict targeted
+  Clippy passed. After adding the package, `cargo clippy --workspace
+  --all-targets --all-features --locked -- -D warnings`, default and
+  all-feature `cargo test --workspace --locked`, Maven `verify` (37 scenarios,
+  fixture checks, and Java/Rust cross-decodes), comparator self-test,
+  37-scenario manifest validation, metadata/license checks, formatting, and
+  diff checks passed.
+- The first live-runner attempt used Bash lowercase parameter expansion not
+  supported by the installed macOS Bash; replaced it with `tr`. The next run
+  correctly provisioned Broker 5.3.4 and the scenario topic but Maven invoked
+  the harness default `compat.Main` instead of the route probe. Added the named
+  Maven execution and preserved the failed-run logs; topic deletion and
+  project-only Compose cleanup succeeded.
+- The `basic` Docker profile repeatedly passed bounded health/readiness checks
+  and `mqadmin clusterList` reported `V5_3_4`. The route runner now creates an
+  isolated project and `compat_phase0_route` with four queues, obtains Java and
+  Rust route rows, compares exact sorted output, deletes only its topic and
+  project, and archives evidence. A final run on source commit `0fa704f8`
+  passed `ROUTE-001-get-existing-topic`; both clients returned `broker-a`
+  queue IDs 0–3. The manifest now records this single `PASS` with an evidence
+  directory. `compare.py --validate-manifest` and `--self-test` passed after
+  evidence reconciliation. Final evidence is under
+  `docs/compatibility/evidence/phase-19/ROUTE-001-get-existing-topic/20261017T050220Z/`.
+- Verified the final Compose project had no remaining containers or volumes.
+  `tests/differential/run.sh --list` reports 37 cases; `--all` exits 3 and
+  identifies 36 unimplemented cases without provisioning Docker resources.
+  Omitting the disposable-test marker exits 2 before setup.
+- The captured environment showed Docker Engine 29.8.2 / Compose 5.5.0,
+  `linux/aarch64`, Rust 1.85.0, Maven 3.10.0; `mvn -version` reported Java 27
+  while `java -version` on PATH reported Zulu 21.0.12. Java runner toolchain
+  pinning/unification remains open.
+- This does not close the full Phase 18/19 objective. The broad P18-V01
+  bidirectional API/settings/error/control-flow/reverse-export audit remains
+  open. Race/leak, fuzz, release-example, and benchmark gates still need a
+  rerun after the workspace membership change. Current-revision Ubuntu/Windows
+  CI evidence and P18-V04 remain open. Phase 19 has 1/37 live cases passed;
+  two-Broker/TLS/ACL/feature profiles and `run-local.sh --all` are not
+  implemented. Registry/version preflight remains open. MAN-01–MAN-04 await
+  owner topology/identity/workload/maintenance inputs; MAN-05 awaits local
+  matrix classification. No push, publication, tag, or production mutation
+  occurred.
+
+# Follow-up at 2026-10-17T05:09Z
+
+- Commit `21ef9f4e` makes the live runner reject
+  non-CI toolchains (Maven JDK 27 and Rust 1.85.0). A new route run passed with
+  the gate enabled, updated the manifest to one evidence-backed `PASS`, and
+  passed comparator self-test/manifest validation. Evidence:
+  `docs/compatibility/evidence/phase-19/ROUTE-001-get-existing-topic/20261017T050623Z/`;
+  metadata records source `21ef9f4e`, clean code paths, and exit status 0.
+- The previously listed remaining offline gates were rerun after workspace
+  membership changed: 16 race/leak cases × 3, fuzz smoke (105 frame seeds, 11
+  message seeds, 1,856 mutations), release examples, and benchmark compilation
+  all passed. Seven publishable crates each include `LICENSE` and `NOTICE` in
+  `cargo package --list`; workspace metadata/license checks pass. P18-V02's
+  server-free local verification is now complete on this workspace revision.
+- Remaining work: broad P18-V01 bidirectional API/settings/error/control-flow/
+  reverse-export audit; current-revision Ubuntu/Windows CI and P18-V04 evidence;
+  the other 36/37 live scenarios and required two-Broker/TLS/ACL/feature
+  profiles; `run-local.sh --all`; Java artifact checksum/provenance and later
+  version/registry preflight. MAN-01–MAN-04 await owner topology, identity,
+  workload, and maintenance inputs; MAN-05 awaits local-matrix classification.
+  No push, publication, tag, or production mutation occurred.
+
+# Follow-up at 2026-10-17T05:12Z
+
+- Commit `adae9d1f` redacts the local home/repository paths and hostname from
+  archived evidence. The JDK 27 Maven runtime is the one used by the Java
+  probe; the separate PATH `java` executable reports Zulu 21 but is not used.
+- Re-ran `ROUTE-001-get-existing-topic` with the committed redaction and
+  toolchain gates. Java/Rust route rows matched, the scenario topic and Compose
+  project were removed, and the manifest evidence validator plus comparator
+  self-test passed. Final evidence:
+  `docs/compatibility/evidence/phase-19/ROUTE-001-get-existing-topic/20261017T051047Z/`;
+  metadata source is `adae9d1f`, `source_code_dirty=false`, `exit_status=0`.
+- Re-ran the Phase 18 checks that had been pending after workspace membership
+  changed: `bash tests/stress/run-offline-smoke.sh`, fuzz-smoke example, release
+  example build, offline benchmark compilation, and `cargo package --list` for
+  seven publishable crates. All passed; each package lists `LICENSE` and
+  `NOTICE`. P18-V02 server-free local validation is now complete for this
+  workspace revision. Broad P18-V01 and current-revision platform CI/P18-V04
+  remain open.
+
+# Follow-up at 2026-10-17T05:23Z
+
+- On `91ecd510`, completed the missing-topic route runner and reran both basic
+  profile route scenarios. `ROUTE-001-get-existing-topic` returned matching
+  four-queue route rows; `ROUTE-002-topic-not-exist` returned `NO_ROUTE` for
+  both clients. Latest evidence is under `20261017T052003Z` and
+  `20261017T051903Z`, respectively. Both manifest rows now have evidence-backed
+  `PASS` status.
+- Reconciled the differential manifest and verified `compare.py
+  --validate-manifest`, `compare.py --self-test`, and `git diff --check`. Both
+  isolated Compose projects report no remaining containers; cleanup logs show
+  their networks removed.
+- Updated the compatibility matrix, server results, integration README, and
+  release checklist to reflect 2/37 live cases passed and 35 pending.
+- Remaining automatable work includes the broad P18-V01 audit, current-revision
+  Ubuntu/Windows CI and P18-V04 evidence, 35 live cases and their additional
+  profiles, `run-local.sh --all`, and pre-publication version/registry checks.
+  Owner-specific MAN-01–MAN-04 still await environment inputs; MAN-05 awaits
+  local-matrix classification. No push, publication, tag, or production
+  mutation occurred.
+
+# Evidence note at 2026-10-17T05:24Z
+
+- The first missing-topic runner attempt (`20261017T051613Z`) recorded Java's
+  route miss as Maven failure because the client wraps response code 17 in an
+  `MQClientException`. The route adapter now walks the cause chain and
+  normalizes this Java outcome to `NO_ROUTE`; follow-up runs at
+  `20261017T051736Z` and `20261017T051903Z` matched Rust. The first failure is
+  retained as evidence, with trailing spaces on two blank `[ERROR]` lines
+  removed so the archived output passes `git diff --check`.
+
+# Evidence formatting at 2026-10-17T05:26Z
+
+- Docker Compose progress logs emitted trailing padding and blank separators.
+  The archived text keeps the full progress messages while trimming only
+  line-ending whitespace and redundant blank separators so the evidence
+  commit passes `git diff --check`.
+
+# Follow-up at 2026-10-17T05:33Z
+
+- Commit `1a77ac68` adds Java/Rust live heartbeat probes and runner support for
+  `HEARTBEAT-001`. The Java 5.5.1 API and Rust typed API sent byte-identical
+  heartbeat bodies for producer group `compat_phase0`; both received Broker
+  response version `481`. The pinned 5.3.4 basic profile was removed after the
+  run. Evidence is under
+  `docs/compatibility/evidence/phase-19/HEARTBEAT-001/20261017T053144Z/`;
+  metadata records `source_code_dirty=false` and exit status 0.
+- Rust integration build and strict Clippy, Java Maven compile, manifest
+  validation, comparator self-test, runner shell syntax, and the explicit
+  disposable-environment guard passed. Updated the compatibility and release
+  documents to report 3/37 live cases passed and 34 pending.
+- Remaining automatable work: broad P18-V01 audit, current-revision
+  Ubuntu/Windows CI and P18-V04, 34 live scenarios plus additional Docker
+  profiles, `run-local.sh --all`, and pre-publication version/registry checks.
+  Owner-specific MAN-01–MAN-04 still await environment inputs; MAN-05 awaits
+  local-matrix classification. No push, publication, tag, or production
+  mutation occurred.

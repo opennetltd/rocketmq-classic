@@ -1,0 +1,20 @@
+Phase 18 parity audit continuation — 2026-10-22 13:22 UTC
+
+Environment: macOS AArch64, Rust 1.85.0. Workspace branch is `phase/18-phase-18-compatibility-closure`; pinned RocketMQ Java source commit is `efa1be59d6fc747ad220f036c86030f05f0419f9`. The Java checkout at the supplied path is on a different HEAD (`2238256de1d227a4384ba969dfa31473187b4d08`) and has an unrelated untracked broker test file; no Java checkout files were changed. Pinned-source inspection used `git show efa1be59...:<path>`.
+
+Audit follow-up selected after the listUser response fix:
+- The Rust API map's historical writer-feature note still marked `WriteClassName` unmapped, while the current source already implements it in body, route, and heartbeat serializers. Pinned Java fixtures record `WriteClassName` output for 41 body, 8 route, and 3 heartbeat serialization cases; the three Rust differential tests compare every writer feature to those fixtures and pass.
+- Pinned Java `UserInfo` is a plain DTO, not a `RemotingSerializable` subclass. Its static serialization helpers are generic, but it has no instance `encode(JSONWriter.Feature...)` method. Rust had retained a public `UserInfo::java_encode_with_features` convenience method after replacing the generated adapter, which offered an unmatched type-specific feature API. Removed that method and added a compile-fail Rustdoc guard. Added an assertion that every pinned Fastjson writer feature variant is marked implemented.
+
+Validation results will be appended after running the focused/full Protocol checks and pinned Maven fixture verification.
+
+Validation:
+- `cargo fmt --all -- --check` — PASS.
+- `cargo test -p rocketmq-classic-protocol --all-features --locked` — PASS (156 unit tests, all integration targets, 158 doctests including the UserInfo compile-fail API guard).
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features --locked -- -D warnings` — PASS.
+- `mvn -f compat/java-reference/pom.xml verify` — PASS (37 scenarios, fixture verification, invoked Java probes, 106 typed headers and 19 typed bodies cross-decoded).
+- Focused body, route, and heartbeat inherited-serialization Java comparisons — PASS; includes individual `WriteClassName` cases and 52 mapped serialization values across the pinned fixtures.
+
+The API and writer-feature documentation reconciliation is pending the implementation commit. No plan files or pinned Java checkout files were changed.
+
+Follow-up to the pending note above: API-map, requirement-audit, and release-checklist documentation changes are now prepared as a separate docs commit. No Phase 18 plan checkbox or text was modified.

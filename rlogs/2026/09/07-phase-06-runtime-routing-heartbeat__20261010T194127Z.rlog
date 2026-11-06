@@ -1,0 +1,7 @@
+# Phase 6 execution session — 2026-10-10T19:41Z
+
+- Continued source/API reconciliation on `07-phase-06-runtime-routing-heartbeat` with a missing raw-route input branch: nullable `TopicRouteTable::put_all_nullable_iter` rejected null keys in code, but the route oracle only covered null values.
+- Added a pinned Java `TreeMap` using a null-tolerant comparator. Its observed order is `a`, `null`, `z`; `ConcurrentHashMap.putAll` throws `NullPointerException` on the null key, keeps the first route, and skips the last. Rust reports typed `InvalidRoute("null topic route key")` and matches the post-failure keys.
+- Code/oracle/test commit: `88ccdd55` (`Cover null keys in raw route putAll`). Route primitive count is 87; `fixtures/runtime/route.json` SHA-256 is `e0986004e2f019366d2deca75f670b0c7a7c395894b24b1ef42857b353d45b92`.
+- Validation passed: focused raw route differential; `cargo test --workspace --all-targets --locked`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; pinned offline `mvn -o verify` (22 scenarios and Java cross-decodes); comparator self-test and 22-scenario manifest validation; `cargo fmt --all -- --check`; `git diff --check`.
+- Updated the API/config map, requirement audit, route audit, and this log. Whole Phase 6 public API/settings/source/input/platform reconciliation remains open; P6-V04 stays a Phase 19 handoff.

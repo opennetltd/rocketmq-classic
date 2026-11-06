@@ -1,0 +1,86 @@
+Phase 18 continuation — Producer send inputs and reverse API audit
+Session date: 2026-10-14 UTC
+Branch: `phase/19-phase-18-compatibility-release-gate`
+Java oracle: RocketMQ client 5.5.1, pinned source `efa1be59d6fc747ad220f036c86030f05f0419f9`; reference checkout read-only.
+Plans: left unchanged.
+
+Changes and decisions
+- Matched Java caller-visible `UNIQ_KEY` preparation. Single-message Producer send methods now accept `&mut Message`; eligible accumulator sends preserve the generated or supplied ID on the caller message before runtime dispatch, while direct sends mutate only after route/address checks. Retries reuse the same ID; auto-batch inputs get unique IDs.
+- Added invoked Java `sendInputMutation` cases for accumulator dispatch failure and direct service-state failure. Rust regression compares both boundaries and covers supplied-ID retention, retry reuse and batch behavior. Final `fixtures/producer/core.json` SHA-256: `079e9fcac47f97f4921a823c10b02a3b0ec882c42b85c85695663530047cd23d`.
+- Reverse-scan correction: `TopicPublishInfo::from_snapshot` had no Java public constructor equivalent and only internal callers, so reduced it to `pub(crate)`. Corrected the Producer matrix's backpressure helper names and made the public validation helper mappings explicit.
+- Cross-checked Phase 15–17 compatibility matrices and execution records: local acceptance is recorded as verified; their Broker-backed handoff cases remain Phase 19. No plan files were changed.
+
+Commits
+- `4b311231` fix(producer): preserve Java send input mutation
+- `6a9c283b` docs(compat): record Producer send mutation evidence
+- `d03744f9` test(producer): compare direct send mutation boundary
+- `a92555ea` docs(compat): record direct send mutation boundary
+- `6761efc1` fix(producer): keep route snapshot constructor internal
+- `48e6849f` docs(compat): refine Producer reverse API crosswalk
+- `b4e681a5` docs(compat): map Producer validation helpers
+
+Validation
+- PASS: `cargo test -p rocketmq-classic-producer --locked` — 139 unit tests and 60 integration tests; rerun after direct-send fixture assertions and after visibility reduction.
+- PASS: focused `cargo test -p rocketmq-classic-producer --locked accumulator_send_mutates_caller_before_runtime_dispatch_like_java`.
+- PASS: strict `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` after both Producer changes.
+- PASS: `mvn -q -Dproducer.core.fixture.verify=false -f compat/java-reference/pom.xml verify` regenerated the Producer fixture; normal `mvn -q -f compat/java-reference/pom.xml verify` then passed fixture drift checks, 37 scenarios and Java/Rust cross-decodes.
+- PASS: `cargo fmt --all -- --check`, `git diff --check`, fixture SHA-256 verification.
+- One documentation patch initially missed its context and changed no files; reapplied against the current lines.
+
+Open work
+- P18-V01 remains open for complete Java source/overload input-error-flow coverage and bidirectional public API/reverse-export reconciliation. The send mutation and one internal API export are bounded closures only.
+- P18-V04 still needs a current GitHub Ubuntu address-profile result; native Ubuntu ARM64 evidence does not satisfy this check.
+- Phase 19 Docker/Broker and cross-language scenarios, current release-version/registry dependency-resolution checks, and owner-environment validations remain outstanding. Publication/tagging is outside this work.
+
+End state at `b4e681a5`: worktree clean; no plan edits, push, publication, or tag.
+
+Phase 18 continuation — Producer publish-info export surface
+Session date: 2026-10-14 UTC
+Time: 16:23 UTC
+Branch: `phase/19-phase-18-compatibility-release-gate`
+Starting revision: `197bafc9`
+
+Changes and validation
+- Reverse API review found `ProducerQueueIndex::current`, `TopicPublishInfo::{from_snapshot,snapshot}`, and `TopicPublishInfoTable::{snapshot,keys}` are implementation helpers with no Java public counterparts. The four helpers newly surfaced in this continuation are now crate-private; existing `from_snapshot` visibility was already crate-private.
+- Updated the Phase 6 audit, Phase 7 matrix, and release checklist to record the scope and preserve P18-V01 as open.
+- PASS: `cargo test -p rocketmq-classic-producer --locked` — 139 unit and 60 integration tests.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all -- --check` and `git diff --check`.
+- This is a bounded public-surface correction; full Java overload/input/error/flow and bidirectional API reconciliation remains open.
+
+Phase 18 continuation — Producer publish-info Rust reverse crosswalk
+Session date: 2026-10-14 UTC
+Time: 16:25 UTC
+Branch: `phase/19-phase-18-compatibility-release-gate`
+Starting revision: `7ce8bf8d`
+
+Changes
+- Added exact Rust-to-Java rows for 11 surfaced publish-info APIs: queue-list setter, cursor accessors, filtered/previous-Broker selectors, Map.replaceAll, live-view removeIf callbacks, and values-view removeAll iterator adapter.
+- Added `rust_publish_info_method_names_have_java_crosswalks`, which requires each listed Rust API and Java counterpart on the same Phase 7 matrix row.
+- Updated the Phase 6 requirement audit and P18-V01 checklist. Full reverse export and overload/input/error/flow reconciliation remains open.
+
+Validation
+- PASS: focused crosswalk guard.
+- PASS: `cargo test -p rocketmq-classic-producer --locked` — 139 unit and 61 integration tests.
+- PASS: strict all-target/all-feature workspace Clippy.
+- PASS: formatting and `git diff --check`.
+
+Phase 18 continuation — TopicPublishInfo and ThreadLocalIndex API parity
+Session date: 2026-10-14 UTC
+Time: 16:44 UTC
+Branch: `phase/19-phase-18-compatibility-release-gate`
+Starting revision: `35edfe02`
+
+Changes
+- Pinned the exact 17-method public `TopicPublishInfo` signature inventory and the 3-method `ThreadLocalIndex` inventory, including constructor and overload signatures. Rust tests now guard their Java-to-matrix and Rust-to-Java rows.
+- Reverse comparison found a public behavior mismatch: Rust `ProducerQueueIndex::increment_and_get` returned the raw wrapped `i32`, while Java returns the incremented value masked with `0x7fffffff`. Rust now stores the wrapped value and returns the Java mask. Added a Java-fixture-backed overflow regression from `i32::MAX` (returns 0, then 1).
+- Implemented `Display` for `ProducerQueueIndex` with Java `ThreadLocalIndex.toString()` formatting, including null before first initialization.
+- First normal Maven fixture verification failed because newly recorded random cursor values made the fixture nondeterministic. Replaced those fields with deterministic Java assertions; subsequent regeneration and verification passed. The failure and correction are both retained here.
+- Latest Producer fixture SHA-256: `052dff1a2c653780e513d74d7021de4e9914ab9cae172f1d090ffc89461d532a`.
+
+Validation
+- PASS: full Producer suite — 140 unit and 63 integration tests.
+- PASS: pinned Java surface tests (15 integration and 5 unit tests selected by `pinned_java_`).
+- PASS: strict all-target/all-feature workspace Clippy, formatting and diff checks.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` — 37 scenarios, fixture drift, cross-decodes and Java runtime fixtures.
+- P18-V01 remains open for the wider Rust public API reverse export and Java overload/input/error/flow reconciliation.

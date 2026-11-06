@@ -1,0 +1,32 @@
+# Phase 19 basic Docker Broker profile — 2026-10-17T04:33:17Z
+
+- Image: official `apache/rocketmq:5.3.4`, pinned to multi-platform index
+  `sha256:d57ee4ebbd9d7bb6e185775bde41c128e98f185b25bf0b05c77d4e6c010572b8`.
+  The selected linux/arm64 image digest is
+  `sha256:4c7982d63c1b1d0edb45d6e9d330746b0a7816d96d01daa340244f5fad84d215`;
+  the image reports RocketMQ 5.3.4 and OpenJDK 8u472.
+- Docker Engine 29.8.2 and Docker Compose v5.5.0 are available. The basic
+  profile uses a project-scoped network and store volume, binds host ports to
+  loopback, disables automatic topic/subscription-group creation, and advertises
+  the Broker as `broker:10911` for clients on the Compose network.
+- Provisioning used the required disposable marker and explicit `basic` profile:
+  `ROCKETMQ_CLASSIC_TEST_ENV=local-disposable ROCKETMQ_PROFILE=basic` with
+  project `rocketmq-classic-p19-20261017-0429`.
+- The first startup failed closed because an empty Docker named volume was
+  root-owned and the image's `rocketmq` user could not create its store lock.
+  Added a one-shot `store-init` service that sets the project volume owner to
+  the image's `rocketmq` user. The rerun passed `docker compose up --wait` and
+  bounded `mqadmin clusterList` polling. Both services became healthy and the
+  cluster listing reported `RocketMQLocalTest`, `broker-a`, address
+  `broker:10911`, and version `V5_3_4`.
+- Archived container startup logs in
+  [`17-phase-19-basic-broker-profile__20261017T043317Z.log`](17-phase-19-basic-broker-profile__20261017T043317Z.log).
+  `cleanup.sh` stopped and removed only this Compose project, its network, and
+  its store volume; subsequent project-filtered container and volume listings
+  were empty.
+- This verifies the initial environment setup/readiness slice only. No
+  Java/Rust client scenario ran; no topic/group scenario state was created.
+  The fail-closed scenario runner, per-scenario reset/evidence reconciliation,
+  two-Broker, TLS/auth and other required profiles, and the complete local
+  matrix remain open. This work stays automatic Phase 19 work and is not moved
+  to the owner-manual validation list.

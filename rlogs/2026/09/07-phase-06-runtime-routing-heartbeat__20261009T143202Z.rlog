@@ -1,0 +1,211 @@
+# Phase 6 execution log — 2026-10-09T14:32:02Z
+
+## Assignment DTO public method parity — 2026-10-09T18:03:00Z
+
+- Added pinned Java 5.5.1 API cases for `QueryAssignmentRequestBody`, `QueryAssignmentResponseBody`, and `SetMessageRequestModeRequestBody`, covering no-argument defaults, every getter/setter, populated readback, and null setter behavior. The oracle confirms `PULL`/zero defaults on the mode request and that Java returns the same mutable Set assigned to the response body.
+- Rust now exposes all corresponding snake_case accessors and matches the invoked values/null states. Its owned HashSet plus borrowed getter does not preserve Java mutable Set alias identity. Oracle `7c7d8b5b`; implementation `fc5f2336`; current lookup fixture SHA-256 `e716392045bd2dc0eae95f7815c6cdc5a9485fed707515ea852ada8c56be8b59`.
+- Full workspace/all-target tests, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture drift, Java cross-decodes), fmt, and diff checks pass. Added ADR-0054 and updated current Phase 6 API/runtime/Java/requirement evidence. Phase 6 remains PARTIAL; P6-V04 stays `PENDING_PHASE_19`.
+
+## BatchAck public API method parity — 2026-10-09T17:56:09Z
+
+- Added a pinned Java 5.5.1 invocation for BatchAck constructor defaults, all nine property getter/setter pairs, `toString()`, and BatchAckMessageRequestBody broker/acks getters and setters. The oracle confirms Java returns the same mutable List passed to `setAcks`.
+- Rust now exposes the corresponding snake_case accessors and Java-shaped `Display` text. Values and null states match; Rust takes ownership of `Vec` and lends an immutable slice, so mutable List alias identity remains an explicit semantic gap. Oracle `7f3a4f0e`; implementation `c709e743`; aggregate lookup fixture SHA-256 at this checkpoint `d16675236d7b63ddc1ffd69c80df896370479f952f0af9f961214ed7d0237632`.
+- Full workspace/all-target tests, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture drift and Java cross-decodes), fmt and diff checks pass. Added ADR-0053 and updated the current Phase 6 API/runtime/Java/requirement evidence. Overall Phase 6 remains PARTIAL; P6-V04 stays `PENDING_PHASE_19`.
+
+## BatchAck Fastjson body input parity — 2026-10-09T17:49:21Z
+
+- Added a direct pinned Java 5.5.1 BatchAckMessageRequestBody.decode/encode matrix with 95 cases. The red differential found Fastjson coercions/defaults, singleton and nullable List behavior, duplicate-field last-wins handling, and empty BitSet omission that derived Serde did not match.
+- Rust now matches the corpus through raw last-wins DTO decoding, Java-shaped primitive/String coercions, Option<Vec<Option<BatchAck>>>, and Base64 BitSet handling. Oracle 58ad8480; implementation 381b6edf; lookup fixture SHA-256 39374bf2374e2ae745ea82335762d17ad05cde2b987c05bc0759b808e984267d.
+- Full workspace/all-target tests, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture drift and Java cross-decodes), focused 95-case differential, fmt and diff checks pass. Other DTO/raw/source/branch/reverse-export reconciliation remains open; Phase 6 stays PARTIAL and P6-V04 remains PENDING_PHASE_19.
+
+## Unregister request API reconciliation — 2026-10-09T17:35:50Z
+
+- Pinned 5.5.1 client/common/remoting artifact scans found no `UnregisterClientRequestBody`. `MQClientAPIImpl.unregisterClient` bytecode creates request code 35 with `UnregisterClientRequestHeader` and sends no body; the Java header exposes clientID, producerGroup and consumerGroup.
+- Removed the Rust-only public body DTO and synthetic serialization test in `0c60e2b1`. Full workspace/all-target tests, strict all-target/all-feature Clippy, fmt, diff and no-reference checks passed.
+- Added ADR-0051 and updated the Phase 6 requirement/API/runtime/Java compatibility inventories. Phase 6 remains PARTIAL with broad DTO/raw/source/branch/reverse-export reconciliation open; P6-V04 remains `PENDING_PHASE_19`.
+
+## Unregister body inventory correction — 2026-10-09T17:38:59Z
+
+- Continued the pinned-artifact public DTO scan and found the unused `UnregisterClientBody` type plus a stale request-code row claiming an optional JSON body. Java's `MQClientAPIImpl.unregisterClient` bytecode passes only `UnregisterClientRequestHeader` to request code 35; the three pinned 5.5.1 client/common/remoting jars contain neither Rust body type.
+- Removed `UnregisterClientBody` in `a1f8d747`; the earlier `UnregisterClientRequestBody` and synthetic-only test removal is `0c60e2b1`. Corrected `REQUEST_CODES.md` to state that command 35 has no request body.
+- Full workspace/all-target tests, strict all-target/all-feature Clippy, fmt and diff checks pass. Phase 6 remains PARTIAL; P6-V04 stays `PENDING_PHASE_19`.
+
+- Continued route DTO/runtime reconciliation on `07-phase-06-runtime-routing-heartbeat`.
+- Committed red Java oracle coverage as `ee5d3cb`; four cases establish that quoted and unquoted `null` keys become actual null `Long` keys in `BrokerData.brokerAddrs`, while `TopicQueueMappingInfo.currIdMap` rejects them as `Integer` keys. Route DTO input coverage is now 399 cases; `fixtures/runtime/route.json` SHA-256 is `0472ed8171207d35519adae7521741d359e343a3c378cf75537cb5c29cb41313`.
+- Implemented nullable broker IDs as `Option<i64>` across the DTO and route snapshot, including JSON key serialization and lookup behavior. Pinned `MQClientInstance` bytecode confirms admin/fallback lookups and heartbeat sends unbox selected IDs; Rust surfaces those paths as `InvalidRoute("null broker address id")`. Implementation and regressions are in `cadf260`.
+- Validation passed: full `cargo test --workspace --all-targets --locked`; strict all-target/all-feature Clippy; pinned offline Maven verify (22-scenario manifest, runtime fixture drift checks and Java cross-decodes); comparator self-test; `cargo fmt --check`; and `git diff --check`.
+- Updated ADR-0014, route/API/requirement/runtime inventories and Java 5.5.1 compatibility evidence. No plan files changed. Whole Phase 6 source/API/settings/input/branch/reverse-export reconciliation and final plan/index audit remain open; P6-V04 stays `PENDING_PHASE_19`.
+
+## Follow-up reconciliation — 2026-10-09T14:35:15Z
+
+- Cross-checked current fixture bytes against the compatibility map and matrix. Updated the current heartbeat DTO count/hash from the historical 213-case checkpoint (`4c6aee...`) to 241 cases and the actual current SHA-256 `385fc38890b6f18fc9ea74a4a6d2a47f52c27bae5ffc7851064c594cef426803`.
+- Updated the Phase 6 source row in `JAVA_5_5_1_COMPATIBILITY.md` to the current 399 route DTO / 241 heartbeat DTO corpus counts; its status remains PARTIAL while named DTO/raw-input and final reverse-export gaps remain open.
+- Checks: `shasum -a 256 fixtures/runtime/heartbeat.json` matches the documented digest; `git diff --check` passes. No plan files changed; P6-V04 remains `PENDING_PHASE_19`.
+- Reconciliation addendum: updated the current `PHASE_6_REQUIREMENT_AUDIT.md` remaining-work summary from the prior 395-case route checkpoint to 399, matching `fixtures/runtime/route.json` and the latest Java/native nullable-key cases; historical checkpoint notes remain unchanged.
+
+## Assignment request DTO red cases — 2026-10-09
+
+- Expanded the pinned Java 5.5.1 lookup oracle with all seven JSON token kinds across every `QueryAssignmentRequestBody` field and every `SetMessageRequestModeRequestBody` field, plus seven root token shapes for each DTO. New corpus arrays: 35 query field cases, 28 setter field cases, and 7 root cases per type. Updated `fixtures/runtime/lookup.json` SHA-256: `67d4aaf007e77c7feae7e5db937a72869ffa421c77563fd47e9cc826624fb335`.
+- Added native differential regressions. Root-shape cases pass, but field-shape cases fail red: Java accepts numeric `topic` and coerces it to `"7"`; Rust's derived optional-string fields reject it. Further token diffs are now exposed by the full regression.
+- Checks: pinned offline Maven generator ran successfully; `cargo test -p rocketmq-classic-protocol --lib shapes_match_invoked_java_fastjson --locked` failed only in the two new field-shape tests as expected; `git diff --check` passes. No production code changed in the red commit.
+
+## Assignment request DTO compatibility fix — 2026-10-09T14:43:50Z
+
+- `QueryAssignmentRequestBody` and `SetMessageRequestModeRequestBody` string properties now use the shared Fastjson nullable-string coercer. `SetMessageRequestModeRequestBody.popShareQueueNum` uses the Java integer coercion rules and maps object values to zero, as the pinned oracle requires. No public field or setting was added.
+- All four new field/root differential tests pass. Full `cargo test --workspace --all-targets --locked` passes with local loopback access; strict workspace/all-target/all-feature Clippy passes; offline Maven verify passes the pinned Java self-test, 22-scenario manifest, all fixture drift checks, and Rust/Java cross-decodes; differential self-test/manifest22, fmt and diff checks pass.
+- Lookup fixture SHA-256 remains `67d4aaf007e77c7feae7e5db937a72869ffa421c77563fd47e9cc826624fb335`. P6-V04 remains `PENDING_PHASE_19`.
+- Phase 6 inventories now record the assignment request DTO boundary: 52 `QueryAssignmentRequestBody` cases and 49 `SetMessageRequestModeRequestBody` cases, including all seven token kinds for every field and all seven roots for each DTO. API/config, requirement, runtime, and Java compatibility matrices use the current lookup fixture hash `67d4aaf007e77c7feae7e5db937a72869ffa421c77563fd47e9cc826624fb335`; `git diff --check` passes. Plan/index files were read-only during the audit.
+
+## Runtime DTO root-shape continuation — 2026-10-09
+
+- Added seven direct Java 5.5.1 roots each for `QueryAssignmentResponseBody.decode`, `GetConsumerListByGroupResponseBody.decode`, and the `CheckClientRequestBody` parse/first-access path. Empty objects decode; JSON null reaches the source-used getter and throws; arrays and scalar roots reject. Rust matches acceptance, decoded fields, and response encoding without a production change.
+- Expanded the direct differential totals to 36 assignment-response, 23 consumer-list, and 43 check-client body inputs. Updated fixture hashes: `lookup.json` `a06ffd71b4d32eb7946d4a2b1126715301da8f2ffc8a843ed2e6ec3d771ef8d7`; `client-check.json` `cdd164bbcaf8cb7a096828b289f69c56c2706c965e97bfe4f228b8ad08c16ee2`.
+- Separate oracle/test commit: `f1be053`. Focused Rust root-shape tests (four, including the existing two request DTO matrices), CheckClient DTO differential, full workspace/all-target tests, strict all-target/all-feature Clippy, pinned offline Maven verify (fixture drift and Rust/Java cross-decodes), comparator/manifest22, formatting and diff checks pass.
+- Current DTO/raw/source/branch reconciliation and non-macOS address-selection evidence remain open. No plan files changed; P6-V04 remains `PENDING_PHASE_19`.
+
+## Lite subscription DTO field/root/set continuation — 2026-10-09T15:09:46Z
+
+- Pinned Java 5.5.1 declarations show `LiteSubscriptionCtlRequestBody.subscriptionSet`, `LiteSubscriptionDTO.liteTopicSet` and `LiteSubscription.liteTopicSet` are Sets. Expanded the Java/native matrix to 114 cases, including every `LiteSubscriptionDTO` field's seven token shapes, roots, set values/members, deduplication, duplicate/null members, and primitive-long conversion. Oracle/test and implementation commits: `bdbe660`/`8f1ddd0`, `d3a298e`/`ab3d0e2`; empty-string Set oracle: `df69ec0`.
+- Native Lite string fields now use Fastjson coercion; nullable topic members use `BTreeSet<Option<String>>`; primitive long decoding matches Java; outer DTO Set wire storage retains identity-distinct objects and collapses duplicate nulls. The vector preserves input order because Java HashSet order is unspecified.
+- Current `fixtures/runtime/lookup.json` SHA-256: `ecb83ddd48d7d19fd3e8e015bc6d281b67f96d1c99e59091ace43d4d86c41756`. Full workspace/all-target tests, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and fixture drift/cross-decodes), comparator self-test/manifest22, fmt, and diff checks pass.
+- Updated ADR-0040, API/config, requirement, runtime and Java 5.5.1 compatibility records. The overall matrix remains PARTIAL; broader DTO/raw/source/branch/reverse-export reconciliation is open. No plan files changed; P6-V04 remains `PENDING_PHASE_19`.
+
+## Lock/unlock batch Set DTO input continuation — 2026-10-09T15:21:35Z
+
+- Pinned 5.5.1 `javap` confirms `LockBatchRequestBody.mqSet`, `UnlockBatchRequestBody.mqSet`, and `LockBatchResponseBody.lockOKMQSet` are `Set<MessageQueue>` fields; the two request constructors and the response constructor initialize an empty set. Added direct Java field/member/root cases: 46 lock request, 46 unlock request, and 25 lock response inputs. Oracle/test commit `bf4a420`; lookup fixture SHA-256 `29211416d6c3f8c9af305fbe18e66b8ad1ada7c251333f69b8cd2f7970938d49`.
+- Red tests found String coercion, primitive boolean null/numeric/fraction conversion, object-to-singleton Set conversion, null/duplicate member handling, empty-string Set conversion, duplicate-field last-wins, default Set encoding, and root-shape differences. Fix `a9c9627` now represents Set values as `Option<HashSet<Option<MessageQueue>>>`, uses the shared Java coercers and last-wins object decoder, and updates `lock_batch_mq` to preserve the nullable Set result. The Java HashSet's output order is unspecified.
+- Artifact inventory across pinned client/common/remoting jars finds `LockBatchResponseBody` and no Java `UnlockBatchResponseBody`; retained the existing Rust-only DTO as an accepted extra. Full workspace/all-target tests, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, deterministic fixture checks and cross-decodes), comparator self-test/manifest22, fmt and diff checks pass.
+- Added ADR-0046 and updated API/config, runtime, requirement and Java compatibility records. Broader Phase 6 method/setting/source/input/branch/reverse-export reconciliation remains open; the matrix stays PARTIAL, no plan files changed, and P6-V04 remains `PENDING_PHASE_19`.
+
+## Lite subscription identity and reverse-export continuation — 2026-10-09T15:30:40Z
+
+- Pinned `javap` on the 5.5.1 common/remoting jars confirms `LiteSubscriptionDTO`, `LiteSubscription`, and `LiteSubscriptionCtlRequestBody` inherit identity equality. Three direct Java cases show self-equality, unequal distinct equal-field objects, and Set size 2. Oracle/test `dc7215c`; fix `bba7902` removes structural `PartialEq`/`Eq` from the three Rust models. Compile-fail API regressions and Lite wire round-trip tests pass.
+- Reverse-export scan added simple-name aliases `body::LiteSubscriptionDTO` and `header::GetConsumerListByGroupResponseBody` in `ded2e08`. The lookup fixture including three identity cases has SHA-256 `0ddf0c9ae47ab86d17cb400da466802350cf7db50be234bb012668c91cd523e7`.
+- Full workspace/all-target tests, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture drift and cross-decodes), protocol doctests, comparator self-test/manifest22, fmt and diff checks pass.
+- The Java `LiteSubscription` field/method surface remains incomplete in Rust: `updateTime`, its accessors, and topic mutation methods are not mapped, and the Rust model retains `client_id`. Updated ADR-0040 and Phase 6 inventories to keep this gap open. Overall matrix remains PARTIAL; no plan files changed; P6-V04 remains `PENDING_PHASE_19`.
+
+## LiteSubscription API and input parity — 2026-10-09T15:42:16Z
+
+- Pinned 5.5.1 `javap` confirms the constructor's concurrent topic Set/current-millisecond timestamp, fluent group/topic setters, Set accessors, add/remove overloads, update-time accessors, and exact `toString` field layout. Java oracle/test commits `7a40c9f` and `d6cfcdd` add one direct method case and 16 Fastjson inputs; the previous 34 lookup keys remained byte-for-byte unchanged.
+- Red tests exposed the old `client_id`, nullable topic Set, absent timestamp/methods, and input behavior differences. Fix `80ded21` adds Java-shaped fields/methods and timestamp updates, matching `Display`, Fastjson coercion and null rejection for the concurrent Set, repeated Set-field accumulation, duplicate scalar last-wins, and constructor-time defaults. The fixture SHA-256 is `d7865ce0f360704c6ada2c059c28893b30e3f77acde0ad8d9dd19bde291068a5`.
+- Full workspace/all-target tests passed with loopback permission; strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and fixture drift), six compile-fail doctests, comparator self-test/manifest22, fmt and diff checks passed. Docs now close this `LiteSubscription` field/method/input item while leaving Lite DTO accessors and the wider audit open. Matrix remains PARTIAL; no plan files changed; P6-V04 remains `PENDING_PHASE_19`.
+
+## Lite DTO accessor and OffsetOption collection parity — 2026-10-09T15:51:24Z
+
+- Pinned `javap` confirms fluent setters for `LiteSubscriptionDTO` except its void `setOffsetOption`, void getter/setter methods for `OffsetOption`, and void control-body Set accessors. Direct Java cases capture getter values, fluent/void setter effects, constants, `toString`, equals, and one OffsetOption `HashSet` collapse.
+- External Rust API test commit `7226054` exposed that `OffsetOption` had value equality but no `Hash`, preventing collection use. Fix `ad1804a` adds the Lite DTO, OffsetOption, and control-body accessor/constructor/text methods; `de9aef7` adds value-consistent Rust `Hash` for OffsetOption and its enum type. Numeric Java `hashCode()` depends on enum object identity and is not represented as a stable number; Rust HashSet membership matches the direct Java equality result.
+- Current lookup fixture SHA-256 is `d618ea8b60671b98fc7c8ec53746c2a0f4bddcb7c744d061b934d38cd6981538`. Protocol all-target tests (99 unit plus integrations), strict workspace Clippy, six doctests, pinned offline Maven verify (22 scenarios and fixture drift), comparator/manifest22, fmt and diff checks pass. Lite accessor surface is mapped; broader Phase 6 source/config/input/reverse-export reconciliation remains open, matrix PARTIAL, P6-V04 `PENDING_PHASE_19`.
+
+## Consumer status body map/API continuation — 2026-10-09T16:11:22Z
+
+- Pinned 5.5.1 `javap -public` confirms `GetConsumerStatusBody`'s no-arg constructor and getters/setters for `Map<MessageQueue, Long>` and `Map<String, Map<MessageQueue, Long>>`. Direct Java `decode`/`encode` input cases prove constructor-empty defaults, explicit-null outer maps, nullable nested consumer maps, Fastjson object-valued queue keys, quoted queue-key rejection, duplicate queue/body last-wins, malformed value rejection, and null omission on encode.
+- Test checkpoints `a13cf18` and `4ac436e` add 14 actual Java input/output cases to `RuntimeLookupFixtures` and the Rust differential. Lookup fixture SHA-256: `e81a66d804a035e2c833c3c21b6e92b7c0ce0e40edf9c3d9fc2031286e11d2d8`.
+- The pre-fix Rust decoder rejected Fastjson object keys and explicit-null maps, accepted quoted serialized queue keys, and rejected duplicate body fields. `46cf2f7` models nullable queue/consumer tables with optional row maps, matches constructor empty defaults, adds Java-shaped accessors/setters and a `decode_java_json` object-key normalizer with raw last-wins behavior, and emits Java null omissions through `encode_java_json`. The checked-in Java response body now decodes and re-encodes through the full typed Rust decoder. Rust uses deterministic BTreeMap order; Java HashMap order and DTO object identity are not claimed.
+- Full `cargo test --workspace --all-targets --locked` passes with loopback permission; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`, `mvn -o -f compat/java-reference/pom.xml verify` (22 scenarios, fixture drift and Java/Rust cross-decodes), differential comparator self-test, manifest validation22, `cargo fmt --all --check`, and `git diff --check` pass. Maven log: `/tmp/p6-consumer-status-java-verify.log`.
+- ADR-0047 and the compatibility/API/requirement/runtime inventories record this DTO boundary. Other Phase 6 source/API/settings/input gaps remain; the general matrix stays PARTIAL, no plan files changed, and P6-V04 remains `PENDING_PHASE_19`.
+
+## ResetOffsetBody Fastjson map-input parity — 2026-10-09T16:18:59Z
+
+- Added 12 direct pinned Java `ResetOffsetBody.decode`/`encode` cases covering constructor-empty versus explicit-null table state, Fastjson MessageQueue object keys, quoted-key rejection, duplicate queue/body last-wins behavior, ignored unknown fields, malformed table/key shapes, and nullable Long values omitted during encoding. Updated fixture entrypoint metadata for both ResetOffsetBody and GetConsumerStatusBody. Oracle/test commit `3d517eb`; current `fixtures/runtime/lookup.json` SHA-256 is `ea3915896136f3c30d5c7c57bcf6a924e571121f351384532c58000291e11e09`.
+- Red tests exposed missing-field rejection, incorrect null/empty encoding, Fastjson key rejection, quoted-key acceptance, duplicate rejection, unknown-field rejection, and null-offset rejection. Fix `3b8ebe5` models `Option<Vec<(MessageQueue, Option<i64>)>>`, preserves the constructor-empty default and nullable values, adds Java-shaped accessors and dedicated `decode_java_json`/`encode_java_json`, and decodes the checked-in remoting body fixture through the typed model instead of a manual parser.
+- Validation passed: full `cargo test --workspace --all-targets --locked` with loopback permission, strict workspace/all-target/all-feature Clippy, `mvn -o -f compat/java-reference/pom.xml verify` (22 scenarios, fixture drift checks and Rust/Java cross-decodes), comparator self-test/manifest22, `cargo fmt --all --check`, and `git diff --check`. Eight remoting tests first failed only because sandbox loopback access was denied; they passed in the authorized workspace run.
+- Updated ADR-0048 and the Java compatibility, Phase 6 API/config, requirement and runtime inventories. Phase 6 remains PARTIAL, no plan files changed, and P6-V04 stays `PENDING_PHASE_19`.
+
+## Current Phase 6 API audit correction — 2026-10-09T16:25:12Z
+
+- Re-read the Phase 6 plan and current API/requirement inventories. P6-V01/V02/V03/U01 are checked; source/API/input/reverse-export reconciliation remains the acceptance gap, while P6-V04 remains explicitly assigned to Phase 19.
+- Retested pinned 5.5.1 LiteSubscription API surface with `javap -public` on the local Maven `rocketmq-common`, `rocketmq-remoting`, and `rocketmq-client` jars and ran `cargo test -p rocketmq-classic-protocol lite_subscription_ --all-targets --locked`: all 12 focused unit tests plus the public API integration test pass. Corrected the final audit's stale claim that `LiteSubscription` getters/setters are unmapped.
+- The requested Java checkout `/Users/nanashi07/Projects/3rd/rocketmq` does not exist in this environment. `/Users/bruce.tsai/Projects/3rd/rocketmq` is a different `rocketmq-all-5.1.4-559-g2238256de1` checkout with an untracked file, so it was excluded as a parity oracle. Pinned 5.5.1 Maven artifacts remain the reference used for `javap` and invoked harness cases; asked the user to confirm that source-checkout path or approve proceeding from the pinned artifacts.
+- Current lookup fixture SHA-256 remains `ea3915896136f3c30d5c7c57bcf6a924e571121f351384532c58000291e11e09`; current direct body counts include 14 GetConsumerStatusBody and 12 ResetOffsetBody inputs. The full audit remains open for other DTO/enum and malformed-input combinations, platform address selection, remaining source families and reverse-export reconciliation.
+
+
+## Runtime body token-shape oracle expansion — 2026-10-09T16:33:36Z
+
+- Expanded the direct pinned Java Fastjson matrices without changing Rust behavior: `ResetOffsetBody` now has 19 inputs covering all `offsetTable` token types and non-object roots; `GetConsumerStatusBody` now has 25 inputs covering all token types for both maps and non-object roots. All Rust differential outcomes match the Java fixture. Shape-oracle test commits: `d8a027b` and `030f7a5`.
+- Updated ADR-0047/0048 and the Phase 6 API/config, runtime, requirement, and Java compatibility records. Current `fixtures/runtime/lookup.json` SHA-256: `4ac75c6dc196cbc010ebf80bb53c9074cbd844ce057bc80c298d03f31e7326f8`.
+- Full `cargo test --workspace --all-targets --locked` passed with loopback permission; strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture drift and Java/Rust cross-decodes), differential comparator self-test, manifest22 validation, `cargo fmt --all --check`, and `git diff --check` passed.
+- Broader Phase 6 source/API/input/reverse-export reconciliation remains open; the matrix stays PARTIAL and P6-V04 remains `PENDING_PHASE_19`. No plan files changed.
+
+
+## Java Long map-value coercion correction — 2026-10-09T16:50:18Z
+
+- Expanded the pinned Java 5.5.1 `ResetOffsetBody` and `GetConsumerStatusBody` decode/encode corpus to 40 and 69 cases. Fixture `fixtures/runtime/lookup.json` SHA-256: `c8abacef79c89afdc1a012f9c135bcf9265a52c3bd3b4d49874ca6b945368cb1`.
+- The direct oracle exposed Java `Long` conversion behavior for numeric strings, booleans, fractions, decimal overflow, exponent values, whitespace, empty strings, nulls, and overflowing integer tokens. Oracle expansion commits: `76cc4eb`, `c7e1e8c`; Rust implementation: `f6a75eb`.
+- Rust now preserves nullable `Long` map entries in both DTOs, parses raw JSON numeric tokens to retain Java's decimal-versus-exponent behavior, and shares the Java body encoder that skips null entries. Java encode omits decoded null offsets.
+- Updated ADR-0047/0048, the Java compatibility record, Phase 6 API/config map, requirement audit, and runtime inventory with the current behavior, case totals, fixture digest, and implementation commits.
+- Validation passed: `cargo test --workspace --all-targets --locked`; strict workspace Clippy with all targets/features and `-D warnings`; pinned offline Maven verify with fixture drift checks and Java/Rust cross-decodes; comparator self-test/manifest22; `cargo fmt --all --check`; `git diff --check`.
+- The requested Java source checkout at `/Users/nanashi07/Projects/3rd/rocketmq` remains unavailable in this environment; the new oracle uses pinned 5.5.1 artifacts. Phase 6 remains PARTIAL because the broader source/API/settings/input/reverse-export reconciliation is open. P6-V04 stays `PENDING_PHASE_19`.
+
+
+## Extreme Java Long map-value probes — 2026-10-09T16:55:57Z
+
+- Added ten more pinned Java values to both map DTO oracles: `+1.5` and exponent strings, `1e400`/`1e-400` and negative counterparts, negative exponent zero, and `false`. Corpus totals are ResetOffsetBody 50 and GetConsumerStatusBody 89; `fixtures/runtime/lookup.json` SHA-256: `2ad29843f77f4b35cc3c7e78611c0c38c933a0c9a2db57ea0ae13053ddf69caa`.
+- Java converts exponent strings as well as exponent tokens through its double-to-long path: extreme positive/negative values saturate at i64 bounds, tiny values and negative exponent zero become 0. The native implementation matched the new cases without production changes. Test commit: `9cfd106`; shared implementation: `f6a75eb`.
+- The focused body-input differentials passed (7 tests). Full workspace/all-target tests, strict all-target/all-feature Clippy (`-D warnings`), pinned offline Maven verify (fixture drift and Java/Rust cross-decodes), `cargo fmt --all -- --check`, and `git diff --check` passed.
+- Updated the current DTO entries and final gap summary in ADR-0047/0048, Java compatibility, Phase 6 API/config, requirement audit, and runtime inventory. Phase 6 remains PARTIAL with wider method/input reconciliation open; P6-V04 stays `PENDING_PHASE_19`.
+
+
+## Nullable MessageQueue fields in Fastjson map keys — 2026-10-09T17:00:15Z
+
+- Added six `ResetOffsetBody` and twelve `GetConsumerStatusBody` cases for object-valued `MessageQueue` keys with null/missing `topic` or `brokerName`, null `queueId`, empty objects and duplicate bean fields. The current fixture contains 56 and 101 cases respectively; `lookup.json` SHA-256: `aa378cf8a89c685f537a62948bea7fd4ca6c32d63d3574a4f01fba9d1da98b5c`.
+- The red differential showed Fastjson omits null `topic`/`brokerName` inside object map keys but always emits primitive `queueId`; absent or null IDs become `0`. Oracle/test commit `2260129` reproduced 12 exact encoded-body mismatches across the two DTOs. Shared encoder fix `eadcb33` now preserves Java key field order and omission/default behavior.
+- Validation passed: focused Java body differentials (7 tests), protocol all-target suite, full workspace/all-target tests with local loopback access, strict all-target/all-feature Clippy (`-D warnings`), pinned offline Maven verify (fixture drift and Java/Rust cross-decodes), comparator self-test, manifest validation (22 scenarios), fmt and diff checks.
+- ADR-0047/0048, Java compatibility, Phase 6 API/config, requirement audit, and runtime inventory now record the current counts/hash and map-key field behavior. Overall Phase 6 remains PARTIAL with broader source/API/input reconciliation open; P6-V04 stays `PENDING_PHASE_19`.
+
+
+## MessageQueue key field token matrix — 2026-10-09T17:03:05Z
+
+- Extended the oracle to invoke all seven JSON token kinds for `MessageQueue.topic`, `brokerName`, and `queueId` as object-valued map-key fields. Consumer status tests both its outer and nested tables. The fixture now has 77 ResetOffsetBody and 143 GetConsumerStatusBody cases; `lookup.json` SHA-256: `202dc2d502473e2e2a73861bfcc82e359668c8f5222744b619052be04c9c014f`.
+- Java and Rust match: String fields coerce scalar/array/object values to JSON text; queueId accepts numeric strings, truncates fractions, maps booleans to 1/0, maps null/object to zero and rejects arrays. No production change was required. Test commit: `85cd833`; key encoder fix remains `eadcb33`.
+- Validation passed: seven focused body-input differential tests, protocol all-target tests, pinned offline Maven verify (fixture drift and cross-decodes), comparator self-test, 22-scenario manifest validation, formatting and diff checks. Full workspace tests and strict Clippy had already passed after the encoder fix.
+- Updated both body ADRs, Java compatibility, Phase 6 API/config, requirement/runtime inventories, and the final current count/hash line. Phase 6 remains PARTIAL; wider source/API/input reconciliation remains open and P6-V04 stays `PENDING_PHASE_19`.
+
+## ConsumeMessageDirectlyResult field-shape and duplicate-input parity — 2026-10-09T17:11:56Z
+
+- Expanded the direct Java 5.5.1 `ConsumeMessageDirectlyResult` oracle from 19 enum cases to 66 cases: seven token kinds for each of five fields, seven root shapes, and last-wins duplicate probes for every field. `fixtures/runtime/lookup.json` SHA-256: `c7662fe1bbbe62726eef0eda14774a3bc08b3910581d771153c3b7b04eccaf40`.
+- The red differential found primitive bool/long null and numeric conversions, Fastjson String conversion for `remark`, and duplicate fields that derived Rust decoding rejected. Commits: oracle/test `910cbd2`; implementation `00d2ea8`. Rust now uses the raw-object last-wins deserializer and existing shared field coercers; all 66 cases match Java acceptance and encoded values.
+- Validation passed: focused DTO differential, full workspace/all-target tests with local loopback access, strict all-target/all-feature Clippy (`-D warnings`), pinned offline Maven verify (22 scenarios, fixture drift and Java/Rust cross-decodes), `cargo fmt --all -- --check`, and `git diff --check`. Maven used a writable temporary artifact-cache copy and `rocketmq.log.root` under `/private/tmp`.
+- Updated ADR-0049 and Phase 6 API/config, requirement, Java compatibility, and runtime inventories. Phase 6 remains PARTIAL; wider source/API/input/branch reconciliation remains open and P6-V04 stays `PENDING_PHASE_19`.
+
+## Consume-result Java constructor default follow-up — 2026-10-09T17:14:51Z
+
+- A direct regression compared Rust `Default` against the Java empty-object fixture and exposed `autoCommit=false` versus Java's constructor value `true`. Test commit `6d53470` records the red mismatch; implementation `b4ec6f4` replaces the derived `Default` with the Java-shaped values.
+- The 66-case DTO differential now also asserts constructor/default parity and passes. Focused test, formatting and diff checks pass. The full workspace, strict Clippy and Maven gates from the preceding decoder change remain green; Phase 6 stays PARTIAL and P6-V04 remains `PENDING_PHASE_19`.
+
+## Assignment response fractional field-shape case — 2026-10-09T17:18:05Z
+
+- Added a direct Java input with numeric fraction `1.5` for `messageQueueAssignments`, extending the QueryAssignmentResponseBody Set-field corpus from 29 to 30 cases and the total field/root matrix from 36 to 37. Java rejects the value with `JSONException`; the Rust differential agrees. No production change was needed.
+- Oracle/test commit `3e58bc1`; current `fixtures/runtime/lookup.json` SHA-256 `4723f8ad95ae556dbc99db83ef81cc311f0aae128cf59e23f8bbda6b1045618a`. Focused differential, format and diff checks pass.
+- Updated Phase 6 API/config, requirement, runtime and Java compatibility records. The overall source/API/input reconciliation remains open; Phase 6 remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## MessageRequestModeSerializeWrapper Java default and input parity — 2026-10-09T17:26:31Z
+
+- Pinned Java 5.5.1 inspection confirms a no-argument constructor initializes messageRequestModeMap to an empty map and the public getter/setter preserve null and assigned values. The 33-case Fastjson corpus covers roots, all nested map levels, duplicate wrapper/key behavior, and malformed null/scalar/array shapes; a separate direct API fixture invokes constructor/getter/setter behavior.
+- The red Rust differential exposed null-versus-empty constructor output and duplicate-root rejection. Rust now has an explicit Java-shaped Default, public accessors, null-field omission, and shared last-wins object decoding. Oracle/input commit: 4456695d; direct API oracle commit: 910e6838; implementation: 33b993b8. Current lookup.json SHA-256: 9d4472bee58e739dbb0efa4c18a3e4405f7b58fd1e1975f862bbc431b61a016f.
+- Focused wrapper input/API test, protocol all-target suite (103 unit tests plus integration targets), full workspace/all-target tests with local loopback permission, strict all-target/all-feature Clippy, and pinned offline Maven verify (22 scenarios, fixture drift and Java/Rust cross-decodes) passed. Maven used the writable temporary repository/log paths. Formatting and diff checks pass.
+- Phase 6 remains PARTIAL; broader source/API/input/reverse-export reconciliation remains open, and P6-V04 stays PENDING_PHASE_19.
+
+
+## Automatic client-IP IPv6 candidate order — 2026-10-09T17:31:01Z
+
+- Inspected pinned 5.5.1 NetworkUtil.getLocalInetAddress bytecode: IPv4 candidates take priority; without IPv4, Java selects the first non-internal IPv6 candidate, falling back to the first IPv6 candidate. The existing Rust selector follows these branches.
+- Regression `8632ec69` extends the ordered selection case with two external IPv6 candidates and asserts the first candidate is selected. Focused core test, formatting, and diff checks pass. No production change was needed.
+- Updated ADR-0045 and Phase 6 requirement/API maps to close the multiple-external-IPv6 selection logic gap. Non-macOS interface enumeration and a real IPv6-only host remain open. Phase 6 remains PARTIAL and P6-V04 stays PENDING_PHASE_19.
+
+## Remaining runtime body public API parity — 2026-10-09T18:11:42Z
+
+- Direct pinned Java 5.5.1 invocations and a Rust differential cover constructor defaults, getter/setter values, null setters, and tested text for CheckClientRequestBody, GetConsumerListByGroupResponseBody, LockBatchRequestBody, UnlockBatchRequestBody, LockBatchResponseBody, and ConsumeMessageDirectlyResult. Added snake_case accessors and Java-shaped Display for the three types with toString methods.
+- Java getter identity for assigned SubscriptionData/List/Set values remains a documented Rust ownership/alias semantic gap. Oracle `7e1155f8`; implementation `bca4329c`; lookup.json SHA-256 `bb0d6d759d1e5d23a532a1e5a4529089aaf88c714bc637ff332553edfc656cc0`.
+- Full workspace/all-target tests, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture drift, Java cross-decodes), fmt, and diff checks pass. ADR-0055 and current Phase 6 API/runtime/Java/requirement records updated. Broader source/API/input/reverse-export audit remains open; Phase 6 stays PARTIAL and P6-V04 remains `PENDING_PHASE_19`.
+
+## Remove Rust-only unlock response DTO — 2026-10-09T18:14:22Z
+
+- Pinned RocketMQ 5.5.1 client/common/remoting jars contain `LockBatchResponseBody` and no `UnlockBatchResponseBody`. Java fixture generation constructs the shared LockBatchResponseBody for both lock (code 41) and unlock (code 42) responses. The unused Rust-only public DTO was removed; no internal callers needed changes.
+- `cargo test -p rocketmq-classic-protocol --all-targets --locked` passes (106 unit tests plus all protocol integration tests); `cargo fmt --all --check` and `git diff --check` pass. The existing lock/unlock Java wire fixtures remain unchanged.
+- Implementation `a5fb87ce`; ADR-0056 and current API/runtime/requirement records updated. Phase 6 remains PARTIAL; P6-V04 stays `PENDING_PHASE_19`.
+
+## Consumer status and reset-offset public method oracles — 2026-10-09T18:18:22Z
+
+- Added direct pinned Java calls for every `GetConsumerStatusBody` and `ResetOffsetBody` map getter/setter. Constructor-empty defaults, assigned values, null setters, nullable offsets, empty/null nested consumer maps, and Java outer/nested Map identity are captured.
+- Existing Rust accessors match defaults, values, and null states. Rust owns entry vectors/maps and lends immutable views, so Java mutable Map alias identity remains explicit. Oracle/test `471b7160`; lookup.json SHA-256 `7b2ce204660f804147471cb2d6d220e669e33991285b64cc68faf699c15a8aff`.
+- Protocol all-target tests pass (107 unit tests and all protocol integrations); pinned offline Maven verify passes (22 scenarios, fixture drift, Java cross-decodes); fmt and diff checks pass. ADR-0057 and current Phase 6 API/runtime/Java/requirement records updated. Phase 6 remains PARTIAL; P6-V04 stays `PENDING_PHASE_19`.

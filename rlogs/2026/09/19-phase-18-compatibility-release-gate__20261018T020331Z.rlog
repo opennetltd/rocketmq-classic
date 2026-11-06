@@ -1,0 +1,69 @@
+# P18-V01 queryTopicConsumeByWho admin RPC follow-up — 2026-10-18T02:03:31Z
+
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Pinned Java oracle: RocketMQ client 5.5.1 at
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`, read-only checkout
+  `/Users/bruce.tsai/Projects/3rd/rocketmq`.
+- This is a documentation and evidence-recording follow-up for implementation
+  commit `c091d507`; no production code changed in this session.
+
+## Source-backed scope
+
+- Pinned `MqClientAdminImpl.queryTopicConsumeByWho` sends request code 300,
+  decodes `GroupList` on `SUCCESS`, and completes exceptionally for Broker
+  errors. Rust adds `MQClientApi::query_topic_consume_by_who`, the typed
+  `QueryTopicConsumeByWhoRequestHeader`, and the `GroupList` DTO.
+- The invoked Java fixtures cover the query header under both decode-mode
+  hints, including absent and malformed Boolean fields. The `GroupList`
+  fixture covers its empty-set default, null Set and null members, JSON form,
+  and the getter's shared Set identity.
+- Header equality/hash coverage now includes 35 request headers inheriting
+  `RpcRequestHeader` behavior. Updated fixture SHA-256:
+  `2849daef72f0bbc29c64f311b8dc41761602845ef1256f12c6937e2ccdbea48f`.
+  `GroupList` fixture SHA-256:
+  `d033bf2e2cf2e866ba854bf2152ab21f66f43a2bb0212caaf9dbdc4d88f5c38e`.
+
+## Documentation changes
+
+- Updated `PHASE_17_ADMIN_MATRIX.md`: three of 19 `MqClientAdmin` methods
+  now have source-backed slices; 16 remain.
+- Updated `PHASE_6_API_CONFIG_MAP.md` from 31 to 35 request-header identity
+  cases and refreshed the fixture hash.
+- Appended this header/RPC follow-up to `PHASE_6_REQUIREMENT_AUDIT.md`.
+- Added the code-slice evidence and current remaining gates to
+  `docs/release-checklist.md`; prior checkpoints were retained as history.
+
+## Validation recorded for implementation commit `c091d507`
+
+Environment: macOS 26.6.1 aarch64, Rust/Cargo 1.85.0, Maven 3.10.0, Java 27.
+
+- Protocol all-feature tests: PASS (131 unit tests, header inventory and
+  validation, 47 doctests).
+- Remoting query/admin decode-mode fixture test: PASS.
+- Core `admin_rpc`: PASS (25 tests).
+- Strict all-target/all-feature Clippy for Protocol, Remoting, and Core: PASS.
+- Maven `verify`: PASS (37 scenarios, fixture checks, 59 typed-header and 14
+  typed-body cross-decodes).
+- `cargo fmt --all -- --check` and `git diff --check`: PASS.
+
+The first standalone Rust typed-header fixture-generator attempt ran before
+the Java header fixture output for request code 300 had been generated and
+failed because the oracle input was absent. The order was corrected: generate
+the Java fixture first, then run the Rust typed-header generator; Maven
+`verify` subsequently passed its Java fixture, Rust cross-decode, and drift
+checks.
+
+## Remaining scope
+
+- Broad bidirectional P18-V01 source/API/settings/input/error/flow and
+  reverse-export reconciliation remains open; 16 `MqClientAdmin` methods
+  still require source-backed crosswalks and invoked evidence.
+- Full-workspace P18-V02 gates need a refresh after this code slice.
+- Current-revision Ubuntu/native Windows P18-V04 evidence and final P18-V03
+  package/provenance review remain open.
+- Phase 19 still needs 30 of 37 local scenario runners, required profiles,
+  and successful `run-local.sh --all` reconciliation. Release version and
+  registry dependency checks remain pending; owner checks are separate.
+- The existing Phase 19 dirty worktree files were left untouched. No live
+  Broker was contacted; the Java oracle and plans were not modified.

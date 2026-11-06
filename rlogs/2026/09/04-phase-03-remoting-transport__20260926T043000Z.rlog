@@ -1,0 +1,35 @@
+# Phase 3 execution log — continuation 2026-09-26T043000Z
+
+- Plan: `plan/2026/09/04-phase-03-remoting-transport.md` and paired Traditional Chinese plan; re-read both without modifying either.
+- Goal: continue Java 5.5.1 observable behavior alignment using native Tokio design; do not accept Phase 3 or start Phase 4.
+
+## Source review and change
+
+- Compared Java `NettyRemotingClient.invokeImpl` GO_AWAY path with Rust `invoke_inner`, plus Java `ResponseFuture` request metadata and its async callback chain.
+- Identified a callback metadata mismatch: after GO_AWAY retry, Java's terminal `ResponseFuture` corresponds to the reconstructed retry request; Rust callback context retained the original request.
+- Added shared callback request metadata state, updated it when creating the Java-style retry request, and used it to construct the terminal callback context. Added loopback regression `p3_async_go_away_retry_callback_reports_reconstructed_request`, checking defaulted flag/remark/language, preserved ext fields/body, response, and retry opaque.
+- Updated compatibility inventory, matrix and ADR to document the behavior/test. No plan changes.
+
+## Validation
+
+- Targeted test: `cargo test -p rocketmq-classic-remoting --test transport p3_async_go_away_retry_callback_reports_reconstructed_request --locked --offline` — PASS.
+- `cargo fmt --all --check` — PASS.
+- `cargo test --workspace --locked --offline` — PASS: 11 common + 9 protocol + 1 fixture + 11 remoting unit + 4 codec + 52 transport tests (88 unit/integration total), plus doc tests.
+- `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings` — PASS.
+- `python3 scripts/check-workspace-metadata.py` — PASS.
+- `python3 tests/differential/compare.py --self-test` — PASS.
+- `git diff --check` — PASS.
+- No Maven, Broker, Docker or Phase 19 validation run. Java reference checkout was read-only.
+
+## Remaining status
+
+- Phase 3 remains NOT ACCEPTED; Phase 4 remains blocked. P3-V04 remains PENDING_PHASE_19.
+- Full parity remains incomplete. Still unresolved: Java error/cause classification and timeout races; exact `ChannelWrapper` recovery, repeated GO_AWAY and NameServer scan/probe timing; oneway post-return error visibility; executor/event queue lifecycle, saturation/rejection and thread ownership; Java hook equality semantics; TLS property/config reload and encrypted-key support; Netty framework-only controls/API semantics. These remain blockers unless reviewed and explicitly accepted under the phase acceptance policy.
+- P3-V01/V02/V03/U01 have prior automated coverage plus the new callback retry test; this does not establish all Phase 3 semantics or Broker parity.
+- Implementation/doc/log changes were reviewed against the Phase 3 contract. No Phase 4 work started. Commit status to be recorded after review/commit.
+
+## Commit and final status
+
+- Implementation commit: `86ec1ba fix: report reconstructed GO_AWAY request in callbacks`.
+- Documentation and execution-log commit: `937c28a docs: record GO_AWAY callback metadata parity`.
+- Working tree clean after commits. Phase 3 remains NOT ACCEPTED; no Phase 4 work. Full plan gate remains blocked by the explicitly listed observable-behavior gaps; framework API emulation itself is not required, but behavior not representable/matched is not waived.

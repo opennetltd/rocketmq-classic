@@ -1,0 +1,37 @@
+Session: 2026-10-16T02:49:30Z
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Branch: phase/19-phase-18-compatibility-release-gate
+Code revision: 479b9a7b
+
+Current-revision server-free P18-V02 gate (macOS arm64; rustc/cargo 1.85.0):
+- `cargo test --workspace --locked` — passed.
+- `cargo test --workspace --all-features --locked` — passed, including all
+  workspace integration and documentation tests.
+- `cargo check --workspace --all-targets --all-features --locked` — passed.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings` — passed.
+- `mvn -f compat/java-reference/pom.xml verify` — passed; 37 scenarios,
+  Java/Rust cross-decodes, and fixture checks.
+- `python3 tests/differential/compare.py --self-test` and
+  `--validate-manifest` — passed; 37 scenarios validated.
+- `bash tests/stress/run-offline-smoke.sh` — passed; 16 deterministic
+  race/leak cases × 3.
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` —
+  passed; 105 frame seeds, 11 message seeds, 1,856 mutations, 146 frame
+  decodes, and 113 message decodes.
+- `cargo build -p rocketmq-classic --examples --release --locked` and
+  `cargo bench --workspace --no-run --locked` — passed.
+- `scripts/check-workspace-metadata.py`, full locked Cargo metadata, and
+  `cargo package --workspace --list --locked --allow-dirty` — passed. Metadata
+  contains 7 workspace packages and 208 registry packages with license
+  metadata; all package listings include `LICENSE` and `NOTICE`.
+- `TZ=Asia/Taipei cargo test -p rocketmq-classic-core --all-features --locked
+  unique_id::tests::` — 4 tests passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+This closes the full server-free P18-V02 gate on `479b9a7b`. Broad bidirectional
+P18-V01 source/API/input/error/control-flow and reverse-export reconciliation,
+current-revision GitHub Ubuntu/P18-V04 evidence, Phase 19 Docker/Broker
+automation, and pre-publication version/registry resolution remain open. Owner-
+run deployment and production checks remain Phase 19 manual validation. No
+Docker, live Broker, push, tag, publication, or deployment was performed.

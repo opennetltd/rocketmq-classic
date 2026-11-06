@@ -1,0 +1,54 @@
+# P18-V01 OpenTelemetry Attributes parity slice — 2026-10-17T23:55:17Z
+
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Oracle: RocketMQ Java client 5.5.1 at
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; the external Java checkout was
+  not modified.
+- Compared OpenTelemetry 1.47 `AttributeKey`, `Attributes`, and
+  `AttributesBuilder` public methods and behavior against Java. Rust now maps
+  all eight scalar/array value kinds, typed key lookup, immutable attributes,
+  `to_builder`, `put_all`, type-aware `remove`, and `remove_if`. The Remoting
+  inventory and invoked Java fixture record the mapping and results.
+- Fixture SHA-256:
+  `e15d03aac196916a0592a21a8deb2440fbce694e20bc3b0e050ba88e798a966e`.
+
+## Verification on the working tree
+
+- `cargo test -p rocketmq-classic-remoting --all-features --locked`: PASS
+  (134 unit, 8 codec, 1 fuzz regression, 7 security, 107 transport, and 18
+  doctests).
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings`: PASS.
+- Workspace default and all-feature tests passed serially with locked offline
+  dependencies; all-target/all-feature workspace check and strict Clippy passed.
+- `cargo fmt --all -- --check` and `git diff --check`: PASS.
+- `mvn -q -f compat/java-reference/pom.xml verify`: PASS; validated 37
+  differential scenarios, generated fixture checks, and Java/Rust cross-decodes
+  (56 typed headers and 14 typed bodies). Java/JDK Unsafe and reflective-final
+  field warnings were emitted, with successful exit status.
+- Differential comparator self-test and 37-row manifest validation: PASS.
+- Deterministic race/leak smoke: 16 cases × 3 repetitions, PASS.
+- Fuzz smoke: 107 frame seeds, 11 message seeds, 1,888 bounded mutations,
+  165 frame decodes, and 116 message decodes, PASS.
+- Release examples, workspace benchmark compilation and offline benchmark:
+  PASS. macOS ARM64 Apple M5 Max, Rust 1.85.0 observations per iteration:
+  frame encode/decode 2,049.6 ns; Zstandard message decode 1,207.5 ns; Producer
+  request construction 1,223.0 ns; 128-entry route lookup 14.9 ns; loopback
+  pending completion 61,938.3 ns. These are observations, not thresholds.
+- Locked Cargo metadata, workspace metadata/license/dependency-direction checks,
+  package-content listing, and UTC/Asia-Taipei Unique ID tests: PASS.
+
+## Scope and remaining work
+
+- This closes the OpenTelemetry Attributes slice and refreshes the local
+  server-free P18-V02 evidence for the current working tree. It does not close
+  the broad P18-V01 API/settings/input/error/flow and reverse-export audit.
+- Current-revision GitHub Ubuntu/native Windows P18-V04 evidence and final
+  P18-V03 package/provenance review remain open. Phase 19 local Broker scenarios
+  and profiles are tracked separately; owner-environment validation remains
+  separate.
+- Phase 19 runner/README changes in the worktree were excluded from this
+  Phase 18 source change and its verification scope.
+- No plan, external Java checkout, remote branch, tag, publication, Broker, or
+  deployment was changed.

@@ -1,0 +1,53 @@
+# Phase 18 P18-V01 `MqClientAdmin.deleteTopicInBroker` — 2026-10-18T03:12:12Z
+
+## Scope and source
+
+- Continued on `phase/19-phase-18-compatibility-release-gate`; the pinned Java
+  oracle at `/Users/bruce.tsai/Projects/3rd/rocketmq` remained read-only.
+- Reconciled Java 5.5.1 `MqClientAdminImpl.deleteTopicInBroker`: request code
+  215, direct Broker address, `DeleteTopicRequestHeader`, no body, null result
+  on `SUCCESS`, and `MQClientException` with response code/remark otherwise.
+- Java's header has a nullable annotated topic because `checkFields()` is a
+  no-op. It inherits nullable `ns`, `nsd`, `bname`, `oway`, and `lo`; inherited
+  equality/hash only considers the four RPC base fields.
+
+## Implementation
+
+- Added the public Rust header, RPC-base equality semantics, validation and
+  typed-header inventory/cross-decode coverage, and
+  `MQClientApi::delete_topic_in_broker`.
+- Extended the invoked Java `MqClientAdmin` fixture with success and Broker
+  error cases; added scripted Core tests that compare request code/fields and
+  Broker error mapping. Updated the Phase 17 matrix to 7/19 after the code
+  commit `74c52143` (`feat(admin): add delete topic in broker RPC`).
+- The first attempt to invoke the Java fixture generator supplied a fixture
+  path to the fixed `compat.Main` entry point and returned its usage text. The
+  existing `request-header-identity-fixture` and
+  `mq-client-admin-fixtures` dispatchers were then used successfully.
+- Preserved the pre-existing uncommitted Phase 19 README, differential runner,
+  local runner, and its execution log; none were included in this slice.
+
+## Validation
+
+- `cargo test --locked -p rocketmq-classic-protocol --all-features` — passed:
+  132 unit tests, all integration targets (including header inventory and
+  validation), and 49 doctests.
+- `cargo test --locked -p rocketmq-classic-core --test admin_rpc` — passed all
+  32 tests, including the new success and Broker-error fixture comparisons.
+- `cargo clippy --locked -p rocketmq-classic-protocol
+  -p rocketmq-classic-remoting -p rocketmq-classic-core --all-targets
+  --all-features -- -D warnings` — passed.
+- `mvn -q -f compat/java-reference/pom.xml verify` — exit 0; 37 scenarios,
+  Java fixture drift checks, 61 typed-header cross-decodes and 14 typed-body
+  cross-decodes passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+## Remaining work
+
+- The other 12 `MqClientAdmin` methods and broad P18-V01 bidirectional
+  Java/Rust public API, configuration, input, error/control-flow and
+  reverse-export reconciliation remain open.
+- Full-workspace P18-V02, current-revision Ubuntu/native Windows evidence,
+  final P18-V03 package/provenance checks, and Phase 19 local Docker/Broker
+  scenarios/profiles and complete `run-local.sh --all` reconciliation remain
+  open. Owner-only production checks remain separate manual work.

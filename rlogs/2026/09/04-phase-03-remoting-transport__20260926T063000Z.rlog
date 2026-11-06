@@ -1,0 +1,30 @@
+# Phase 3 execution log — continuation 2026-09-26T063000Z
+
+## Goal and scope
+
+- Continued Phase 3 per user request. Netty class/API equivalence is not required; observable logic parity remains the criterion. Phase 4 remains blocked.
+- Re-read both Phase 3 plans; no plan files changed.
+
+## Source-based findings and changes
+
+- Java `NettyRemotingClient.invokeSync` directly calls `invokeSyncImpl` and does not call outbound RPC hooks. Rust's `invoke_sync` shared core previously ran those hooks. Added an explicit internal `run_rpc_hooks` invocation option, disabled for sync calls, and renamed/updated the regression test to `p3_sync_invoke_does_not_run_outbound_rpc_hooks`.
+- Java `invokeImpl` calls `doBeforeRpcHooks` once on the original request; retry uses `super.invokeImpl`, and the outer `whenComplete` calls `doAfterRpcHooks` with the original request and final retry response. Rust previously skipped after-hooks on retry success. Moved after-hook execution to the outer retry path with the original request, and suppressed duplicate inner retry hooks. Extended `p3_go_away_retries_once_on_a_new_connection` to assert original request metadata and final response at the after-hook.
+- Updated the compatibility inventory and Java compatibility summary to reflect both behaviors and test IDs.
+- Investigated Java `RPCHook` exception behavior. The hook interface has no declared checked exceptions; Java sync has no hook calls, while async/future/oneway hook exceptions can escape their respective invocation/callback contexts. Rust's current `RpcHook` primary methods are infallible and panic-isolated. No broad behavior/API change was made in this pass because callback/oneway exception delivery has separate nonblocking semantics and needs a dedicated source/test design.
+
+## Validation
+
+- Initially formatting check caught formatting-only diffs; ran `cargo fmt --all`, then formatting check passed.
+- Targeted `p3_go_away_retries_once_on_a_new_connection` passed.
+- Targeted `p3_sync_invoke_does_not_run_outbound_rpc_hooks` passed.
+- `cargo test --workspace --locked --offline` passed: 89 unit/integration tests (11 common + 10 protocol including fixture + 11 remoting unit + 4 codec + 53 transport) plus doc tests.
+- `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings` passed.
+- `python3 scripts/check-workspace-metadata.py`, `python3 tests/differential/compare.py --self-test`, and `git diff --check` passed.
+
+## Plan/evidence status
+
+- No Phase 3 plan acceptance checkboxes were changed or claimed complete. P3-V04 remains deferred to Phase 19.
+- Phase 3 is NOT ACCEPTED. Remaining observable/semantics work includes Java error/cause taxonomy and timeout races, oneway post-return error boundaries, ChannelWrapper reconnect/replacement and duplicate GO_AWAY cases, NameServer probe/scheduling behavior, executor/event overload and lifecycle, RPC hook exception/equality behavior, and TLS property reload/encrypted private-key handling.
+- Framework-specific Netty types, allocator/event-loop mechanics are not being imitated; document any behavior that cannot be mapped through Tokio.
+- No Maven, live Broker, Docker, TLS/auth cluster or cross-language validation was run.
+- Implementation, documentation and this log will be committed separately after review.

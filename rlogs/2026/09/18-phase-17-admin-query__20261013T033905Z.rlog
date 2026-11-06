@@ -1,0 +1,33 @@
+Session start — 2026-10-13 03:39 UTC
+- Goal continuation: complete plan Phases 15–18 on phase branches, with separately reviewable commits for each logical change; Java Oracle checkout is `/Users/bruce.tsai/Projects/3rd/rocketmq` and source comparisons must use pinned client 5.5.1 commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- Revalidated repository branch `phase/18-phase-17-admin-query` at `128f210c`; Phase 17 has 11 modified Rust files. Phase 15 and Phase 16 have existing phase branches and completion commits; auditing their plans/matrices/logs before continuing.
+- No plan files are to be modified. Java checkout remains on 5.3.3 `2238256de1d227a4384ba969dfa31473187b4d08` with only the previously known unrelated untracked `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java`; leave it untouched.
+- Initial inspection confirms Phase 17 matrix is stale versus current uncommitted inbound work; `GET_CONSUMER_RUNNING_INFO` remains unimplemented. Direct-consume and bounded executor changes require compile/test/lint before commit.
+- First formatting gate found only rustfmt layout differences in the new Direct Consume and executor code; `cargo fmt --all` applied formatting.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (156 unit tests, 3 admin integration, all Lite/POP/offset/orderly/pull/push/rebalance integration tests and doctests). The new reset-versus-slow-listener fencing test passed.
+- PASS: `cargo test -p rocketmq-classic-core --locked` (154 unit tests and all integration/doctests). Existing inbound routing/error cases still pass with the current handler selection changes.
+- PASS: `cargo fmt --all -- --check` after formatting.
+- `cargo clippy -p rocketmq-classic-remoting -p rocketmq-classic-core -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings` first flagged the executor task sender's complex type; introduced a private `InboundTask` alias (no lint suppression), then strict Clippy passed.
+- PASS: `cargo test -p rocketmq-classic-remoting --locked` (81 unit + 86 transport integration tests and doctests), including processor-specific/default executor routing and transport regressions.
+- Added the Java 5.5.1 `GetConsumerRunningInfoRequestHeader` model with required group/client fields, primitive `jstackEnable`, and inherited `RpcRequestHeader` fields. Pinned Java harness generated `header-consumer-running-info-request`; Rust inventory decode and Java reverse decode passed (53 Rust-generated header frames decoded).
+- Added `direct_consume_invokes_listener_without_advancing_regular_offsets`; it invokes a scripted listener and proves the regular memory/persisted offsets remain unchanged. Focused test passed.
+- PASS after these code changes: consumer direct-consume focused test, protocol `header_inventory` (2 tests), Rust-to-Java fixture decode. Full consumer/core/remoting suites and Clippy passed immediately before the header/direct-test additions; rerun affected gates at P17 closure.
+
+Continuation — 2026-10-13 04:57 UTC
+- Aligned `PullConsumer::fetch_subscribe_message_queues` with Java `MQAdminImpl` empty-route behavior by returning typed `EmptyMessageQueues`; Push intentionally retains Java's empty-set behavior. Added scripted producer/push/pull route tests for missing, empty and malformed routes.
+- Added a pinned Java `ConsumerRunningInfo` response-body fixture and wired it into Maven verification. Added its request header to the protocol validation matrix; pinned `RpcRequestHeader.nsd` is nullable and is recorded as optional.
+- PASS: `cargo test -p rocketmq-classic-protocol -p rocketmq-classic-core -p rocketmq-classic-remoting -p rocketmq-classic-consumer -p rocketmq-classic-producer --locked` (all unit, integration and doctest suites).
+- PASS: `cargo test -p rocketmq-classic-consumer --test admin -p rocketmq-classic-producer --test admin --locked` (5 consumer-admin and 8 producer-admin integration tests, after final test-helper edits).
+- PASS: `cargo clippy -p rocketmq-classic-protocol -p rocketmq-classic-remoting -p rocketmq-classic-core -p rocketmq-classic-consumer -p rocketmq-classic-producer --all-targets --all-features --locked -- -D warnings`; fixed redundant-closure and format-collect lints without suppressions.
+- PASS: `cargo fmt --all -- --check`; `git diff --check`; `python3 tests/differential/compare.py --self-test`.
+- PASS: `mvn -f compat/java-reference/pom.xml verify`; the new ConsumerRunningInfo fixture passed, Java decoded 53 Rust-generated typed headers and 14 typed bodies, and the 32-scenario manifest validated.
+- Phase 17 still has non-manual work: implement Java-equivalent Push Running Info per-topic statistics and all-thread stack dump; finish public-facade error-forwarding coverage for admin RPC and unique-key query paths; audit/commit the current working-tree changes and close the matrix. Broker-backed P17-V02 remains Phase 19 work.
+- Phase 18 remains unstarted: bidirectional parity inventory, offline scenario completion, fuzz and race/leak evidence, benchmarks, server-free CI, packaging/docs review, and Phase 19 handoff are outstanding.
+
+Continuation — 2026-10-13 05:09 UTC
+- Added public-facade failure coverage: Producer, Push and Pull preserve terminal unique-key query `NO_MESSAGE`; all three preserve Broker permission errors for offset and create-topic RPCs. Consumer integration peers accept reconnects, and each new consumer case uses a distinct instance name to avoid sharing the process-global Java-compatible runtime with parallel tests.
+- PASS after these additions: `cargo test -p rocketmq-classic-protocol -p rocketmq-classic-core -p rocketmq-classic-remoting -p rocketmq-classic-consumer -p rocketmq-classic-producer --locked`.
+- PASS after these additions: `cargo test -p rocketmq-classic-consumer --test admin -p rocketmq-classic-producer --test admin --locked` (7 consumer admin, 10 producer admin).
+- PASS after these additions: strict Clippy across protocol/remoting/core/consumer/producer with all targets/features; `cargo fmt --all -- --check`; `git diff --check`.
+- Updated `PHASE_17_ADMIN_MATRIX.md`: V01 now has route edge cases and facade error forwarding covered. The remaining P17 implementation/evidence gap is Java-equivalent Push Running Info `statusTable` metrics and the all-thread `jstack` dump. P17-V02 remains Phase 19 Broker validation.
+- Phase 17 changes remain uncommitted on `phase/18-phase-17-admin-query`; commit grouping and final phase closure are still outstanding. Phase 18 implementation remains unstarted.

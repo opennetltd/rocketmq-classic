@@ -1,0 +1,40 @@
+# Phase 18 factory per-client NameServer refresh schedules
+
+- Recorded: 2026-10-23 09:56:28 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Implementation revision: `681a8acf`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: `MQClientAPIFactory` periodic NameServer discovery schedule
+
+## Finding and change
+
+Pinned Java `createAndStart` schedules one `fetchNameServerAddr` fixed-rate
+task per API client, with a 10-second initial delay and a 120-second period.
+Rust previously used one timer worker that fetched each pool slot sequentially.
+Rust now owns one Tokio refresh task per pool slot, applies each result only to
+that slot, uses fixed-rate missed-tick catch-up, and signals and joins all
+tasks during factory shutdown.
+
+The invoked Java factory fixture uses a `ScheduledThreadPoolExecutor` and
+captures two scheduled registrations after starting two domain clients. It
+also preserves the distinct lookup results `127.0.0.11:9876` and
+`127.0.0.12:9876`. A paused-time Rust regression checks its per-slot task
+count against the fixture and verifies distinct refreshed results after the
+first 10-second tick.
+
+## Verification
+
+- `cargo test --offline --workspace --all-features --locked` — passed; Core reported 239 unit tests, and the other workspace tests and doctests passed.
+- Focused `factory_domain_discovery_keeps_each_clients_address_independent` and `factory_domain_refresh_runs_independently_for_each_client_slot` tests — passed.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- `mvn -o -f compat/java-reference/pom.xml verify` — BUILD SUCCESS in 3:08; 37 differential scenarios and the expanded factory fixture verified.
+
+## Acceptance boundary
+
+This closes the per-client factory refresh scheduling behavior slice only.
+Broad P18-V01 source/API/settings/input/error/control-flow/reverse-export
+reconciliation remains open. Native Windows runtime, current-revision remote
+Ubuntu CI, and Phase 19 Broker/Docker evidence remain pending. No push or
+remote CI was run; existing Phase 19 worktree files remain untouched and
+unstaged.

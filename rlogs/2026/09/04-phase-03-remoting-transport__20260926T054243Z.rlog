@@ -1,0 +1,35 @@
+# Phase 3 execution log — continuation 2026-09-26T054243Z
+
+## Goal and scope
+
+- Continued Java 5.5.1 remoting behavior comparison; did not alter the Phase 3 plan. Phase 4 remains blocked.
+- Reviewed Java GO_AWAY callback/retry flow and Rust async semaphore permit ownership.
+
+## Source finding and implementation
+
+- Java completes the first response future for GO_AWAY before retrying through `invokeImpl`, which releases the initial async semaphore permit; the retry then performs admission again.
+- Rust retained the original `OwnedSemaphorePermit` across the retry and marked retry as already admitted. Changed invoke ownership to retain the permit in the outer invocation scope, explicitly drop it after GO_AWAY, and re-acquire admission under the same absolute deadline. Retry still skips outbound hooks.
+- Added `p3_go_away_retry_reacquires_async_admission`: with async capacity 1, a competing invocation queued before GO_AWAY is allowed to acquire the released permit and complete before the retry can send. This makes the source-observed order testable.
+- Updated `docs/compatibility/PHASE_3_REMOTING_INVENTORY.md` and `docs/compatibility/JAVA_5_5_1_COMPATIBILITY.md` with the behavior and test mapping.
+
+## Validation
+
+- Targeted: `cargo test -p rocketmq-classic-remoting --test transport p3_go_away_retry_reacquires_async_admission --locked --offline` — passed.
+- `cargo fmt --all --check` — passed.
+- `cargo test --workspace --locked --offline` — passed (89 unit/integration tests; doc tests passed).
+- `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings` — passed.
+- `python3 scripts/check-workspace-metadata.py` — passed.
+- `python3 tests/differential/compare.py --self-test` — passed.
+- `git diff --check` — passed.
+
+## Plan and acceptance status
+
+- Re-read the Phase 3 plan and confirmed no plan modifications. Automated race/loopback coverage remains passing; however, semantic parity review is in progress and the plan's P3-V01–V03 / P3-U01 boxes remain unchecked. P3-V04 remains deferred to Phase 19. No live Broker, Maven, or Docker run was performed.
+- Phase 3 remains NOT ACCEPTED; Phase 4 has not started. Remaining known parity investigations and non-equivalent Netty mechanics are documented in `docs/compatibility/PHASE_3_REMOTING_INVENTORY.md` and the previous session log; do not infer acceptance from workspace gates.
+
+## Changed paths
+
+- `crates/rocketmq-classic-remoting/src/client/mod.rs`
+- `crates/rocketmq-classic-remoting/tests/transport.rs`
+- `docs/compatibility/JAVA_5_5_1_COMPATIBILITY.md`
+- `docs/compatibility/PHASE_3_REMOTING_INVENTORY.md`

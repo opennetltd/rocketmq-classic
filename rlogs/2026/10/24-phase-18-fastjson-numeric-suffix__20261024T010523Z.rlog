@@ -1,0 +1,56 @@
+# Phase 18 Fastjson numeric suffix and string coercion parity
+
+- Recorded: 2026-10-24 01:05:23 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Code/test revision: `8b375eac4aa08adf515d3093892fed3ad7ba997f`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Host: macOS 26.6.1, Apple M5 Max, AArch64, 18 logical CPUs
+- Rust: 1.85.0
+- Cargo target directory: `/tmp/rocketmq-phase18-target`
+- Heartbeat fixture SHA-256: `69ab7ea24c30ad628e6f2b519268edeebee9060d7013b6becdfad88adc658f49`
+
+## Compatibility change
+
+- Added fourteen Java 5.5.1 heartbeat DTO input cases for uppercase numeric
+  suffixes, exponent and decimal-point forms, lowercase suffix rejection, and
+  numeric suffix coercion to a string field.
+- The Rust normalizer now handles `L`, `F`, `D`, `B`, and `S` suffixes,
+  leading-dot and trailing-dot decimals, and Java Float/Double string forms.
+  The 1,102-case Rust heartbeat DTO differential and focused numeric formatter
+  regression pass.
+- This closes the observed token and string-field cases only. Broader Fastjson
+  grammar and P18-V01 source/API/settings/input/error/control-flow/reverse-
+  export reconciliation remain open.
+
+## Verification
+
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+  — passed.
+- `cargo test --workspace --locked` — passed, including doctests.
+- `cargo test --workspace --all-features --locked` — passed, including
+  doctests. Default and all-feature runs were sequential.
+- Focused heartbeat DTO differential and Java Float/Double formatter tests —
+  passed.
+- `mvn -o -f compat/java-reference/pom.xml verify` — passed: 37 scenarios,
+  fixture-drift checks, 11 message fixtures, 106 typed headers, and 19 typed
+  bodies cross-decoded.
+- Differential self-test passed; manifest validation passed with 37 scenarios.
+- `scripts/check-workspace-metadata.py` passed. Offline package listings for
+  all seven product crates include `LICENSE` and `NOTICE`.
+- Deterministic race/leak smoke passed 20 cases x 3 repetitions. Fuzz smoke
+  passed 163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes,
+  and 192 message decodes.
+- Facade release examples and the offline benchmark passed. Benchmark
+  observations are in `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+- Windows GNU all-target/all-feature workspace check and strict Clippy passed
+  as compile-only evidence. The Asia/Taipei Unique ID fixture test passed.
+- Current Rustdoc public-name counts remain Common 439, Consumer 460, Core
+  798, Producer 361, Protocol 1,524, and Remoting 337 from the preceding
+  current-tree scan; this commit changes no exported Rust API.
+
+P18-V01 remains `PARTIAL`. Native Windows runtime and current-revision remote
+Ubuntu CI remain unverified. Phase 19 Broker/Docker validation is separate.
+No push or remote CI was run. The four protected Phase 19 worktree paths remain
+unchanged and unstaged.

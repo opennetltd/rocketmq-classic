@@ -1,0 +1,8 @@
+# Phase 6 execution session — 2026-10-10T16:45Z
+
+- Continued source/owner reconciliation on `07-phase-06-runtime-routing-heartbeat`.
+- Cross-read the Phase 6 inbound matrix/runtime inventory/API map with the pinned Phase 9, 10 and 11 plans. Found a stale inbound-matrix sentence: it assigned consumer allocation/rebalance to Phase 9 and said pull-request ownership was open.
+- Corrected the source-to-phase owner map: Phase 6 owns the shared PullMessageService FIFO/delayed worker and current-owner dispatch; Phase 9 owns manual pull RPC and remote/local offset stores; Phase 10 owns Push PullRequest/PopRequest, ProcessQueue and bounded fetch/consume scheduling; Phase 11 owns assignment and initial-offset activation. Code 40 remains a Phase 6 runtime-wide wakeup, with allocation behavior owned by Phase 11.
+- Updated `docs/compatibility/PHASE_6_INBOUND_MATRIX.md`, `PHASE_6_RUNTIME_INVENTORY.md`, and `PHASE_6_API_CONFIG_MAP.md`; appended the mapping result to `docs/compatibility/PHASE_6_REQUIREMENT_AUDIT.md`.
+- This resolves an ownership-documentation ambiguity only. No downstream feature was pulled into Phase 6 or claimed complete. Full source/API/input/reverse-export reconciliation remains PARTIAL, and P6-V04 remains the Phase 19 handoff.
+- Validation: `git diff --check` and plan-link target inspection.

@@ -1,0 +1,1 @@
+{"java_client_version":"5.5.1","server_baseline_not_contacted":"5.3.4","scenario_id":"P5-RPC-SEND-11","request_code":10,"response_code":11,"response":true,"ext_fields":{"queueId":"2","msgId":"offset-msg-1","queueOffset":"99","transactionId":"tx-1"},"body_hex":"","frame_sha256":"8642726c9bd685ecdc9b5fa6985fe26bd8705d44af2b2ac2972eb002d798557d","java_outcome":"SLAVE_NOT_AVAILABLE"}

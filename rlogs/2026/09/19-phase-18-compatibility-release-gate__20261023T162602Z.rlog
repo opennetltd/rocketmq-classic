@@ -1,0 +1,56 @@
+# Phase 18 ConsumerConnection and ProducerConnection Set parity
+
+- Recorded: 2026-10-23 16:26:02 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Java baseline: RocketMQ 5.5.1, source commit `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Product commit: `05207a17e361b1f751ca89fba8e20206099d183d`
+
+## Finding and change
+
+Pinned Java `ConsumerConnection` and `ProducerConnection` expose
+`HashSet<Connection>`. `Connection` inherits `Object.equals/hashCode`, so
+membership is by object identity: the same object reference and null each
+deduplicate, while separately decoded objects with identical fields remain
+distinct. The Rust DTOs previously used `Vec` and admitted repeated references
+and repeated nulls.
+
+Both Rust DTOs now expose shared `HashSet<Option<SharedValue<Connection>>>`
+containers. `SharedValue<Connection>` equality and hashing use stable pointer
+identity, the identity-aware nullable set decoder creates distinct handles for
+distinct decoded objects, and getter/setter container aliasing remains live.
+Java oracle fixtures record direct collection operations and JSON decode
+outcomes. Rust Protocol regressions exercise both DTO decoders and the
+ConsumerConnection admin RPC path.
+
+Fixture SHA-256:
+
+- `fixtures/admin/query-consume-time-span.json`:
+  `9e011a55e633140ed06209762aec715cf88b14dfd8724f7239fe24effee7309c`
+- `fixtures/producer/core.json`:
+  `d635048972229fa1ba2c03b3e2ad0e4600c6de32493ad927543be75a9aaa6de2`
+
+## Verification
+
+- `cargo test --offline --workspace --locked` — passed.
+- `cargo test --offline --workspace --all-features --locked` — passed.
+- `cargo test --offline --locked -p rocketmq-classic-protocol --lib` — 160
+  passed after the final Producer decoder regression was added.
+- `cargo test --offline --locked -p rocketmq-classic-core --test admin_rpc mq_client_admin_get_consumer_connection_list_matches_invoked_java_fixture` — passed.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — passed after an explicit, localized allowance documenting why pointer-identity Set keys remain stable while `Connection` fields mutate.
+- `mvn -o -f compat/java-reference/pom.xml verify` — BUILD SUCCESS; validated 37 scenarios, fixture drift, Java/Rust cross-decodes, 11 message fixtures, 106 typed headers, and 19 typed bodies.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+An initial Clippy run flagged the identity-keyed mutable `Connection` handle in
+the regression test. The test now documents and scopes the lint allowance to
+the pointer-based equality/hash contract; the full strict Clippy run then
+passed. No Phase 19 path was staged or changed by this work. No push or remote
+CI was run.
+
+## Status
+
+This closes the `connectionSet` collection-kind and identity semantics for
+these two DTOs only. Broad P18-V01 reconciliation remains open. Current-
+revision remote CI, native Windows runtime evidence, and Phase 19 remain
+outstanding/out of scope. Product change is committed as `05207a17`; the
+compatibility documentation and this run record are committed separately.

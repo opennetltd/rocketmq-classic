@@ -1,0 +1,22 @@
+[package]
+name = "rocketmq-classic-common"
+version.workspace = true
+description = "Common models and utilities for the RocketMQ Classic Rust client."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+flate2.workspace = true
+lz4_flex.workspace = true
+zstd.workspace = true
+xxhash-rust.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+base64.workspace = true

@@ -1,0 +1,58 @@
+# Phase 18 client-ID-scoped Producer accumulator and current-tree gates
+
+- Recorded: 2026-10-24 18:36:39 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Code revision: `49fffa75` (`fix(producer): share accumulator by client id`)
+- Host: macOS AArch64, Apple M5 Max, 18 logical CPUs
+- Rust: `rustc 1.85.0 (4d91de4e4 2025-02-17)`
+- Pinned Java reference: RocketMQ 5.5.1, source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Compatibility finding and change
+
+- `MQClientManager.getOrCreateProduceAccumulator(ClientConfig)` caches by
+  `ClientConfig.buildMQClientId()`. The invoked Java fixture records same-ID
+  accumulator reuse and distinct-ID separation. Fixture SHA-256:
+  `e285d6e3408c9824feb957fb8cbf16f0209c9b345343a6db8a1ca3a954f40eba`.
+- Rust now caches the shared accumulator by explicit manager identity and the
+  Java-compatible client ID. Producer instances share live thresholds, queued
+  batches and worker state. Each pending batch retains its first Producer as
+  the send owner. Shutdown stops workers without discarding queued entries;
+  later Producer startup resumes workers and schedules retained deadlines.
+- `auto_batch_is_shared_by_client_id_and_keeps_first_producer_owner` verifies
+  fixture identity, same/different IDs, shared live settings, first-owner
+  transport routing and restart behavior.
+  `stopped_accumulator_retains_pending_batches_for_restart` verifies queued
+  entries and original deadlines survive stop and become ready after restart.
+- Updated the Phase 6 API map, Phase 6 requirement audit and Phase 7 Producer
+  matrix. The general offline benchmark sample is recorded separately.
+
+## Current-revision verification
+
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-shared-accumulator cargo test --offline --locked --workspace` — PASS, including doctests.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-shared-accumulator cargo test --offline --locked --workspace --all-features` — PASS, including doctests.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-shared-accumulator cargo clippy --offline --locked --workspace --all-targets --all-features -- -D warnings` — PASS.
+- Windows GNU all-feature workspace check, strict all-target Clippy and test harness compile/link — PASS. Windows executables were not run.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS; 37 scenarios, fixture drift, 11 message fixtures, 106 typed headers, 19 typed bodies and Java/Rust cross-decodes.
+- `python3 tests/differential/compare.py --self-test` and `--validate-manifest` — PASS; 37 scenarios.
+- `CARGO_NET_OFFLINE=true bash tests/stress/run-offline-smoke.sh` — PASS; 20 cases × 3 repetitions.
+- `cargo run --offline --locked -p rocketmq-classic-remoting --example fuzz_smoke` — PASS; 163 frame seeds, 11 message seeds, 11 property seeds, 2,960 mutations and 564/192/176 decoder calls.
+- Release facade examples, offline benchmark and strict benchmark Clippy — PASS. The machine-specific sample is in `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+- Rustdoc JSON generation, workspace metadata checks and all seven offline package listings with `LICENSE` and `NOTICE` — PASS.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS for the final source and documentation tree.
+
+## Remaining scope
+
+- The manager cache and cross-Producer accumulator ownership slice is closed;
+  broad P18-V01 API, settings, input, error, control-flow and reverse-export
+  reconciliation remains `PARTIAL`.
+- `ResponseFuture.toString()` JVM identity rendering and different-mode
+  assignment hash collisions based on process-local Java enum identity hashes
+  remain known gaps.
+- Native Windows runtime and current-revision remote Ubuntu CI remain
+  unverified; P18-V04 remains open. No push, remote CI, Broker or Docker run
+  was performed.
+- The four pre-existing Phase 19 worktree paths and the Java checkout's
+  user-owned `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java` remain
+  untouched and unstaged.

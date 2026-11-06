@@ -1,0 +1,40 @@
+# Phase 18 MessageClientExt offset-ID null clearing — 2026-10-21T22:08:23Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `f7d7e8f1` (`fix(common): preserve cleared client offset IDs`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Common message fixture SHA-256:
+`1adc11e14bf1af0d39966ecda166a3ddb8a24c0e7d13bbf2d5a9830bdaac64dc`.
+Runtime consumer fixture SHA-256:
+`403b79b69f30957ae2f935be37ec0b8537696909d91066d2126f216eff31996d`.
+
+## Change
+
+- Match Java `setOffsetMsgId(null)` behavior by clearing both the offset value
+  and the effective client message ID. Conversion to a base-typed
+  `MessageExt` preserves the cleared raw state.
+- Record explicit boolean expectations for the cleared offset and effective ID;
+  the Java fixture serializer omits map entries whose value is null.
+- Keep custom subtype offset getter/setter dispatch and inherited `UNIQ_KEY`
+  precedence covered by the existing invoked direct-consume cases.
+
+## Verification
+
+- Focused `message_client_ext_api_matches_java_551_fixture` — passed.
+- `cargo test --workspace --locked --quiet` — passed.
+- `cargo test --workspace --all-features --locked --quiet` — passed.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+  — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- Pinned `mvn -q -f compat/java-reference/pom.xml verify` — passed: 37
+  scenarios, 9 Running Info, 29 direct-consume, 15 reset cases, 85 typed
+  headers, 16 typed bodies, and Java/Rust cross-decodes. Existing JDK/Netty
+  `Unsafe` and reflective-final-field warnings were emitted.
+
+## Remaining work
+
+Broad P18-V01 source/API/settings/input/error/control-flow/reverse-export
+reconciliation remains open. The complete current-revision supplemental P18-V02
+stress/fuzz/benchmark/package refresh and GitHub Ubuntu/native Windows P18-V04
+evidence remain open. No push, remote CI, Broker, or Docker run was performed.
+Protected Phase 19 worktree paths were left unstaged.

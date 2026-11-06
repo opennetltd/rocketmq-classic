@@ -1,0 +1,50 @@
+Phase 18 Remoting ResponseFuture surface continuation — 2026-10-16
+
+Context
+- Plan: `plan/2026/09/19-phase-18-compatibility-release-gate.md`; no plan edits.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Java client 5.5.1 oracle source commit:
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Actions
+- Added a pinned Java fixture for `ResponseFuture.toString`'s stable fields,
+  response-latch count before/after response, and external JVM thread
+  interruption during `waitResponse`.
+- Updated Rust `Display` to expose those stable fields in Java field order and
+  count the response latch state. Added fixture-backed Rust coverage for the
+  stable fields, response-latch transition, wait timeout, and the distinct
+  `ResponseFuture::interrupt` operation.
+- Source inspection confirmed `CountDownLatch.await` propagates
+  `InterruptedException` and clears the Java thread's interrupt flag. Rust's
+  standard Condvar has no external thread-interrupt primitive; documented this
+  runtime boundary separately from the mapped future `interrupt()` method.
+- Updated the Phase 3 Remoting inventory, compatibility crosswalk and known
+  differences. Fixture SHA-256:
+  `4739b82304af6d251fe963f87f90f829215add80632976ccd6d9ef411c6494f4`.
+
+Validation
+- `cargo test -p rocketmq-classic-remoting --all-features` passed: 108 unit,
+  8 codec, 1 fuzz regression, 7 security, 107 transport, and 10 doc tests.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings` passed.
+- `mvn -f compat/java-reference/pom.xml verify` passed, including 37 manifest
+  scenarios and the updated Remoting API fixture.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+- Fixture regeneration had two corrected tooling/source issues: an unavailable
+  `ResponseCode` symbol was replaced by the numeric success code, and the
+  Maven exec invocation was routed through the repository's `compat.Main`
+  fixture command. Java fixture generation and verification then passed.
+- Code and fixture committed as `db03c206` (`fix(remoting): align response
+  future display state`). Documentation/evidence changes are staged separately.
+
+Scope status
+- Phase 15–17 local unit criteria are recorded as passed in the release
+  checklist. P15-V03, P16-V02, and P17-V02 remain Phase 19 live handoffs; the
+  current-revision Windows runtime CI result is still pending.
+- Phase 18 broad bidirectional P18-V01 API/config/input/error/control-flow and
+  reverse-export audit remains open. The final full-workspace P18-V02 gate
+  must run after the remaining P18 changes. Current-revision P18-V04 GitHub
+  evidence remains pending.
+- Phase 19 Docker/Broker execution and owner-run production checks are outside
+  this Phase 15–18 implementation objective; Phase 18 must still hand off all
+  live IDs without claiming those runs.

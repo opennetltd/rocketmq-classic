@@ -1,0 +1,13 @@
+Execution session: 2026-10-10T14:57:46Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Initial state: `b99880ee` after implementing null-input handling for `ClientRuntime::find_broker_address_by_topic_nullable`. The Java oracle and Rust behavior commits were already present; the API map and requirement audit needed the final verification record.
+
+Selected slice: pin the `findBrokerAddrByTopic(null)` input boundary. Java RocketMQ 5.5.1 performs a `ConcurrentMap.get(topic)` and throws `NullPointerException` for the null key, including with an empty route table. Rust's nullable entry point maps `None` to `InvalidRoute("null broker lookup topic")`; non-null input delegates to the existing lookup. Oracle commit `7c137f27`, implementation commit `b99880ee`, fixture `fixtures/runtime/route.json` SHA-256 `d961d16d35c8dfadfc4cd092167d5b04044eb7c25c7d798dbbdbda92ebc94e7a`.
+
+Validation: fixture-backed runtime lookup test, full `cargo test --workspace --all-targets --locked`, and strict `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` pass. Pinned offline `mvn -o -q -Dmaven.repo.local=/private/tmp/p6-maven-repository -Drocketmq.client.logRoot=/private/tmp/p6-rocketmq-logs -f compat/java-reference/pom.xml verify` passes: 22 scenarios, route and other fixture checks, runtime invoked-case verification, and Rust-to-Java cross-decodes. Comparator self-test and manifest validation pass (22 scenarios); `cargo fmt --all -- --check` and `git diff --check` pass.
+
+Documentation update: `PHASE_6_API_CONFIG_MAP.md` lists the nullable Rust lookup and maps the Java null failure to the typed route error. `PHASE_6_REQUIREMENT_AUDIT.md` records the oracle behavior, fixture digest, and verification gates. This closes only the null topic input shape; full Phase 6 method/input/platform reconciliation remains open, and P6-V04 remains `PENDING_PHASE_19`.
+
+Documentation/log commit: pending.

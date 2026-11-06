@@ -1,0 +1,52 @@
+2026-10-15 20:21 UTC — closed the Java TLS property-file reload timing slice
+and reran server-free P18-V02 on code revision `83afee2a`.
+
+Pinned Java source commit: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+`TlsHelper.buildSslContext` rereads `tls.config.file` before every context
+build. The invoked fixture changes `tls.test.mode.enable` across three builds
+and records `true, false, true`; it also changes `tls.client.authServer` to
+true and then omits it, recording that the prior value remains true.
+
+Rust retains the property-file source in `TlsConfig` and rereads it
+immediately before a new `RemotingClient` builds its TLS connector. Existing
+clients retain their settings. Clones of one `TlsConfig` share cached
+last-loaded values, including values whose keys are omitted by a later file.
+Separate Rust `TlsConfig` sources retain their own explicit property maps;
+Java's values are process-static, so this cross-config source boundary remains
+part of broad P18-V01. Rust regression:
+`java_tls_property_file_is_reloaded_for_each_client_context`.
+
+Updated fixture SHA-256:
+
+- `fixtures/security/tls-settings-defaults.json`:
+  `c5db30257df68c1e1926a811549bb534210a4e3a70df95aed1cde3195c764528`
+- `fixtures/security/tls-settings-system-properties.json`:
+  `099916a84c78f2b5b1f4b434eec904cc556779271e43db39831ae7208f7d8951`
+
+Code, Java fixture and JSON fixture commit: `83afee2a`.
+
+Server-free P18-V02 validation passed on the code in that commit:
+
+- `cargo test --workspace --locked`
+- `cargo test --workspace --all-features --locked`
+- `cargo check --workspace --all-targets --all-features --locked`
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+- `mvn -f compat/java-reference/pom.xml verify` — 37 scenarios and fixture checks
+- Differential comparator self-test and 37-scenario manifest validation
+- `bash tests/stress/run-offline-smoke.sh` — 16 race/leak cases × 3
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` —
+  105 frame seeds, 11 message seeds, 1,856 bounded mutations
+- `cargo build -p rocketmq-classic --examples --release --locked`
+- `cargo bench -p rocketmq-classic --bench offline --locked --no-run`
+- Locked Cargo metadata, workspace metadata/license/dependency checks, and
+  seven package listings containing LICENSE and NOTICE
+- Asia/Taipei Unique ID fixture, rustfmt, and `git diff --check`
+
+P18-V02 passes locally on `83afee2a`. Broad P18-V01 remains open for Java/Rust
+public API, settings, overload/input, error/control-flow, inherited API, and
+reverse-export reconciliation, including the process-static versus separate
+Rust property-source boundary. Current-revision GitHub Ubuntu/P18-V04 evidence,
+Phase 19 local Docker/Broker automation, and pre-publication version/registry
+resolution remain open. Owner-run deployment and live Broker checks remain
+Phase 19 manual validation. No push, tag, publication, deployment, Docker, or
+live Broker action occurred.

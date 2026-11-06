@@ -1,0 +1,35 @@
+# Phase 18 Remoting response/error factory reverse-name crosswalk
+
+- Recorded: 2026-10-23 13:27:31 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source revision before documentation commit: `f034a3ab`
+- Pinned Java source: RocketMQ 5.5.1,
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Finding
+
+- The compatibility Markdown token scan identified three public Remoting
+  names without exact Rust-name text: `create_response_command`,
+  `create_response_command_with_header`, and `build_error_response`.
+- Rust declares the methods on `RemotingCommand` in
+  `crates/rocketmq-classic-remoting/src/command.rs`; its existing API-map row
+  grouped them under Java response/error factory overload families.
+- Pinned Java `RemotingCommand` declares the corresponding
+  `createResponseCommand(int, String)`,
+  `createResponseCommandWithHeader(int, CommandCustomHeader)`, and
+  `buildErrorResponse(int, String)` overloads. Existing invoked fixture cases
+  and Rust comparisons cover defaults, response flags, headers, request IDs,
+  and reflective header-construction failures.
+- The API map now lists the exact Rust methods and their Java overloads,
+  including the typed-header factory adapters.
+
+## Verification
+
+- Reviewed pinned Java source, Rust declarations/call sites, the existing
+  fixture coverage, and the compatibility crosswalk.
+- `git diff --check` — passed.
+- Documentation-only change; no tests were run. No push or remote CI was run;
+  existing Phase 19 user-owned paths were not edited or staged.
+
+This closes an exact-name crosswalk omission only. Broad P18-V01 source/API/
+settings/input/error/control-flow reconciliation remains open.

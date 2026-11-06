@@ -1,0 +1,21 @@
+# Phase 18 Producer factory/helper surface disposition — 2026-10-14T03:35:28Z
+
+- Continued `phase/19-phase-18-compatibility-release-gate`. The pinned 5.5.1 Java source remains commit `efa1be59d6fc747ad220f036c86030f05f0419f9`; byte comparisons confirm the published 5.5.1 source JAR's `MQClientInstance`, `MQFaultStrategy`, and `DefaultMQProducerImpl` sources match that commit exactly. The separate Java checkout remains untouched.
+- Extended the invoked Producer fixture to inventory the return type of `getMqClientFactory` / deprecated `getmQClientFactory`: `MQClientInstance` has 2 public constructors and 51 public methods. Rust test pins the type, counts, and representative route, heartbeat, client-ID, and MQClientAPI accessors.
+- Pinned `MQFaultStrategy` inventory has 2 constructors, 16 declared methods and 17 publicly callable methods including inherited `StartAndShutdown.preShutdown`; `BrokerFilter` has 1 constructor and 2 methods. Source call-site review shows `getAvailableFilter`, `getReachableFilter`, `getThreadBrokerFilter`, and `BrokerFilter` are only consumed by the strategy's own queue selection. The Producer matrix now records their disposition: Rust keeps raw mutable factory/filter/ThreadLocal objects inside the lifecycle owners and exposes the audited settings and owner behavior through Producer/ClientRuntime APIs.
+- Code/test/fixture commit: `e475ff2d` (`test(producer): inventory returned Java helper surfaces`). Current `fixtures/producer/core.json` SHA-256: `9c8b0b55a958804b131d64cfeb8883c53ff2af5f652d1b8b01f25dcd4509a0ef`.
+
+## Verification
+
+- PASS: `cargo test -p rocketmq-classic-producer --test producer --locked` (16 tests).
+- PASS: strict Producer Clippy across all targets and features.
+- PASS: pinned Maven `verify` with fixture-drift checks, Java/Rust cross-decodes, and 37 scenarios.
+- PASS: formatter check, `git diff --check`, comparator self-test, and 37-scenario manifest validation.
+- This is a fixture/inventory and disposition slice. The full workspace P18-V02 gate and the remaining broad source/overload/input/reverse-export audit have not been completed.
+
+## Remaining work
+
+- P18-V01 remains PARTIAL for per-overload input/branch crosswalks, Java reverse-export, inherited/trait API reconciliation, and broad source/input reconciliation outside the bounded Producer helper surfaces recorded above.
+- Re-run full workspace P18-V02 gates after all remaining P18-V01 slices.
+- A current GitHub Ubuntu workflow result, Phase 19 Broker/Docker scenarios, and confirmation of the `0.1.0` release version plus registry dependency resolution remain open; packages stay unpublished.
+- Final owner-run platform checks remain separate: Windows IP Helper runtime enumeration, non-macOS BSD runtime enumeration, and an IPv6-only host.

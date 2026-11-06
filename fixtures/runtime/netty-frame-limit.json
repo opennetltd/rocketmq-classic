@@ -1,0 +1,6 @@
+{
+  "property": "com.rocketmq.remoting.frameMaxLength",
+  "default": 16777216,
+  "configured": 4096,
+  "encoderProbeBodySize": 4096
+}

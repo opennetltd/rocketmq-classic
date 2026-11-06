@@ -1,0 +1,31 @@
+# Phase 18 current-revision verification — 2026-10-14T05:56:54Z
+
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Pinned Java client source reference: `efa1be59d6fc747ad220f036c86030f05f0419f9`; external checkout left untouched. It currently points at a different HEAD and has an unrelated untracked `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java`.
+- Implemented nullable Producer group construction, setter, namespace/start validation, hook context representation, and fixture-backed behavior in code commit `281dd9e0`.
+- Latest producer fixture SHA-256: `b0a59a0c084fc24ddff5c4947e7064d20311fe0dcf38306b8ac45ee15546c4fc`.
+- PASS: `cargo test --workspace --locked` (completed before this execution on the same code tree); `cargo test --workspace --all-features --locked`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (fixture drift, Java/Rust cross-decodes, 37 scenarios).
+- PASS: differential comparator self-test; 37-scenario manifest validation.
+- PASS: `bash tests/stress/run-offline-smoke.sh` (16 deterministic cases × 3 repetitions); bounded fuzz smoke (1,824 mutations).
+- PASS: release facade example build; offline benchmark compilation; `scripts/check-workspace-metadata.py`.
+- P18-V02 server-free evidence now covers revision `281dd9e0`. P18-V01 remains open for broad bidirectional Java/Rust source/API/overload/input/branch and inherited/trait reconciliation. Current GitHub Ubuntu CI evidence and Phase 19 Docker/Broker execution remain outstanding; neither is claimed as a manual waiver.
+
+## Continued execution — 2026-10-14T06:20:38Z
+
+- Pinned Java 5.5.1 call-site audit confirmed that create-topic key, default-topic queue count, send timeout, per-request retry timeout, sync/async retry counts, retry-after-non-OK-store, and max-message-size setters are read by later send/header/retry/validation paths. Rust had construction-time `ProducerConfig` methods only for these settings.
+- Added live `Producer` getters/setters backed by thread-safe config values. `ProducerConfig::clone` remains a detached snapshot. The pinned Java fixture now invokes all eight settings; Rust tests cover later header values, send deadline, retry budgets, retry to another Broker after non-OK store status, message-size validation, and snapshot independence.
+- Code commit: `781bf6f0 fix(producer): support live send settings`. Fixture SHA-256: `46c9c9522317d72d2942fab4abae0caf9c6fd9bf76a179ea90a6ec453b041f3c`.
+- Technical command corrections: the first fixture-generator invocation overrode Maven's configured main class incorrectly; a later invocation used stale compiled fixture classes and the drift check correctly failed. Regenerated with the `compat.Main` producer-core dispatch after source compilation. The first Rust compile identified seven missing `.clone()` calls on shared settings; fixed. Initial strict Producer Clippy found two scripted-test mutex guards held across `await`; scoped the guards and reran successfully.
+- PASS: `cargo test -p rocketmq-classic-producer --locked` (127 unit tests; admin 10, producer fixture 20, request/reply 3, scripted send 13, transaction 7, doc tests); `cargo test -p rocketmq-classic-producer --lib runtime_ --locked` (15 tests); focused producer Java fixture test.
+- PASS: `cargo test --workspace --locked`; `cargo test --workspace --all-features --locked`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; producer-specific all-target/all-feature Clippy; format and diff checks.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` with fixture drift checks, Java/Rust cross-decodes, and 37 differential scenarios.
+- P18-V01 remains open for Producer group/VIP/topic-list live-setting behavior and the broad Java reverse-export, overload/input/branch, inherited/trait and source reconciliation. P18-V04 GitHub Ubuntu evidence and Phase 19 Docker/Broker runs remain pending. Race/leak, fuzz-smoke, release-example and benchmark gates were not rerun on this new code commit.
+
+## Current-revision offline gates — 2026-10-14T06:26:37Z
+
+- Re-ran the deterministic race/leak smoke on current `HEAD` `dc82d57e`: 16 cases × 3 repetitions passed.
+- Re-ran bounded fuzz smoke on current `HEAD`: 104 frame seeds, 10 message seeds, and 1,824 mutations passed.
+- PASS: release example builds, offline benchmark compilation, workspace metadata check, comparator self-test, and seven package-content manifest checks.
+- These results close the current-revision rerun gap for those offline gates. They do not close P18-V01, the required GitHub Ubuntu result (P18-V04), Phase 19 Docker/Broker runs, or release version/registry checks.

@@ -1,0 +1,51 @@
+# P18-V01 `WriteBooleanAsNumber` and combined feature precedence
+
+Timestamp: 2026-10-16 22:24 UTC
+Plan: `plan/2026/09/19-phase-18-compatibility-release-gate.md` (unchanged)
+Branch: `phase/19-phase-18-compatibility-release-gate`
+Starting revision: `1e68fbca`
+Implementation commit: `7938dc75`
+
+## Changes
+
+- Pinned Java oracle: RocketMQ client 5.5.1 at
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; Fastjson2 2.0.63.
+- Implemented `WriteBooleanAsNumber` in inherited body, route, and heartbeat
+  serializer adapters. True and false values become JSON numbers `1` and `0`.
+- Inspected Fastjson2's `ObjectWriterImplBoolean`: when both
+  `WriteBooleanAsNumber` and `WriteNonStringValueAsString` are enabled, the
+  latter wins and booleans are emitted as JSON strings. Rust now follows that
+  precedence.
+- Added combined-feature outputs to the invoked lookup, route, and heartbeat
+  Java fixtures and differential assertions across the covered DTOs.
+- Updated the Phase 6 API/config crosswalk and release checklist. Five of 48
+  writer features now have behavior mappings; 43 remain explicitly unmapped.
+
+## Validation
+
+- `cargo test -p rocketmq-classic-protocol --all-features --locked` passed:
+  121 unit tests, all integration targets, and 42 doctests.
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features
+  --locked -- -D warnings` passed. The first run identified an eight-argument
+  serializer helper; the options were grouped and the strict rerun passed.
+- `TZ=UTC mvn -o -q -f compat/java-reference/pom.xml verify` passed all 37
+  scenarios and runtime fixture drift checks.
+- `cargo fmt --all -- --check`, `git diff --check`, and staged diff checks
+  passed.
+- Fixture SHA-256 values: `lookup.json`
+  `c0398f15a506db742fff5bc9c019ffe5b944649c08cce8b97847cc6403bffcdf`,
+  `route.json`
+  `ad46456edced9bd7152c27ad4af06c45273f9a3ea715067d507fc732c551b4d7`,
+  `heartbeat.json`
+  `b9ffb50d9624ca531076444b2529e3a729baacf0edfc8361d93a19d1ab7df797`.
+
+## Remaining work
+
+- The other 43 Fastjson2 writer features and broad P18-V01 Java/Rust
+  source/API/settings/input/error/flow/reverse-export reconciliation remain
+  open.
+- The final-revision full-workspace P18-V02 run, current-revision platform CI
+  evidence, package/pre-publication review, and Phase 19 local Docker/Broker
+  automation remain open. Those runnable items are not owner manual checks.
+- No plan edit, Docker/Broker execution, push, tag, publication, or release
+  action occurred.

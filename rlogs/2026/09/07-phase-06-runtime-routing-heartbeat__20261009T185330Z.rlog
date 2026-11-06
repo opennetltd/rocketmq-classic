@@ -1,0 +1,171 @@
+## Fastjson SOCKS root-map object references — 2026-10-09T18:53:30Z
+
+- Direct pinned RocketMQ 5.5.1 construction and `NettyRemotingClient.getProxy` oracle cases established route `$ref` behavior: a reference resolves to the same `SocksProxyConfig` object, chained references retain address and credentials, and unresolved references select no proxy.
+- Added two resolved-reference cases plus one unresolved-reference case to the 495-case constructor corpus, with two actual private proxy-selection cases. The initial native differential failed because the referenced route had no address.
+- Native parsing now resolves simple and quoted root-key JSONPath references and chains into equivalent owned proxy values; CIDR matching and unresolved direct selection match Java. Red oracle commit `80ba235d`; implementation commit `9cf5a8fb`.
+- Current `fixtures/runtime/client-config.json` SHA-256: `0cafefb33a4611746f78005582a3394e7a6de8818932ea3d9d947e99d3d1eb5e`.
+- Focused reference parse/selection tests pass. Full `cargo test --workspace --all-targets --locked`, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, Java fixture drift and cross-decodes), differential comparator self-test and manifest22 validation, `cargo fmt --all -- --check`, and `git diff --check` pass.
+- Updated ADR-0038 and the Phase 6 API, requirement, Java compatibility, and runtime inventory records. Additional Fastjson grammar forms, source/input reconciliation, non-macOS interface enumeration and a real IPv6-only host remain open. Phase 6 remains PARTIAL; P6-V04 stays `PENDING_PHASE_19`.
+
+## Fastjson SOCKS cyclic references — 2026-10-09T18:59:08Z
+
+- Added pinned Java constructor and actual private `NettyRemotingClient.getProxy` cases for a self-reference and a two-route `$ref` cycle. Java constructs both and selects no proxy; the native parser differential failed first because it rejected both cycles.
+- Test/oracle and fixture commit: `115a2cb1`. Resolver implementation commit: `2f60397e`. The resolver now maps a detected cycle to the same direct/no-proxy outcome.
+- The SOCKS constructor corpus has 497 cases. Current `fixtures/runtime/client-config.json` SHA-256: `0434b8f5de37827ad98c145d60e9888a1d7e851f79e7872742047b4e760d8c03`.
+- Focused constructor and proxy-selection tests pass. Full `cargo test --workspace --all-targets --locked`, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture checks and cross-decodes), differential self-test and manifest22, `cargo fmt --all -- --check`, and `git diff --check` pass.
+- Updated ADR-0038 and the Phase 6 API, requirement, Java compatibility, and runtime inventory records. Remaining Fastjson grammar and broad Phase 6 source/API/input reconciliation remain open; Phase 6 remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## Fastjson SOCKS special references — 2026-10-09T19:06:01Z
+
+- Added actual pinned Java constructor and private `getProxy` cases for `$ref` `#-1` and root `$`. Java accepts `#-1` as a null/no-address route and selects no proxy; root `$` fails construction with `ClassCastException`. The native constructor differential failed first on both outcomes: it rejected `#-1` and accepted `$`.
+- Test/oracle and fixture commit: `9a8dc90d`. Resolver implementation commit: `8cc47fc8`. Rust now maps `#-1` to direct/no-proxy selection and rejects root `$`; the selection differential handles construction-stage Java failures as error outcomes.
+- The SOCKS constructor corpus has 499 cases. Current `fixtures/runtime/client-config.json` SHA-256: `15e8e57a07b7a488f45750d10f5820ed41a49a2aba198254d7e2b85ba84f871a`.
+- Focused constructor/selection tests, full `cargo test --workspace --all-targets --locked`, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture checks and cross-decodes), differential self-test and manifest22, `cargo fmt --all -- --check`, and `git diff --check` pass.
+- Updated ADR-0038 and the Phase 6 API, requirement, Java compatibility, and runtime inventory records. Other Fastjson forms and broad Phase 6 source/API/input reconciliation remain open; Phase 6 remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## SOCKS matched route with no address — 2026-10-09T19:14:31Z
+
+- Added an actual Java 5.5.1 constructor/private-`getProxy` selection case for a matching CIDR whose `SocksProxyConfig` has no `addr`. Java returns the matched CIDR entry with a null address; the native selection test first failed because it converted the match into an error and discarded the CIDR.
+- Oracle/test and fixture commit: `1ca984ac`. Implementation commit: `c4bcbbbb`. Rust now carries the selected CIDR and route independently, treats null-valued routes as direct on connection, and defers missing-address handling to the connection stage.
+- The fixture has 15 private SOCKS selection cases and SHA-256 `f3a1558b2722c74fe917bcba299484563ddcc4990b3db58419ac403fa2fb4a69`.
+- Focused SOCKS parser/selection tests, full `cargo test --workspace --all-targets --locked`, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, drift and cross-decodes), comparator self-test and manifest22, `cargo fmt --all -- --check`, and `git diff --check` pass.
+- Updated ADR-0038 and the Phase 6 API, requirement, Java compatibility, and runtime inventory records. Phase 6 source/API/input reconciliation remains open; P6-V04 stays `PENDING_PHASE_19`.
+
+## SOCKS Java HashMap route-selection order — 2026-10-09T19:22:36Z
+
+- Added pinned Java 5.5.1 private `NettyRemotingClient.getProxy` cases for overlapping CIDRs. Three JSON field-order permutations of the same `/8`, `/9`, `/10`, and `/11` routes all select `/9`, demonstrating Java `HashMap` iteration rather than longest-prefix matching. A fourth case places two matching CIDR strings in different source buckets that collapse into one destination bucket; Java selects the entry from source bucket 1 although it appears second in JSON.
+- The native differential was red before implementation: the prior randomized map traversal selected `/11` instead of Java's `/9`. Oracle/test commits `99284f59` and `6f790b8a`; implementation commit `965109bd`. Rust preserves the parsed root-map insertion order and models Java source-map bucket traversal followed by destination `putAll` traversal.
+- The fixture has 499 `socksConstruction` cases and 19 `socksProxySelection` cases. `fixtures/runtime/client-config.json` SHA-256: `3e46fee1230a4dbf66837deca0a17015aeea87913fa9f3b08ad79e1aa0f90c42`.
+- Focused constructor/selection suites, full `cargo test --workspace --all-targets --locked`, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and Java cross-decodes), differential comparator self-test, manifest22 validation, `cargo fmt --all -- --check`, and `git diff --check` pass.
+- Updated ADR-0038 and the Java compatibility, API map, requirement audit, and runtime inventory records. Broader Fastjson grammar and Phase 6 source/API/input/final-plan reconciliation remain open; Phase 6 remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## SOCKS additional Fastjson reference paths — 2026-10-09T19:28:34Z
+
+- Added nine direct Java 5.5.1 private `NettyRemotingClient.getProxy` inputs covering `$.target`, `$["target"]`, `$[ 'target' ]`, `$[0]`, `@`, `..`, `#-2`, bare `target`, and `$..target`. Java resolves dot, double-quoted bracket, and whitespace-bearing quoted bracket forms to the target proxy. `#-2` and bare `target` retain the matching CIDR entry with a null address; numeric-index, self, parent, and recursive-descent forms fail.
+- The native differential first failed on `$[ 'target' ]`. Rust now accepts ASCII whitespace around the quoted bracket key, preserves `#-2` and bare-name no-address routes, and rejects the unsuccessful forms. Oracle/test commit `c90a1bec`; implementation commit `27700865`.
+- The fixture now has 499 constructor cases and 28 private selection cases. `fixtures/runtime/client-config.json` SHA-256: `2099360007a6e46dbba89ba22c70d7ca7354fe49b2b5129a082bd42ff9f2b011`.
+- Focused SOCKS tests, full `cargo test --workspace --all-targets --locked`, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and Java cross-decodes), comparator self-test, manifest22 validation, `cargo fmt --all -- --check`, and `git diff --check` pass.
+- Updated ADR-0038 and the Java compatibility, API map, requirement audit, and runtime inventory. Remaining Fastjson paths and the broad Phase 6 source/API/input/final-plan reconciliation remain open; Phase 6 remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## SOCKS additional bare-reference observations — 2026-10-09T19:35:02Z
+
+- Added four actual Java private-selection cases for empty `$ref`, one space, bare `target.addr`, and bare `0`; all select the matching CIDR and expose a null proxy address. The `0` case intentionally has no root key named `0`, while `$[0]` remains the separate failing array-index form. Oracle/test commit `47d09d76`; the Rust implementation required no change.
+- The fixture has 499 `socksConstruction` cases and 32 `socksProxySelection` cases. SHA-256: `fd46551f8755e1ca55a6434bdf15eabe58014077a402e8e17928b9eb8d9039d7`.
+- Focused SOCKS tests, full `cargo test --workspace --all-targets --locked`, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and Java cross-decodes), comparator self-test, manifest22 validation, format, and diff checks pass.
+- Updated ADR-0038, Java compatibility, API map, requirement audit and runtime inventory. Additional Fastjson grammar and whole Phase 6 source/API/input/reverse-export reconciliation remain open; Phase 6 remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## Consumer-list mutable getter mapping — 2026-10-09T19:41:12Z
+
+- Extended pinned Java `consumerListApiCase`: mutation through the List passed to `setConsumerIdList` and mutation through `getConsumerIdList` are mutually visible; final contents are `client-a`, `client-b`, `client-c`, `client-d`. Oracle/fixture commit `0877435c`; `lookup.json` SHA-256 `3d031033fb4f04d0ab78df0bf7818827dec7a460e8264812f303667ee42c020b`.
+- The test-first Rust differential failed to compile because no mutable getter existed. Implementation `dd4156c5` adds `get_consumer_id_list_mut() -> Option<&mut Vec<Option<String>>>`; the test moves the Vec into the DTO, mutates through the accessor, and checks the resulting values. Java external List identity remains outside Rust's move-based ownership model.
+- Focused DTO method differential, full workspace/all-target tests, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and Java cross-decodes), comparator self-test, manifest22 validation, `cargo fmt --all -- --check`, and `git diff --check` pass.
+- Updated ADR-0055, Java compatibility, API map, requirement audit, runtime inventory, and this rlog. Other DTO aliases, malformed inputs, full source/reverse-export reconciliation, platform address evidence, and P6-V04 remain open.
+
+## Lock-batch mutable Set getter mapping — 2026-10-09T19:47:36Z
+
+- Extended direct pinned Java API cases for `LockBatchRequestBody`, `UnlockBatchRequestBody`, and `LockBatchResponseBody`: mutations through both the Set passed to the setter and the Set returned by the getter are mutually visible. Each case replaces queue id 2 with id 3 through the original reference, then id 4 through the getter.
+- Oracle/test and fixture commit `f80a844d`; aggregate `fixtures/runtime/lookup.json` SHA-256 `8f8f823b9a63d14dd5cf4d9b86d0538ad5ebe142138d4316639ce3e60bc5fd6c`. The Rust differential first failed to compile because the three mutable getter methods were absent.
+- Implementation commit `c8aeb821` adds `get_mq_set_mut` to both request DTOs and `get_lock_okmq_set_mut` to the response DTO. Focused native differential now passes and compares final values; Java identity with the caller's pre-move Set remains an ownership difference.
+- Full `cargo test --workspace --all-targets --locked`, strict Clippy, pinned offline Maven verify (22 scenarios and fixture drift/cross-decodes), comparator self-test and manifest22 validation, `cargo fmt --all -- --check`, and `git diff --check` pass.
+- Updated ADR-0055, Java compatibility, API/config map, requirement audit, runtime inventory, and this rlog. Other DTO aliases, malformed inputs, source/reverse-export reconciliation, platform address evidence, and P6-V04 remain open; Phase 6 stays PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## Assignment response mutable Set getter mapping — 2026-10-09T19:52:17Z
+
+- Extended `queryAssignmentResponseApiCase` with direct Java add/remove mutations through both the setter `Set<MessageQueueAssignment>` and the DTO getter. Both views observe the changes; final contents hold queue id 4. Oracle/test and fixture commit `1bfe20bf`; `lookup.json` SHA-256 `ce344c0aa35c634a730f97cf706fba3b41313fd12a2fac294d3e01250f7e9b2c`.
+- The Rust test first failed to compile because `get_message_queue_assignments_mut` was absent. After adding the accessor, a focused failure exposed that the Java API-value fixture includes null `attachments` while DTO serialization omits that field; the differential now normalizes the getter values explicitly.
+- Implementation commit `b280111c` adds `get_message_queue_assignments_mut() -> Option<&mut HashSet<Option<MessageQueueAssignment>>>`. Focused test, full workspace/all-target tests, strict Clippy, pinned offline Maven verify (22 scenarios and fixture drift/cross-decodes), comparator self-test and manifest22, format, and diff checks pass.
+- Updated ADR-0054, Java compatibility, API/config map, requirement audit, runtime inventory, and this rlog. Rust still does not preserve Java's alias to the caller-owned Set across its move-based setter. Other DTO aliases, malformed inputs, source/reverse-export reconciliation, platform evidence, and P6-V04 remain open; Phase 6 stays PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## BatchAck mutable List getter mapping — 2026-10-09T19:55:39Z
+
+- Extended the actual pinned Java `batchAckApiCase`: changes through the List passed to `setAcks` and the List returned by `getAcks()` are mutually visible; the fixture replaces queue id 1 with 3 through the original reference and 4 through the getter.
+- Oracle/test and fixture commit `51b92e77`; current `fixtures/runtime/lookup.json` SHA-256 `9a9c052d3d57d0c4e54e6f8adc1147c71bbfa1fbc07745d63e0920ab670f4442`. Test-first Rust differential failed to compile because the mutable getter was absent.
+- Implementation commit `f4d85af0` adds `BatchAckMessageRequestBody::get_acks_mut() -> Option<&mut Vec<Option<BatchAck>>>`; focused differential passes. Rust reproduces getter mutation through ownership but does not retain Java's external List alias.
+- Full `cargo test --workspace --all-targets --locked`, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture drift and cross-decodes), comparator self-test/manifest22, `cargo fmt --all -- --check`, and `git diff --check` pass.
+- Updated ADR-0053, Java compatibility, API/config map, requirement audit, runtime inventory, and this rlog. Other DTO aliases, malformed inputs, whole-source/reverse-export reconciliation, platform evidence, and P6-V04 remain open; Phase 6 stays PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## CheckClientRequestBody mutable nested DTO getter mapping — 2026-10-09T19:59:16Z
+
+- Direct pinned Java `checkClientBodyApiCase` now changes `SubscriptionData.subVersion` through the object passed to `setSubscriptionData`, then changes `subString` through the body getter; both views observe the final values. Oracle/test and lookup fixture commit `cd8e761e`; aggregate lookup SHA-256 `f3d9e92e8965faa082e06f075755bed7b9fc7d0435698b35a58d19ac809d8c29`.
+- The test-first Rust differential failed to compile because `CheckClientRequestBody::get_subscription_data_mut` was absent. Its first green run exposed a getter-view normalization difference (`codeSet` is omitted from the Java API map); the test now compares the actual declared fields.
+- Implementation commit `ecf19a87` adds `get_subscription_data_mut() -> Option<&mut SubscriptionData>`. Focused differential passes. Java caller-object identity remains different after Rust's owned setter.
+- Full `cargo test --workspace --all-targets --locked`, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture drift and cross-decodes), comparator self-test/manifest22, `cargo fmt --all -- --check`, and `git diff --check` pass.
+- Updated ADR-0055, Java compatibility, API/config map, requirement audit, runtime inventory, and this rlog. Other DTO aliases, malformed inputs, complete source/reverse-export reconciliation, platform evidence, and P6-V04 remain open; Phase 6 stays PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## GetConsumerStatusBody mutable map getter mapping — 2026-10-09T20:04:48Z
+
+- Extended the pinned Java `consumerStatusBodyApiCase` to mutate the assigned `messageQueueTable`, the returned `consumerTable`, and a nested consumer table. Each mutation is visible through the corresponding Java alias; the fixture records the final map values.
+- Oracle/test and fixture commit `89aef2e2`; aggregate `fixtures/runtime/lookup.json` SHA-256 `9fa29ff2a82f4227ebb8ea83c74c32702b6cf60f2b11e1eebbc8f0b1fff57da7`. The Rust test-first differential failed to compile because the mutable getters were absent.
+- Implementation commit `3d5cfd44` adds `get_message_queue_table_mut()` and `get_consumer_table_mut()`. The focused differential verifies mutation of both owned Rust maps and the nested rows; Java caller-owned Map identity remains unrepresented across Rust ownership.
+- Full workspace/all-target tests, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and fixture drift/cross-decodes), comparator self-test/manifest22, formatting, and diff checks pass.
+- Updated ADR-0057, Java compatibility, API/config map, requirement audit, runtime inventory, and this rlog. ResetOffsetBody mutable getter review, other DTO aliases, malformed inputs, whole-source/reverse-export reconciliation, platform evidence, and P6-V04 remain open; Phase 6 stays PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## Lite subscription Set getter mutation coverage — 2026-10-09T20:21:07Z
+
+- Extended pinned Java `liteSubscriptionDtoApiCase` and `liteSubscriptionControlApiCase` to mutate each assigned Set through the setter-held reference and through the DTO getter. The Lite topic Set ends with `getter-added`, `lite-a`, and `setter-added`; the control Set grows from one to three DTOs.
+- Oracle/test and fixture commit `4fd32a88`; lookup fixture SHA-256 `99d189c5eeba83f01b53a5ec23ab56cf5b902043db0849bd54a93ac2a3f3d743`. The first focused differential failed because these mutation results were not yet in the Java fixture.
+- Existing Rust `LiteSubscriptionDto::lite_topic_set_mut()` and `LiteSubscriptionCtlRequestBody::subscription_set_mut()` pass the new getter-side checks. Rust still does not retain Java's caller-owned Set identity; no production change was needed.
+- Full workspace/all-target tests, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and fixture drift/cross-decodes), comparator self-test/manifest22, formatting, and diff checks pass.
+- Updated Java compatibility, API/config map, requirement audit, runtime inventory, and this rlog. Other DTO aliases and full source/API/input/reverse-export reconciliation remain open; P6-V04 stays `PENDING_PHASE_19`.
+
+## Heartbeat DTO mutable Set getter mapping — 2026-10-09T20:21:07Z
+
+- Extended pinned Java public-method cases for `SubscriptionData`, `ConsumerData`, and `HeartbeatData` to mutate collection values through both setter-held Sets and returned getters. Final tag/code values are `bronze/gold/silver` and `7/9/11`; consumer subscription and both heartbeat collection sizes become three.
+- Oracle/test and fixture commit `33829680`; `fixtures/runtime/heartbeat.json` SHA-256 `a03cd054471d1782251f8635adcc35d6da29f67f9900c215eadf67f76f5d9c30`. The test-first Rust differential failed to compile because five mutable getters were absent.
+- Implementation commit `5151a308` adds `get_tags_set_mut`, `get_code_set_mut`, `get_subscription_data_set_mut`, `get_producer_data_set_mut`, and `get_consumer_data_set_mut`. Focused Java/Rust differential passes through Rust-owned HashSets and vectors; external Java Set identity remains unrepresented.
+- Full workspace/all-target tests, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and fixture drift/cross-decodes), comparator self-test/manifest22, formatting, and diff checks pass.
+- Updated ADR-0058, Java compatibility, API/config map, requirement audit, runtime inventory, and this rlog. Other DTO aliases, malformed inputs, whole-source/reverse-export reconciliation, platform evidence, and P6-V04 remain open; Phase 6 stays PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## LiteSubscriptionDTO mutable OffsetOption getter mapping — 2026-10-09T20:25:41Z
+
+- Extended the actual pinned Java `liteSubscriptionDtoApiCase`: mutation through the `OffsetOption` passed to `setOffsetOption` is visible through `getOffsetOption`, and mutation through the getter is visible through the original object. Both finish at value 13.
+- Oracle/test and fixture commit `373dec0c`; aggregate `fixtures/runtime/lookup.json` SHA-256 `0880db9cf0e22cf22580c4c176e3413c7e3b2a2336fcc63dc6f81b616126fcaa`. The test-first Rust differential failed to compile because `offset_option_mut` was absent.
+- Implementation commit `6612a7fe` adds `LiteSubscriptionDto::offset_option_mut() -> Option<&mut OffsetOption>`. Focused differential passes; the Rust borrow mutates the DTO-owned object but does not retain Java's identity with the setter caller's object.
+- Full workspace/all-target tests, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and fixture drift/cross-decodes), comparator self-test/manifest22, formatting, and diff checks pass.
+- Updated Java compatibility, API/config map, requirement audit, runtime inventory, and this rlog. Other DTO aliases, malformed inputs, whole-source/reverse-export reconciliation, platform evidence, and P6-V04 remain open; Phase 6 stays PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## ResetOffsetBody mutable map getter mapping — 2026-10-09T20:08:59Z
+
+- Extended the pinned Java `resetOffsetBodyApiCase`: mutation through the Map assigned to `setOffsetTable` is visible through the body getter, and mutation through `getOffsetTable()` is visible through the original Map. The final table includes queue ids 2, 3 (null offset), 4 (99), and 5 (100).
+- Oracle/test and fixture commit `a6e6d723`; aggregate `fixtures/runtime/lookup.json` SHA-256 `b77cd6ce3487c18e1c2d9b34c06ff2354f9c025ab65ac15a1255a3ed9fb31bc3`. The Rust test-first differential failed to compile because `get_offset_table_mut` was absent.
+- Implementation commit `ff81313a` adds `ResetOffsetBody::get_offset_table_mut()`. The focused Java/Rust differential passes; Rust supports mutation through its owned ordered rows but does not preserve caller-owned Map identity.
+- Full workspace/all-target tests, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and fixture drift/cross-decodes), comparator self-test/manifest22, formatting, and diff checks pass.
+- Updated ADR-0057, Java compatibility, API/config map, requirement audit, runtime inventory, and this rlog. Other DTO aliases, malformed inputs, whole-source/reverse-export reconciliation, platform evidence, and P6-V04 remain open; Phase 6 stays PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## MessageRequestModeSerializeWrapper mutable map getter — 2026-10-09T20:38:43Z
+
+- The getter sweep found that `MessageRequestModeSerializeWrapper.getMessageRequestModeMap()` returns a live mutable nested map in pinned RocketMQ 5.5.1, but Rust exposed only an immutable borrow. The direct Java case adds an outer topic and nested group entry through the getter and verifies both remain visible through the wrapper. It also checks that the setter-retained map identity is true in Java.
+- Oracle/test commit `94a0d62d`; a follow-up snapshots the original populated map before getter mutation so the initial and final expected maps are independently recorded (`0614eda5`). Current aggregate `fixtures/runtime/lookup.json` SHA-256: `c0ba2b2cf51eb3c900a90e57a807edb25bda2cee0fed1b9e54a303680814c6bb`.
+- Implementation commit `6c19de4c` adds `MessageRequestModeSerializeWrapper::get_message_request_mode_map_mut()`. The focused differential passes. Rust supports mutation of its owned outer and nested `BTreeMap`s but does not preserve Java identity with the caller-owned map passed to the setter.
+- Unprivileged workspace/Maven runs hit the environment's loopback socket restriction; the required workspace/all-target tests and pinned offline Maven verify passed when rerun with local loopback access. Strict Clippy, comparator self-test/manifest22, format, and diff checks pass.
+- Updated ADR-0050, Java compatibility, API/config map, requirement audit, runtime inventory, and this rlog. The whole Phase 6 source/API/input/reverse-export reconciliation remains open; Phase 6 stays PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## BatchAck mutable BitSet getter — 2026-10-09T20:42:36Z
+
+- The collection-accessor sweep found `BatchAck.getBitSet()` returns a mutable Java `BitSet`, while Rust exposed only an immutable byte slice. The pinned Java oracle confirms that `getBitSet()` returns the object assigned by `setBitSet`; setting bit 5 through the getter is visible through both references and changes the serialized `BitSet.toByteArray()` bytes from `BQ==` to `JQ==`.
+- Oracle/test commit `bd3d2e71`; aggregate `fixtures/runtime/lookup.json` SHA-256 `abfe31546b68799aced43ff4f631f5dea37a4c14efac1dfc60a1ed637a22b970`. The Rust test-first differential failed to compile because `get_bit_set_mut` was absent.
+- Implementation commit `d1dc7dfd` adds `BatchAck::get_bit_set_mut() -> Option<&mut Vec<u8>>` for the DTO-owned `BitSet.toByteArray()` bytes. The focused differential passes after mutation. Rust does not retain identity with the caller-owned Java `BitSet` and does not expose Java's full `BitSet` API.
+- Full workspace/all-target tests, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and fixture drift/cross-decodes), comparator self-test/manifest22, formatting, and diff checks pass. Workspace and Maven loopback fixtures used local scripted peers only.
+- Updated ADR-0053, Java compatibility, API/config map, requirement audit, runtime inventory, and this rlog. Other DTO aliases and full Phase 6 source/API/input/reverse-export reconciliation remain open; Phase 6 stays PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## MessageQueueAssignment attachments getter mutation — 2026-10-09T20:47:39Z
+
+- Existing `MessageQueueAssignment::attachments_mut()` was present in Rust, but its Java API oracle covered only getter readback. The pinned Java 5.5.1 method case now verifies `getAttachments()` returns the assigned Map and that insertion through the getter is visible through the setter-held reference. The Rust differential mutates the owned map and compares the final entries.
+- Oracle/test and fixture commit `359ed253`; aggregate `fixtures/runtime/lookup.json` SHA-256 `8b6dab97da3ebca80f494b07ebcc7b12da396d700587137e136ea8620ed8d972`. No production implementation change was required.
+- Focused public-method differential and full workspace/all-target tests, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and fixture drift/cross-decodes), comparator self-test/manifest22, formatting, and diff checks pass. Local loopback fixtures used scripted peers only.
+- Updated ADR-0020, Java compatibility, API/config map, requirement audit, runtime inventory, and this rlog. Caller-owned Map identity remains an ownership gap; whole Phase 6 source/API/input/reverse-export reconciliation remains open and P6-V04 stays `PENDING_PHASE_19`.
+
+## MessageQueueAssignment nested queue getter mutation — 2026-10-09T20:51:17Z
+
+- The nested-reference sweep found `MessageQueueAssignment::message_queue()` returned only an immutable borrow, while pinned Java `getMessageQueue()` returns the mutable object assigned by `setMessageQueue()`. The Java case sets queue id 4 through the getter and verifies the assigned object sees it; the Rust test-first differential initially failed to compile because `message_queue_mut()` was absent.
+- Oracle/test commit `caff0e22`; aggregate `fixtures/runtime/lookup.json` SHA-256 `9cdbcae68d20569b3d0cfdbf774aaf4183a63430438d9e3d74e8ad2e64b863d1`.
+- Implementation commit `8fff4781` adds `MessageQueueAssignment::message_queue_mut() -> Option<&mut MessageQueue>`. The focused differential and full workspace tests pass; Rust matches mutation of its owned nested queue but does not preserve the caller-owned Java object alias.
+- Strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and fixture drift/cross-decodes), comparator self-test/manifest22, formatting, and diff checks pass. Workspace and Maven loopback tests use local scripted peers only.
+- Updated ADR-0020, Java compatibility, API/config map, requirement audit, runtime inventory, and this rlog. Other DTO aliases and full Phase 6 source/API/input/reverse-export reconciliation remain open; Phase 6 stays PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+
+## Protocol borrow-returning getter sweep — 2026-10-09T20:52:20Z
+
+- The final scan of public borrow-returning collection and nested-object accessors across `rocketmq-classic-protocol` found mutable accessors for all discovered DTO-owned collections and nested references. Direct Java mutation evidence now also covers the previously untested `MessageQueueAssignment.attachments` Map and `messageQueue` object getters, in addition to the newly added request-mode map and BatchAck BitSet cases.
+- Oracle/test commits: `94a0d62d`, `0614eda5`, `bd3d2e71`, `359ed253`, `caff0e22`; implementation commits: `6c19de4c`, `d1dc7dfd`, `8fff4781`; the assignment attachment mutator was already implemented. Current aggregate `fixtures/runtime/lookup.json` SHA-256: `9cdbcae68d20569b3d0cfdbf774aaf4183a63430438d9e3d74e8ad2e64b863d1`.
+- Full workspace/all-target tests, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and fixture drift/cross-decodes), comparator self-test/manifest22, `cargo fmt --all -- --check`, and `git diff --check` pass. Loopback fixtures use local scripted peers only.
+- Remaining caller-owned Java collection/object identity gaps are recorded; this does not close full Phase 6 source/API/input/reverse-export reconciliation or P6-V04 Phase 19 validation. Phase 6 stays PARTIAL and P6-V04 stays `PENDING_PHASE_19`.

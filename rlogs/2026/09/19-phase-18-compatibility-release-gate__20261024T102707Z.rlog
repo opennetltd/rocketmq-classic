@@ -1,0 +1,486 @@
+# Phase 18 compatibility release-gate execution session
+
+- Recorded: 2026-10-24 10:27:07 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Plan: `plan/2026/09/19-phase-18-compatibility-release-gate.md`
+- Java reference: RocketMQ client 5.5.1, source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; Broker 5.3.4 is reserved for
+  Phase 19.
+- Rust toolchain: 1.85.0; workspace edition 2024.
+
+## Implementation and commits
+
+- `1e928372 fix(remoting): match Java throwable identity equality` changes
+  `ErrorSource` equality from display-chain comparison to shared wrapped-error
+  identity. Its regression proves clones compare equal and distinct causes
+  with the same text compare unequal. The request-classification test now
+  checks mapped variant/address/cause text without comparing fresh cause
+  identities.
+- `dcd00304 docs(compatibility): record remoting error identity parity`
+  updates the Remoting inventory, Known Differences, release checklist, and a
+  focused run record.
+- `cdf5efcb docs(compatibility): record current error identity gates` records
+  the refreshed server-free gates and benchmark sample.
+- `e83a9e85 docs(compatibility): refresh cross inventory review` removes an
+  obsolete Phase 0 Known Differences statement and records the remaining
+  GO_AWAY interleaving boundary.
+- This session also updates the top-level README's P18-V02 date and records
+  the P18-V03 review. Its changes are included in the final documentation
+  commit for this session.
+
+## Validation
+
+- Remoting package: `cargo test --offline --locked
+  -p rocketmq-classic-remoting` — PASS (146 unit, 9 codec, 1 fuzz-regression,
+  7 security, 109 transport tests, and 20 doctests). Strict all-target/all-
+  feature Remoting Clippy passed.
+- Workspace default and all-features tests/doctests — PASS in both modes;
+  each run had 93 test suites, 2,019 passed and 0 failed. Strict all-target/
+  all-feature workspace Clippy passed.
+- CI timezone-specific test
+  `TZ=Asia/Taipei cargo test --offline --locked -p rocketmq-classic-core
+  --lib unique_id::tests::public_unique_id_helpers_match_the_pinned_java_fixture
+  -- --exact` — PASS.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+- Differential comparator self-test and 37-scenario manifest validation —
+  PASS. Offline Maven `verify` — PASS with 37 scenarios, 11 message fixtures,
+  106 typed headers, 19 typed bodies, fixture-drift checks, and Java/Rust
+  cross-decodes.
+- Deterministic race/leak smoke — PASS, 20 cases × 3. Bounded fuzz smoke —
+  PASS, 163 frame seeds, 11 message seeds, 2,784 mutations, 564 frame
+  decodes, 192 message decodes.
+- Windows GNU all-target/all-feature workspace `cargo check` and strict
+  Clippy — PASS as compile-only checks. Release facade examples built.
+- Offline benchmark ran; current sample is recorded in
+  `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md` and has no
+  threshold. Workspace metadata/dependency direction/license checks and all
+  seven product package listings passed; each listing includes `LICENSE` and
+  `NOTICE`.
+
+## Audit status and limits
+
+- Phase 3 Remoting inventory has no `NOT MAPPED` row after `ErrorSource`
+  identity parity. The source-recorded Java `ChannelWrapper.reconnect()`
+  `tryLock` race remains: deterministic coverage verifies post-swap retry but
+  not every simultaneous lock-contention order. Rust's global connection-map
+  mutex is not a faithful equivalent of Java's per-wrapper lock; no
+  superficial locking change was made.
+- The Phase 6 map still calls for complete method/overload,
+  input/default/error/control-flow and reverse-export reconciliation across
+  DTO, route, heartbeat, enum, configuration and subscription surfaces. Broad
+  P18-V01 remains PARTIAL.
+- P18-V03 local docs/provenance/package review is complete. P18-V02 local
+  server-free gates pass on code revision `1e928372`. Native Windows runtime
+  and current-revision remote Ubuntu CI remain unverified; P18-V04 remains
+  open. Phase 19 Broker/Docker validation remains separate.
+- No push or remote CI was run. The protected Phase 19 worktree files were
+  not modified or staged.
+
+Detailed run records for the focused code and current-tree gate runs are in
+`rlogs/2026/10/24-phase-18-remoting-error-identity__20261024T100726Z.rlog` and
+`rlogs/2026/10/24-phase-18-current-tree-error-identity-gates__20261024T102143Z.rlog`.
+
+## P18-V01 `MessageExt` body-array alias continuation — 2026-10-24
+
+- Code commit: `950cf356 fix(common): preserve subtype message body aliases`.
+- Added `MessageExtSubtype::{shared_body,set_shared_body}` and
+  `MessageExt::{shared_body,set_body_shared}`. Snapshot-only body overrides
+  still work; custom subtype adapters can now retain and expose the shared
+  mutable byte-array handle used by Java.
+- Extended the pinned Java direct-consume fixture and Rust callback check to
+  compare `setBody` input identity, caller mutation visibility, `getBody()`
+  alias identity, getter-to-subtype mutation, and subtype-to-later-getter
+  mutation. Fixture SHA-256:
+  `4ba7bf76f4ef8ebb1ecc116f253d5b8e64100cf83096e65ff86958425f403b5c`.
+- Focused gates passed: Common `message_decode` (28 tests), consumer
+  `runtime_direct_consume` (6 tests), and Java fixture `--verify` (29 direct
+  cases).
+- On `950cf356`, default and all-feature locked workspace test/doctest runs
+  each passed 93 suites and 2,019 tests. Strict all-target/all-feature
+  workspace Clippy passed. Release workspace examples built. Windows GNU
+  all-target/all-feature workspace check and strict Clippy passed as
+  compile-only gates. Offline Maven `verify` passed: 37 scenarios, 11 message
+  fixtures, 106 typed headers, 19 typed bodies, including the updated direct
+  consumer fixture.
+- The first default workspace test launch in the repository target stalled
+  before Rust test code in the macOS dynamic loader for the Remoting `codec`
+  binary. A process sample showed only `_dyld_start`; the run was stopped and
+  the full default workspace suite passed with
+  `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target`. The all-feature run used
+  the same target and passed.
+- Matrix and runtime crosswalks were updated. Broad P18-V01 source/API/input/
+  flow/reverse-export reconciliation remains PARTIAL. Native Windows runtime
+  and current-revision remote Ubuntu CI remain unverified; no push or remote
+  CI was run. The four pre-existing Phase 19 worktree paths remain unstaged
+  and untouched.
+
+## P18-V01 Remoting GO_AWAY wrapper tryLock parity — 2026-10-24
+
+- Code commit: `3b7cb5d2 fix(remoting): match GoAway wrapper trylock`.
+- `ClientInner` now keeps weakly cached per-address wrapper locks. Current
+  connection lookup reads under the wrapper lock; a GO_AWAY response tries a
+  nonblocking write lock and, on contention, checks whether the generation
+  changed. Contention with the same generation skips retirement/retry. A
+  replacement or an already-retired generation remains eligible for the
+  shared retry path. Socket-close cleanup with no current entry still retains
+  the existing retry behavior.
+- Added `go_away_try_lock_skips_current_channel_and_retries_replaced_channel`
+  to cover same-generation lock contention and replacement routing.
+- Focused Remoting gates passed: all-feature package tests (147 unit, 9 codec,
+  1 fuzz-regression, 7 security, 109 transport, 20 doctests), strict
+  all-target/all-feature Remoting Clippy, and the GO_AWAY transport subset
+  (84 matching cases). A first full Remoting attempt exposed five regressions
+  when no current map entry followed socket-close cleanup; that branch was
+  corrected to preserve the pinned Java post-close retry and the rerun passed.
+
+## P18-V02 current-revision server-free gates — 2026-10-24 (`3b7cb5d2`)
+
+- Default and all-feature locked workspace tests/doctests passed on
+  `3b7cb5d2`; strict all-target/all-feature workspace Clippy, `cargo fmt`, and
+  `git diff --check` passed.
+- CI-equivalent checks passed: Asia/Taipei Unique ID fixture; differential
+  comparator self-test and 37-scenario manifest; stress smoke (20 cases × 3);
+  fuzz smoke (163 frame seeds, 11 message seeds, 2,784 mutations, 564 frame
+  decodes, 192 message decodes); offline Maven `verify` (37 scenarios, 11
+  message fixtures, 106 typed headers, 19 typed bodies); release examples;
+  offline benchmark compilation; workspace metadata; and seven package
+  listings, each including `LICENSE` and `NOTICE`.
+- Windows GNU all-target/all-feature workspace check and strict Clippy passed
+  as compile-only evidence. Maven emitted bounded probe-thread linger warnings
+  for the intentionally nonterminating Java zero-size/cycle decoder cases;
+  `verify` completed successfully.
+- Broad P18-V01 Phase 6 source/API/overload/input/error/control-flow and
+  reverse-export reconciliation remains PARTIAL. Native Windows runtime and
+  current-revision remote Ubuntu CI remain unverified. No push or remote CI
+  was run. The four pre-existing Phase 19-owned worktree paths remain
+  untouched and unstaged.
+
+## P18-V01 Rustdoc name-crosswalk status correction — 2026-10-24
+
+- The Phase 6 audit's initial 2026-10-13 counts of 137 Producer and 157
+  Consumer exact-token candidates were superseded by a follow-up Rustdoc
+  crosswalk that found zero unmatched exact method identifiers. The 2026-10-23
+  declaration review likewise reports no declaration-name discrepancy.
+- Updated the Phase 6 audit and Known Differences summary so they distinguish
+  the closed scoped name inventory from still-open method behavior,
+  overload/input/error/control-flow and Java-side omission reconciliation.
+- Docs-only; no source or tests changed. `git diff --check` passed.
+
+## P18-V01 historical status reconciliation — 2026-10-24
+
+- Corrected two release-checklist entries whose later follow-ups had already
+  closed their listed current gaps: controller DTO behavior and GO_AWAY
+  wrapper-lock contention. The historical scan evidence and broad P18-V01
+  PARTIAL status remain explicit.
+- Documentation-only; no code or tests changed. `git diff --check` passed.
+- Phase 19-owned paths were not staged or modified.
+
+## P18-V02 direct property decoder fuzz seeds — 2026-10-24
+
+- Code commit: `67ee9ec4 test(remoting): fuzz encoded property strings`.
+- The bounded deterministic smoke now collects unique encoded property
+  strings from the invoked Java message fixture and mutates each 16 ways,
+  including byte flips, truncation, U+0001/U+0002 separator edits, and
+  control/invalid suffixes. The regression requires nonzero property seed and
+  decoder counts; the example reports both counts.
+- Focused fuzz regression and smoke passed: 163 frame seeds, 11 message seeds,
+  11 property seeds, 2,960 total mutations, 564 frame decodes, 192 message
+  decodes, and 176 property decodes. The full Remoting all-feature suite
+  passed (147 unit, 9 codec, 1 fuzz-regression, 7 security, 109 transport,
+  and 20 doctests). Strict all-target/all-feature Remoting Clippy, formatting,
+  and diff checks passed.
+- This closes the direct property-seed coverage gap in P18-V02 only. Broad
+  P18-V01 reconciliation and native Windows/current remote Ubuntu evidence
+  remain open; no push or remote CI ran, and the Phase 19-owned worktree paths
+  remain untouched and unstaged.
+
+## P18-V01 stale property-map status references — 2026-10-24
+
+- Reconciled four historical Phase 6 audit passages that still described
+  caller-defined `MessageExt.getProperties()` live-map aliasing as open after
+  code revision `158a049f` and the crosswalk had closed it.
+- Marked each finding as open at its original checkpoint and linked the later
+  closure. Documentation-only; `git diff --check` passed. No code or tests
+  changed, and Phase 19-owned worktree paths remain untouched and unstaged.
+
+## P18-V02 all-feature workspace rerun — 2026-10-24 (`1f9f1ce7`)
+
+- `cargo test --offline --all-features --locked --workspace` passed all
+  workspace tests and doctests. `cargo clippy --offline --locked --workspace
+  --all-targets --all-features -- -D warnings`, `cargo fmt --all -- --check`,
+  and `git diff --check` also passed. The property-seeded fuzz regression ran
+  as part of the workspace suite.
+- The first workspace-target launch stalled in the macOS dynamic loader before
+  executing Remoting `codec` tests; `sample` showed only `_dyld_start`. After
+  stopping that process, the same command passed with
+  `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-allfeat-target`.
+- This verifies the current server-free unit-only all-feature workspace gate.
+  Native Windows runtime, current-revision remote Ubuntu CI, and Phase 19 live
+  handoff evidence remain open. No push or remote CI ran; Phase 19-owned
+  worktree paths remain untouched and unstaged.
+
+## P18-V01 PULL assignment expiry and retention — 2026-10-24 12:07 UTC
+
+- Code commit `33c57f09 test(consumer): cover expired pull assignments` adds
+  an invoked Java `RebalanceImpl.updateMessageQueueAssignment` fixture and a
+  Rust regression comparing expired replacement, active/dropped retention,
+  and empty-assignment removal. Combined runtime fixture SHA-256:
+  `892956f5ef65b5418bf637a5065f4697f4342a7926d9e04d69cdd657a7d3a911`.
+- Focused Rust test
+  `assigned_pull_queue_expiry_matches_java_replacement_and_retention` passed.
+  Offline pinned Maven `verify` passed with 37 scenarios, 11 message fixtures,
+  106 typed headers and 19 typed bodies; `cargo fmt --all -- --check` and
+  `git diff --check` passed.
+- This closes the assigned PULL expiry/retention slice only. The full workspace
+  gate has not yet been rerun at this code revision. Broad P18-V01, current
+  native Windows/current remote Ubuntu evidence, and Phase 19 Broker/Docker
+  validation remain open. No push or remote CI ran; Phase 19-owned worktree
+  paths remain untouched and unstaged.
+
+## P18-V02 post-PULL full-feature refresh — 2026-10-24 12:11 UTC
+
+- On code commit `33c57f09`,
+  `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-allfeat-target cargo test --offline
+  --all-features --locked --workspace` passed all workspace tests and
+  doctests, including the new Consumer PULL assignment regression.
+- Strict all-target/all-feature workspace Clippy passed with `-D warnings`.
+  `cargo fmt --all -- --check` and `git diff --check` passed. The earlier
+  repository-target loader stall and isolated-target recovery are recorded
+  above.
+- This refreshes the local full-feature gate only. Broad P18-V01, native
+  Windows/current remote Ubuntu evidence, and Phase 19 Broker/Docker
+  validation remain open. No push or remote CI ran; Phase 19-owned worktree
+  paths remain untouched and unstaged.
+
+
+## Windows GNU all-feature workspace compile/link — 2026-10-24 12:18 UTC
+
+- Environment: macOS ARM64 host, Rust 1.85.0, target
+  `x86_64-pc-windows-gnu`, MinGW GCC linker.
+- PASS: `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-windows-target cargo check
+  --offline --all-features --locked --workspace --target
+  x86_64-pc-windows-gnu`.
+- PASS: strict all-target/all-feature Windows GNU workspace Clippy with
+  `-D warnings`.
+- PASS: `cargo test --no-run --offline --all-features --locked --workspace`
+  for the Windows GNU target; all test harnesses compiled and linked, not run.
+- This is compile-only platform evidence. Native Windows runtime and
+  current-revision remote Ubuntu CI remain unverified. Broad P18-V01 remains
+  PARTIAL. No push, remote CI, or Phase 19 file changes.
+
+
+## Current-revision P18-V02 race/fuzz/manifest refresh — 2026-10-24 12:20 UTC
+
+- Source code revision: `33c57f09`; documentation HEAD: `d0033845`.
+- PASS: `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-allfeat-target bash
+  tests/stress/run-offline-smoke.sh` — 20 cases × 3 repetitions, including
+  2,000 concurrent async sends per scripted-peer repetition.
+- PASS: `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-allfeat-target cargo run
+  --offline --locked -p rocketmq-classic-remoting --example fuzz_smoke` — 163
+  frame seeds, 11 message seeds, 11 property seeds, 2,960 mutations, and
+  564/192/176 frame/message/property decoder calls.
+- PASS: `python3 tests/differential/compare.py --self-test` and
+  `python3 tests/differential/compare.py --validate-manifest` (37 scenarios).
+- These checks refresh the local P18-V02 smoke gates. Native Windows runtime,
+  current-revision remote Ubuntu CI, and broad P18-V01 remain open. No push or
+  remote CI was run; Phase 19-owned worktree files were left untouched.
+
+## P18-V01 SubscriptionData.compareTo null-input parity — 2026-10-24 12:28 UTC
+
+- Source-backed gap: Java 5.5.1 `SubscriptionData.compareTo(null)` throws
+  `NullPointerException`; the Rust API only accepted a non-null reference.
+- Added public `java_compare_to_nullable` and
+  `SubscriptionDataCompareError::NullOther`; kept the existing non-null API.
+  The invoked Java `RuntimeHeartbeatFixtures` now records the null-argument
+  exception class. Fixture SHA-256:
+  `7329d0dc1c886c1110a9e81661f72984087f8ecf86fd8a46120a8b86cfe415a8`.
+- Initial `mvn exec:java -Dexec.mainClass=...` attempt invoked the configured
+  `compat.Main` without a recognized command and exited with usage. Corrected
+  to `mvn -o -q -f compat/java-reference/pom.xml compile exec:java
+  -Dexec.args='runtime-heartbeat-fixtures <fixture-path>'`; direct generation
+  passed. Full offline Maven `verify` passed (37 scenarios, 11 message
+  fixtures, 106 typed headers, 19 typed bodies).
+- PASS: focused Protocol regression; Protocol all-feature package tests and
+  doctests (168 unit tests, 165 doctests); strict all-target/all-feature
+  Protocol Clippy; `cargo fmt --all -- --check`; `git diff --check`.
+- Code commit: `fdfdbaea`. This closes the null argument branch only; broad
+  P18-V01 remains PARTIAL. Phase 19-owned worktree files remain untouched.
+
+## P18-V01 route DTO compareTo null-input parity — 2026-10-24 12:36 UTC
+
+- Code commit `80acf42f` adds nullable comparison adapters and typed
+  `NullOther` errors for `MessageQueue`, `QueueData`, and `BrokerData`. The
+  pinned Java runtime fixture records `NullPointerException` for all three;
+  current `fixtures/runtime/route.json` SHA-256:
+  `fa4ee2e7b22496a561998501ca464455ebe0fc489a005868c96521e20efb4732`.
+- PASS: focused invoked-Java comparison regressions; all-feature locked Common
+  and Protocol tests/doctests; strict all-target/all-feature Clippy for both
+  crates; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `mvn -o -q -f compat/java-reference/pom.xml verify` — 37 scenarios,
+  11 message fixtures, 106 typed headers, 19 typed bodies, and 36 invoked
+  runtime route/VIP cases.
+- This closes the null-argument branch for these three comparators only.
+  Broad P18-V01 remains PARTIAL. Native Windows runtime and current-revision
+  remote Ubuntu CI remain unverified; Phase 19 Broker/Docker validation remains
+  separate. No push or remote CI ran; Phase 19-owned files remain untouched.
+
+## P18-V02 full current-code refresh — 2026-10-24 12:46 UTC
+
+- Code revision `80acf42f`; documentation HEAD before this record: `1ee16861`.
+- PASS: `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-allfeat-target cargo test
+  --offline --all-features --locked --workspace` (all workspace tests and
+  doctests) and strict all-target/all-feature workspace Clippy with
+  `-D warnings`.
+- PASS: Windows GNU all-feature workspace `cargo check`, strict all-target /
+  all-feature Clippy, and `cargo test --no-run` for `x86_64-pc-windows-gnu`.
+  All test harnesses compiled and linked; no Windows executable was run.
+- PASS: offline deterministic race/leak smoke, 20 cases × 3 repetitions,
+  including 2,000 concurrent async sends; fixed-seed fuzz smoke with 163 frame
+  seeds, 11 message seeds, 11 property seeds, 2,960 mutations and 564/192/176
+  decoder calls; differential comparator self-test and 37-scenario manifest.
+- PASS: pinned offline Maven `verify` on `80acf42f` (37 scenarios, 11 message
+  fixtures, 106 typed headers, 19 typed bodies); `cargo fmt --all -- --check`
+  and `git diff --check`.
+- This refreshes local P18-V02 gates. Broad P18-V01 remains PARTIAL; native
+  Windows runtime and current-revision remote Ubuntu CI remain unverified.
+  Phase 19 Broker/Docker validation remains separate. No push or remote CI ran;
+  Phase 19-owned worktree paths remain untouched.
+
+## P18-V01 TraceContext.compareTo null-input parity — 2026-10-24 12:55 UTC
+
+- Code commit `3427d269` adds `TraceContext::java_compare_to_nullable` and
+  `TraceContextCompareError::NullOther`; the pinned Java fixture records
+  `NullPointerException` from `TraceContext.compareTo(null)`. Current
+  `fixtures/tracing/trace-records.json` SHA-256:
+  `e56224bb6c926d53ab4c118fcb38d5a6067e10e252bd42817f2be68c1f7a3f5e`.
+- PASS: focused trace identity/comparison regression; Core all-feature tests and
+  doctests; strict all-target/all-feature Core Clippy; pinned offline Maven
+  `verify` (37 scenarios, 11 message fixtures, 106 typed headers, 19 typed
+  bodies); `cargo fmt --all -- --check`; `git diff --check`.
+- The latest all-feature workspace P18-V02 gate was on code revision
+  `80acf42f`, before this slice; refresh it after remaining source-audit work.
+  This closes the null argument branch only. Broad P18-V01 remains PARTIAL;
+  native Windows runtime and current-revision remote Ubuntu CI are unverified.
+  No push or remote CI ran; Phase 19-owned worktree files remain untouched.
+
+## P18-V01 MessageQueueForC public value API — 2026-10-24 13:05 UTC
+
+- Code commit `a460d966` adds the Common `MessageQueueForC` value type and
+  exports its constructor, accessors, Java hash/text/comparison behavior and
+  typed null failure mapping. Invoked Java fixtures cover API values, setters,
+  equality, offset-insensitive hash, and 12 comparison pairs. Current
+  `fixtures/runtime/route.json` SHA-256:
+  `9c068b67324f45510dab1aa4df3c2943b54944a9a56dcf8accc24f89f6612246`.
+- PASS: Common all-feature package tests/doctests, strict all-target/all-feature
+  Common Clippy, pinned offline Maven `verify` (37 scenarios, 11 message
+  fixtures, 106 typed headers and 19 typed bodies), `cargo fmt --all -- --check`,
+  and `git diff --check`.
+- Java `Serializable` object-stream behavior and the Broker2Client /
+  `ResetOffsetBodyForC` C-client wire path are outside this value-class slice.
+  Broad P18-V01 remains PARTIAL. Native Windows runtime and current-revision
+  remote Ubuntu CI remain unverified. No push or remote CI ran; Phase 19-owned
+  worktree paths remain untouched.
+
+## P18-V01 Java nested FaultItem reverse-surface audit — 2026-10-24 13:08 UTC
+
+- Source review confirms `LatencyFaultToleranceImpl.FaultItem` is public and
+  non-static, with a constructor, public mutators/accessors, value methods and
+  `Comparable`. Its enclosing implementation stores values only in its private
+  table, public interface methods never return them, and production source does
+  not call `FaultItem.compareTo`; `pickOneAtLeast` shuffles private values.
+- Rust keeps operational producer fault records private and maps selection
+  through the Producer owner. The directly constructible nested Java helper
+  has no standalone Rust public API counterpart, so its scope remains an open
+  P18-V01 reverse-surface item pending explicit disposition. No code changed.
+- Phase 19-owned worktree paths remain untouched; no push or remote CI ran.
+
+## P18-V02 full current-code refresh — 2026-10-24 13:23 UTC
+
+- Code revision `a460d966`; documentation HEAD before this record: `0c0b2219`.
+- PASS: `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-allfeat-target cargo test
+  --offline --all-features --locked --workspace` (all workspace tests and
+  doctests) and strict all-target/all-feature workspace Clippy with
+  `-D warnings`.
+- PASS: Windows GNU all-feature workspace `cargo check`, strict all-target /
+  all-feature Clippy, and `cargo test --no-run` for `x86_64-pc-windows-gnu`.
+  All test harnesses compiled and linked; no Windows executable was run.
+- PASS: offline deterministic race/leak smoke, 20 cases × 3 repetitions;
+  fixed-seed fuzz with 163 frame seeds, 11 message seeds, 11 property seeds,
+  2,960 mutations and 564/192/176 decoder calls; differential comparator
+  self-test and 37-scenario manifest validation.
+- PASS: pinned offline Maven `verify` on `a460d966` (37 scenarios, 11 message
+  fixtures, 106 typed headers, 19 typed bodies); `cargo fmt --all -- --check`
+  and `git diff --check`.
+- Broad P18-V01 remains PARTIAL, including the open nested `FaultItem`
+  reverse-surface disposition. Native Windows runtime and current-revision
+  remote Ubuntu CI remain unverified. Phase 19 Broker/Docker validation remains
+  separate. No push or remote CI ran; Phase 19-owned worktree paths remain
+  untouched.
+
+## P18-V01 MqClientAdmin inventory checkbox reconciliation — 2026-10-24 13:25 UTC
+
+- Corrected the stale 2026-10-18 unchecked `MqClientAdmin` discovery item.
+  Code commits `f05833a7` and `4ddd9266` now provide source-backed typed RPC
+  slices and invoked Java fixtures for all 19 methods, and the Rust wrapper
+  surface test compile-calls all 19 methods.
+- The Phase 17 matrix and release checklist now distinguish that closed
+  method-inventory/wrapper slice from the still-open defaults, input/error,
+  response DTO API, and reverse-export audit. Broad P18-V01 remains PARTIAL.
+- Documentation-only correction; current Phase 19-owned worktree paths remain
+  untouched.
+
+## P18-V01 nested producer FaultItem scope disposition — 2026-10-24 13:26 UTC
+
+- Source audit confirms Java declares `LatencyFaultToleranceImpl.FaultItem`
+  public, but only retains instances in a private table; no public
+  `LatencyFaultTolerance` method returns them, and production source has no
+  `compareTo` call site. `pickOneAtLeast` shuffles the private values.
+- Closed the direct helper inventory disposition with the existing Phase 7
+  raw strategy/filter ownership mapping: Rust preserves the observable
+  Producer fault-selection/settings flow through its owner without exposing a
+  standalone internal record handle. This closes the helper disposition only;
+  broad P18-V01 remains PARTIAL. No code changed.
+
+## P18-V02 default/configuration and P18-05 benchmark refresh — 2026-10-24 13:32 UTC
+
+- PASS: default-feature locked workspace tests/doctests; release facade example
+  build; offline benchmark compile and fixed-input run; locked Cargo metadata
+  (8 workspace members, 216 packages); workspace package listing and
+  `scripts/check-workspace-metadata.py` (seven product packages, LICENSE/NOTICE,
+  license metadata and dependency direction).
+- Benchmark environment: macOS ARM64, Apple M5 Max, 18 logical CPUs, Rust
+  1.85.0, release profile. Observations (iterations, input bytes, ns/op,
+  allocation calls/op, allocated bytes/op): frame encode/decode (20,000, 427,
+  6,775.3, 62, 6,787); Zstd message decode (10,000, 146, 2,240.9, 17,
+  197,493); Producer request construction (20,000, 512, 2,898.3, 54, 3,665);
+  route lookup at 128 entries (100,000, 10, 28.4, 0, 0); loopback pending
+  completion (500, 128, 77,655.6, 125, 12,873). Measurements are observations,
+  not thresholds.
+- Together with the full-feature gate above, these close the default-config,
+  examples, metadata and local P18-05 checks for code revision `a460d966`.
+  Native Windows runtime, current-revision remote Ubuntu CI, broad P18-V01,
+  remote registry availability and Phase 19 Broker/Docker gates remain open.
+
+## P18-V01 Java Comparable declaration source scan — 2026-10-24 13:34 UTC
+
+- Pinned Java 5.5.1 client/common/remoting source contains seven declared
+  Comparable implementations: `MessageQueue`, `MessageQueueForC`,
+  `TraceContext`, `SubscriptionData`, `BrokerData`, `QueueData`, and nested
+  `LatencyFaultToleranceImpl.FaultItem`.
+- Six value types map to Rust Java-compatible comparison methods with invoked
+  fixtures. `FaultItem` remains private producer state and follows the scoped
+  raw strategy-owner disposition. This closes the declared-comparator scan for
+  these modules only; inherited enum comparison and the broad P18-V01 audit
+  remain separate.
+
+## P18-V01 assignment mode accessor assertion — 2026-10-24
+
+- Code commit `88061e7a` fixes a self-comparison in
+  `assignment_methods_match_invoked_java_public_api`; the test now compares the
+  getter result with the mode value supplied by the invoked Java fixture.
+- PASS: focused Protocol unit test, strict Protocol all-target/all-feature
+  Clippy, `cargo fmt --all -- --check`, and `git diff --check`.
+- The Java `MessageQueueAssignment` process-local hash collision case remains
+  unresolved; broad P18-V01 stays PARTIAL. Phase 19-owned worktree paths were
+  not staged or modified by this change.

@@ -19,9 +19,11 @@ Phase 5 RPCs are accepted. Consumer pull/rebalance implementations do not exist 
 
 - Read/complete first: [Phase 5](06-phase-05-typed-rpc-api.md).
 
+Source mapping correction (2026-10-09): pinned `MQClientManager.getOrCreateMQClientInstance` first reads the client-ID table and returns an existing instance; only a missing key reaches `computeIfAbsent`. Later config and hook arguments do not replace or conflict-check the first runtime. The former `localServeAddr` phrase belongs to Proxy `ProxyConfig.initData`, outside the client-only phase; use the source-backed `ClientConfig.clientIP`/`NetworkUtil.getLocalAddress` behavior instead. See the [requirement audit](../../docs/compatibility/PHASE_6_REQUIREMENT_AUDIT.md).
+
 ### 2.1 Java references to inspect
 
-- Before coding, resolve these classes/methods and their call sites using the pinned-source rules in the index; the Java artifact has not been independently verified by this planning task.
+- The source mapping correction above is grounded in the pinned 5.5.1 artifact; continue resolving each listed class/method and call site using the pinned-source rules in the execution index before changing its behavior.
 - `MQClientManager`
 - `MQClientInstance`
 - `ClientConfig`
@@ -45,13 +47,13 @@ crates/rocketmq-classic-core/tests/runtime.rs
 docs/architecture/ADR-0002-client-runtime-sharing.md
 ```
 
-ClientRuntimeManager is an explicit shareable handle, not an unresettable global singleton. The facade later shares a default manager while allowing a private test-only manager override. A client-ID entry owns single initialization; compare runtime-affecting TLS/auth/NameServer configuration and reject conflicts rather than silently sharing incompatible transports. Model Created→Starting→Running→ShuttingDown→Stopped and startup failure. Group registration is identity-based and separate from Arc strong counts.
+ClientRuntimeManager is an explicit shareable handle, not an unresettable global singleton. The facade later shares a default manager while allowing a private test-only manager override. A client-ID entry owns single initialization. Match Java's first-mapping behavior: return the existing runtime for a repeated ID even when later config or hook inputs differ; retain the first runtime's config/property/hook snapshot and leave the later caller config unchanged. Do not reject a later same-ID call for a configuration conflict. Model Created→Starting→Running→ShuttingDown→Stopped and startup failure. Group registration is identity-based and separate from Arc strong counts.
 
 ## 4. Ordered implementation tasks
 
 ### 4.1 P6-01 / P6-02 — Build identity and single-flight creation
 
-Fixture-test ClientConfig ID construction, including instance/unit components and blank local serve address treated as unset. Use per-key OnceCell or entry ownership before constructing sockets/tasks. Allow unrelated keys to initialize concurrently. Failed initialization removes only its own entry and permits a documented retry. Keep runtime ownership explicit in ADR-0002.
+Fixture-test ClientConfig ID construction, including instance/unit components, and source-backed automatic `clientIP` initialization. `ProxyConfig.localServeAddr` is server-side and outside this client phase. Use per-key OnceCell or entry ownership before constructing sockets/tasks. Allow unrelated keys to initialize concurrently. Failed initialization removes only its own entry and permits a documented retry. Keep runtime ownership explicit in ADR-0002.
 
 ### 4.2 P6-03 / P6-04 — Implement lifecycle and group leases
 
@@ -67,24 +69,30 @@ Use centralized defaults: route poll 30000 ms, heartbeat 30000 ms, offset persis
 
 ### 4.5 P6-09 / P6-10 — Register inbound slots and roll back failures
 
-Route inbound check-transaction, consumer-change, reset-offset, consumer-status, direct-consume and reply-push by group/client identity. Until an owning phase activates a handler, return an explicit supported-protocol error, never fake success. Inject failures after registration, transport start and each task start; reverse owned effects and join all work. Last-registration shutdown unregisters from Brokers before closing transport within a bounded deadline.
+Route inbound check-transaction by producer/body group; consumer-change notifications wake runtime-wide rebalance (the header group is only logged); reset-offset, consumer-status, running-info and direct-consume by consumer group; and reply-push by correlation identity. Until an owning phase activates a feature handler, return an explicit supported-protocol error, never fake success. Inject failures after registration, transport start and each task start; reverse owned effects and join all work. Last-registration shutdown unregisters from Brokers before closing transport within a bounded deadline.
 
 ## 5. Verification
 
 Write the failing check/oracle fixture before its implementation. The cases below must become runnable checks, not manual checklist-only claims. Run these checks without Docker or a live Broker; use Java fixtures, controlled clocks and scripted peers. Shared commands and evidence rules are in the execution index.
 
-- [ ] **P6-V01** — Many concurrent get_or_create calls for one ID yield one identity, one task set and one socket pool; different IDs are not globally serialized.
-- [ ] **P6-V02** — Stale failed creation and unregister tokens cannot remove replacements; incompatible shared configuration is rejected.
-- [ ] **P6-V03** — Paused-time timers, route snapshot readers and all startup-failure points leave no partial state or leaked tasks.
+- [x] **P6-V01** — Many concurrent get_or_create calls for one ID yield one identity, one task set and one socket pool; different IDs are not globally serialized.
+- [x] **P6-V02** — Stale failed creation and unregister tokens cannot remove replacements; repeated IDs return the first Java runtime and retain its config/hook despite later differing inputs.
+- [x] **P6-V03** — Paused-time timers, route snapshot readers and all startup-failure points leave no partial state or leaked tasks.
 
-- [ ] **P6-U01** — Scripted responses and paused time verify heartbeat/subscription/unregister bytes and independent shutdown of shared users.
+- [x] **P6-U01** — Scripted responses and paused time verify heartbeat/subscription/unregister bytes and independent shutdown of shared users.
 
 ### 5.1 Local commands after implementation
 
-Run after this phase or earlier phases create the named entry points. This documentation task does not execute these commands or claim their tests pass.
+Verified 2026-10-10 after the direct default-topic-route API differential, ordered NameServer provider parity, and nullable NameServer address accessor oracle. The full locked workspace/all-target suite, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and cross-decodes), comparator self-test/manifest22, formatting, and diff checks pass. These are local checks, not a live Broker run; **P6-V04 remains a Phase 19 handoff**, not a Phase 6 gate. The broader compatibility audit still records actual Linux/Windows/BSD runtime address enumeration and residual source/input branches as open. See the [requirement audit](../../docs/compatibility/PHASE_6_REQUIREMENT_AUDIT.md) for per-ID evidence and fixture provenance.
 
 ```bash
-cargo test -p rocketmq-classic-core --test runtime --locked
+cargo test --workspace --all-targets --locked
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+mvn -o -q -Dmaven.repo.local=/private/tmp/p6-maven-repository -f compat/java-reference/pom.xml verify
+python3 tests/differential/compare.py --self-test
+python3 tests/differential/compare.py --validate-manifest
+cargo fmt --all -- --check
+git diff --check
 ```
 
 ### 5.2 Phase 19 live-test handoff

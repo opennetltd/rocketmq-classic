@@ -1,0 +1,87 @@
+Phase 19 live synchronous-send case implementation
+Started: 2026-10-17 05:45:41 UTC
+
+- Revalidated branch `phase/19-phase-18-compatibility-release-gate`, HEAD `259cde6f`, and a clean worktree before edits. Java reference checkout remains read-only.
+- Added Java 5.5.1 and Rust direct Broker probes for synchronous V2 send and physical-offset readback. Added the fail-closed `PROD-001-sync-send` runner path for Java-to-Rust and Rust-to-Java readback, isolated topic creation/cleanup, and structural evidence validation.
+- Confirmed local toolchains: Maven 3.10.0/JDK 27, Rust 1.85.0, Docker 29.8.2, Compose 5.5.0.
+- Initial Maven compilation exposed the Java request-header package mismatch; corrected to `org.apache.rocketmq.remoting.protocol.header.SendMessageRequestHeader` and compilation passed.
+- Initial `cargo fmt --check` reported import ordering; applied `cargo fmt --all`, then formatting passed.
+- Passed `cargo test --locked -p rocketmq-classic-integration` (0 tests), strict integration-crate Clippy, Java Maven compile, comparator self-test, 37-scenario manifest validation, shell syntax, and `git diff --check`.
+- Live Broker execution and evidence commit are pending this implementation commit.
+
+
+Live verification and evidence reconciliation (2026-10-17 05:46–05:49 UTC)
+
+- Committed the harness implementation as `95e38101`, then ran `PROD-001-sync-send` from that clean code revision against the pinned 5.3.4 basic profile.
+- PASS: Java and Rust synchronous V2 sends both returned `SEND_OK`; Rust read the Java message and Java read the Rust message by physical offset. Both bodies were `fixed`, both topics were `compat_phase0_send`, and queue IDs/queue offsets matched each send result.
+- The runner deleted the scenario topic and removed the isolated Compose containers, network and volume. Exit status was 0; metadata records `source_code_dirty=false` and the pinned image digest. Manifest and evidence were committed in `398c8ebd`; ignored setup/build/topic/Compose logs were force-archived with trailing CLI padding removed in `4fe2444c`.
+- `python3 tests/differential/compare.py --validate-manifest` passed with 37 rows. Four scenarios now pass; 33 remain pending. Updated the integration instructions, Java compatibility checkpoint, 5.3.4 results and release checklist. Broad P18-V01, current-revision Ubuntu/Windows P18-V04 evidence, the remaining local Phase 19 matrix/profiles/orchestration, pre-publication checks, and MAN-05 classification remain open.
+
+Phase 19 live asynchronous-send case implementation
+
+- Revalidated branch `phase/19-phase-18-compatibility-release-gate`, HEAD `cfeca0a5`, and a clean worktree before edits. The Java reference checkout is read-only.
+- Added Java 5.5.1 `CommunicationMode.ASYNC` callback coverage with an exact callback count, and Rust `SendMode::Future` coverage that records its single awaited completion. Both send directly to the pinned Broker and cross-read the stored messages.
+- Registered `PROD-002-async-send`, added fail-closed runner dispatch and evidence checks, and extended manifest validation plus its self-test to reject duplicate completion evidence.
+- Passed `cargo test --locked -p rocketmq-classic-integration` (0 tests), strict integration-bin Clippy, integration-bin build, `cargo fmt --all -- --check`, Maven compile on the project JDK 27, differential comparator self-test, 37-row manifest validation, shell syntax, Python compilation, and `git diff --check`.
+- One initial Maven invocation used a relative POM path from the read-only Java checkout and failed to find the project POM; reran from the Rust repository root and compilation passed.
+- Live Broker execution and evidence reconciliation remain pending this implementation commit.
+
+Live verification and evidence reconciliation — PROD-002 (2026-10-17)
+
+- Committed the implementation as `6f2a0c12`, then ran `PROD-002-async-send` from that clean revision using isolated project `rocketmq-classic-p19-prod-002-async-send-20261017t055737z` and the pinned Apache RocketMQ 5.3.4 profile.
+- PASS: Java returned one `ASYNC_CALLBACK` with `SEND_OK`; Rust returned one `ASYNC_FUTURE` result with `SEND_OK`. Rust read the Java message and Java read the Rust message; both readbacks matched topic `compat_phase0_send`, queue 0, their send result's queue offset, and body `fixed`.
+- Scenario topic deletion, Compose project/container/network/volume teardown, and evidence path redaction succeeded. Metadata records revision `6f2a0c126dacae0245ece773d69dda2170a8b61d`, `source_code_dirty=false`, image digest, and exit status 0. Evidence: `docs/compatibility/evidence/phase-19/PROD-002-async-send/20261017T055737Z/`.
+- Comparator self-test and manifest validation passed (37 rows); evidence validation rejects a synthetic duplicate Java callback. Five live scenarios now pass and 32 remain pending.
+- `git diff --cached --check` initially flagged Compose CLI alignment spaces in the captured setup/cleanup logs. Trimmed only trailing CLI padding from archived `.log` files; no test output content changed. The evidence files are now force-staged despite the repository-wide `*.log` ignore rule.
+- Updated the integration instructions, Java compatibility checkpoint, 5.3.4 server results, and release checklist to record `PROD-002` and the current five-of-37 / 32-pending count. Removed stale Phase 0 summary text that still described only the four earlier live cases.
+
+Live verification and evidence reconciliation — PROD-003 (2026-10-17)
+
+- Committed the oneway implementation and evidence validator in `610df3b2`, `1f36dc0a`, `90d436a9`, and `48ed3f58`. Early isolated runs exposed that the low-level query API did not find the oneway message, that the client message ID was not a physical offset ID, and that indexing the same value as both `KEYS` and `UNIQ_KEY` returned duplicate rows. Those diagnostic runs remain archived under `docs/compatibility/evidence/phase-19/PROD-003-oneway-send/`; the runner now resolves the unique key to the Broker physical offset and keeps the key values distinct.
+- PASS: run `20261017T063258Z` used clean source revision `48ed3f5885563218c263b925485abb9aa7be528e` against the pinned 5.3.4 basic profile. Both Java and Rust oneway calls completed without a Broker response. Queue max offset advanced to 1 after Java and 2 after Rust; Rust read the Java message at queue offset 0 and Java read the Rust message at offset 1. The payloads were `fixed` and the expected topic and key identities matched.
+- The scenario topic deletion succeeded. Compose removed the run's containers, network, and volume; follow-up project-filtered Docker listings found no remaining resources. Evidence metadata records Java 5.5.1, image digest, `source_code_dirty=false`, and exit status 0.
+- The manifest row now records `PASS`; the passing total is six of 37 and 31 remain pending. Updated the integration instructions, Java compatibility checkpoint, server results, and release checklist. The completion report does not imply Phase 19 acceptance.
+
+Phase 19 live batch-send case implementation
+
+- Started from clean branch `phase/19-phase-18-compatibility-release-gate` at `8f87d94a`. Added Java 5.5.1 and Rust direct Broker batch-send probes for two messages, plus Java/Rust expansion of the stored compact batch body for cross-language readback. The scenario records one send result per batch and checks both logical queue offsets and each body.
+- Registered `PROD-004-batch-send` with the basic profile, fixed body prefix, and two-message count. Added fail-closed runner dispatch, manifest inputs, structural evidence validation, and comparator self-test evidence for missing batch members. The runner uses the first Broker physical offset ID in the comma-separated batch send response for `view-batch` and retains the full ID list in evidence.
+- Passed the Java Maven compile on the pinned JDK, `cargo build --locked -p rocketmq-classic-integration --bin live_client`, strict integration-crate Clippy, formatting, shell syntax, Python compilation, comparator self-test, and 37-row manifest validation. The no-marker runner preflight refused execution before Docker setup as expected.
+- Basic-profile live execution and evidence reconciliation remain pending the implementation commit. No Docker resources were started in this implementation checkpoint.
+
+
+PROD-004 batch live diagnostic run (2026-10-17 06:44 UTC)
+
+- Ran `PROD-004-batch-send` from clean source revision `2f9396e3be30e0a123d59aa125d881a3056ad102` against the pinned 5.3.4 basic profile. Java batch send succeeded and returned two comma-separated physical offset IDs.
+- The Rust readback command received only the first ID and incorrectly decoded that ordinary stored message body as a compact batch body, failing with `IncompleteField { field: "magic code", length: 4 }`. This is a runner readback failure; no PASS was recorded.
+- The failed run evidence is preserved at `docs/compatibility/evidence/phase-19/PROD-004-batch-send/20261017T064439Z/`. The scenario topic and isolated Compose containers, network, and volume were cleaned up; project-filtered Docker checks found no remnants.
+
+
+PROD-004 batch readback correction (2026-10-17 06:53 UTC)
+
+- Updated Java and Rust `view-batch` probes to parse the complete comma-separated physical-offset ID list and read each stored message independently. Removed the incorrect assumption that `viewMessage` returns a compact-batch body. The runner now passes all returned IDs in both language directions; command usage documents the full list.
+- Added Rust integration-binary tests for decoding all IDs and rejecting empty/missing entries.
+- Verification passed: `cargo test --locked -p rocketmq-classic-integration` (2 tests), strict integration-bin Clippy, integration-bin build, `cargo fmt --all -- --check`, Maven `verify`, Maven compile after final CLI usage text, shell syntax, Python compilation, comparator self-test, 37-row manifest validation, and `git diff --check`.
+- The failure evidence was archived separately in commit `0bf53383`. The readback correction and test changes are ready for a clean-revision live rerun; `PROD-004` remains pending until that run and evidence reconciliation pass.
+
+
+PROD-004 batch live verification and evidence reconciliation (2026-10-17 06:54–06:56 UTC)
+
+- Reran `PROD-004-batch-send` from clean source revision `8262d72279ac03b77bd38ea5f963e3ad2bb12473` on the pinned 5.3.4 basic profile. Java and Rust each returned `SEND_OK` for two messages; Rust read Java queue offsets 0 and 1, and Java read Rust queue offsets 2 and 3. Both bodies matched `batch-0` and `batch-1`.
+- The runner removed the scenario topic and isolated Compose project. Post-run Docker filters found no project containers, network, or volume. Evidence metadata records `source_code_dirty=false`, image digest `sha256:d57ee4ebbd9d7bb6e185775bde41c128e98f185b25bf0b05c77d4e6c010572b8`, and exit status 0: `docs/compatibility/evidence/phase-19/PROD-004-batch-send/20261017T065458Z/`. The failed diagnostic run remains separately archived.
+- The manifest records the passing evidence; comparator self-test and 37-row manifest validation pass, with seven PASS and 30 pending. Updated the integration README, Java compatibility checkpoint, server results, and release checklist.
+
+
+Current server-free Phase 18 verification (2026-10-17 07:04 UTC)
+
+- On clean worktree revision `5e677be3` (probe source commit `8262d722`), `cargo test --workspace --locked` and `cargo test --workspace --all-features --locked` both exited 0, including workspace integration tests and doctests.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`, `cargo fmt --all -- --check`, and the timezone-sensitive unique-ID fixture passed. Workspace metadata/license/dependency-direction check passed.
+- `bash tests/stress/run-offline-smoke.sh` passed all 16 cases × 3 repetitions. Fuzz smoke passed 105 frame seeds, 11 message seeds, 1,856 mutations, 146 frame decodes, and 113 message decodes. Release examples and offline bench target compiled.
+- Maven `verify` passed after the Java probe change on source revision `8262d722`; Maven compile passed after the final usage text update. Comparator self-test and final 37-row manifest validation passed with seven PASS / 30 pending.
+
+
+P18-V01 audit crosswalk reconciliation (2026-10-17)
+
+- Reconciled the Phase 6 API/config map and requirement audit with the later `WriteClassName` completion in code commit `07d2fba1` and evidence recorded in release-checklist commit `b5e02620`. The prior 35/48 and 47/48 checkpoints are now identified as superseded; the current pinned `JSONWriter.Feature` mapping is 48/48.
+- No implementation or fixture changed in this documentation correction. `git diff --check` is the documentation-only verification; the protocol implementation and fixture coverage were verified in the cited earlier commits.
+- The broad P18-V01 audit, current-revision Ubuntu/Windows CI evidence, and remaining Phase 19 local scenarios remain open.

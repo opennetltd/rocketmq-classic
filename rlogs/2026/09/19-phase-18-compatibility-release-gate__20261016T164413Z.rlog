@@ -1,0 +1,43 @@
+# Phase 18 GO_AWAY post-swap retry follow-up — 2026-10-16 16:44 UTC
+
+## Scope
+- Recheck GO_AWAY behavior against pinned RocketMQ Java 5.5.1 source and close
+  the deterministic post-replacement retry discrepancy discovered during the
+  Remoting P18-V01 audit.
+- This is a bounded source/API/control-flow slice. Broad P18-V01 and final
+  release gates remain open.
+
+## Source and changes
+- Product-code commit: `bc970e10`.
+- Pinned source: Java commit `efa1be59d6fc747ad220f036c86030f05f0419f9`,
+  `NettyRemotingClient.invokeImpl` and `ChannelWrapper.reconnect`.
+- Java retains the old-channel-to-wrapper lookup. Once reconnect swaps the
+  wrapper's current future, a later GO_AWAY response arriving on the old
+  channel retries through the wrapper's current future. The wrapper uses
+  `tryLock`; a callback racing before that identity swap can fail when the lock
+  is held.
+- Rust `retire_for_go_away` now lets requests from an already-retired
+  generation reuse the shared replacement. The transport regression first
+  observes the initial retry on the replacement, then sends the second GO_AWAY
+  on the old channel and checks that its retry uses the same replacement.
+- Updated the Phase 3 Remoting inventory and Known Differences to describe the
+  post-swap path and the unclaimed `tryLock` contention ordering.
+
+## Verification
+- `cargo test -p rocketmq-classic-remoting --all-features -- --test-threads=1`
+  — passed: 104 unit, 8 codec, 1 fuzz regression, 7 security, 102 transport,
+  and 8 doctests.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features -- -D warnings`
+  — passed.
+- `cargo fmt --all -- --check` — passed.
+- `git diff --check` — passed.
+- The focused post-swap regression passed after formatting.
+
+## Remaining gates
+- Broad bidirectional P18-V01 source/API/setting/input/error/control-flow,
+  inherited API, and reverse-export reconciliation remains open.
+- Run the full workspace P18-V02 server-free gate on the eventual final tree;
+  obtain current-revision Ubuntu and Windows CI evidence; implement and run
+  Phase 19 Docker/Broker automation; prepare `docs/owner-validation.md`; and
+  complete pre-publication version/dependency resolution.
+- Owner-run deployment and live Broker validation remains Phase 19 manual work.

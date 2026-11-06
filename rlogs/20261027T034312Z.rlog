@@ -1,0 +1,15 @@
+# Test artifact cleanup — 20261027T034312Z
+
+- Scope: audit tracked and local test/build outputs in `rocketmq-classic`; preserve intentional fixtures and authored compatibility audits.
+- Removed all 9,319 tracked Phase 19 run-output files and the remaining ignored local output tree. Removed local Cargo/Maven `target/` directories and the generated Java fixture log directory.
+- Removed the tracked raw RocketMQ Broker container log `rlogs/2026/10/17-phase-19-basic-broker-profile__20261017T043317Z.log`. Reviewed neighboring `.rlog` files as append-only execution summaries and retained them.
+- Updated differential and supplementary runners to write outputs and mutable manifest copies outside the checkout; reject artifact or manifest paths that resolve inside the repository. Updated the Java offset fixture to use a system-temp home for generated logs.
+- Marked 37 historical Phase 19 manifest outcomes `PASS_RECORDED` and removed their evidence pointers. Replaced dead artifact links in compatibility and release docs and added `docs/compatibility/TEST_ARTIFACTS.md`.
+- Checks: `git diff --check HEAD` passed; `bash -n` passed for the three changed shell runners; manifest JSON audit found 37/37 `PASS_RECORDED` Phase 19 rows with no evidence fields; no old evidence paths remained in active docs/scripts; no tracked raw logs/TSV/stderr or generated-looking build outputs remained; no `target/` directories remained.
+- Tests were not run.
+- Commit/push status: pending.
+
+## Completion update
+
+- Cleanup commit `5a2fb64482328f543fdd25c0e5379ab0589adf90` was pushed to `origin/phase/19-docker-local-validation`.
+- Post-push check: worktree clean, local HEAD matches upstream, no tracked Phase 19 artifacts or raw log/TSV/stderr outputs, and no local `target/` directories.

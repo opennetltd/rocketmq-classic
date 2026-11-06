@@ -1,0 +1,6 @@
+# Phase 6 API compatibility session — 2026-10-10T17:42Z
+
+- Pinned Java 5.5.1 probes now cover null-key/value inputs for `put`, `putIfAbsent`, both `replace` overloads, and both `remove` overloads on the manager, producer, and consumer tables. Null required inputs throw `NullPointerException`; conditional `remove(key, null)` returns `false`.
+- Code/oracle commit: `46ab9111` (`Match nullable live table mutations`). Rust nullable wrappers use typed `InvalidRoute` for null keys/required values and return `Ok(false)` for conditional removal with a null expected value. `client-config.json` SHA-256: `429fa8f06d1543507a8a6eb7a6b833d239c11cea9eead41b4354bd04e645064c`.
+- Validation passed: manager-table 10/10, registry-table 12/12, locked workspace/all-target tests with local socket access, strict workspace/all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and Java cross-decodes), comparator self-test/manifest22, formatting, and diff checks.
+- Updated the API/config map and requirement audit. Compute/merge/view nullable input boundaries and the wider Phase 6 source/API/input/reverse-export reconciliation remain open; P6-V04 remains a Phase 19 handoff.

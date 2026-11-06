@@ -1,0 +1,42 @@
+P18-V01 shutdown lifecycle parity correction —
+2026-10-22 21:50 UTC
+
+Environment: macOS AArch64, Rust 1.85.0. Branch:
+`phase/18-phase-18-compatibility-closure`. Java reference is RocketMQ 5.5.1,
+commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Source comparison:
+- Java `NettyRemotingClient.shutdown()` closes channels and requests graceful
+  event-loop shutdown, then calls `NettyEventExecutor.shutdown()`. Inherited
+  `ServiceThread.shutdown()` joins the event thread for at most 90 seconds.
+- Java then invokes `ExecutorService.shutdown()` for the public and scan
+  executors without awaiting queued or running work.
+- Rust previously waited for its transport tasks, connection joins, and callback
+  workers together. This made callback completion observable at the public
+  shutdown boundary, unlike Java.
+
+Correction, commit `c7d8b20d`:
+- `RemotingClient::shutdown().await` now waits at most 90 seconds for the
+  synchronous channel-event worker, matching Java's join boundary.
+- Connection/task cleanup and accepted default-executor callbacks continue in a
+  background cleanup task. Callback workers receive their shutdown signal after
+  transport work and the event worker finish or the shared deadline expires;
+  queued callbacks drain, and a running blocking callback may finish later.
+- Added regressions for non-blocking callback drain, Java-bounded event-worker
+  join, and eventual background cleanup completion.
+- Updated the remoting compatibility inventory and known-differences note.
+
+Current-revision verification:
+- `cargo test --offline --workspace --lib --quiet --locked` — PASS.
+- Remoting shutdown-filter tests — PASS (10 tests), including both new shutdown
+  regressions.
+- Strict all-target/all-feature workspace Clippy — PASS.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+- A full `cargo test --offline -p rocketmq-classic-remoting --locked` invocation
+  passed its 140 unit tests, then the `tests/codec.rs` test process remained in
+  macOS `_dyld_start` and did not enter the Rust test harness. The invocation
+  was stopped; the final-revision workspace library suite and Clippy completed.
+
+Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export
+reconciliation remains open. No external CI, push, publication, or release
+operation was performed. Protected Phase 19 working-tree paths remain unstaged.

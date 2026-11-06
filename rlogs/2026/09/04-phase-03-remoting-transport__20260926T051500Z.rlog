@@ -1,0 +1,20 @@
+# Phase 3 execution log — continuation 2026-09-26T051500Z
+
+- User decision: Netty class/API equivalence is not required; observable remoting functionality and logic must be equivalent. Continue Phase 03; do not start Phase 04.
+- Re-read the full English and Traditional Chinese Phase 3 plans; neither was modified.
+
+## GO_AWAY callback metadata correction
+
+- Rechecked Java `NettyRemotingClient.invokeImpl` and `NettyRemotingAbstract.invokeAsyncImpl` callback construction.
+- Corrected the prior implementation: Java's successful retry completes with the retry `ResponseFuture` request, but retry-connect failure creates the outer callback's failure `ResponseFuture` using the original request. A second GO_AWAY is also converted into an outer invocation failure, preserving original request metadata.
+- Rust now switches callback request metadata to the reconstructed retry request only when the retry succeeds; original request metadata (including its opaque) remains for retry-connect failure and terminal second GO_AWAY.
+- Extended `p3_async_go_away_retry_connect_failure_completes_before_failure`; added `p3_async_second_go_away_callback_retains_original_request`; retained successful-path `p3_async_go_away_retry_callback_reports_reconstructed_request`.
+- Targeted test command: `cargo test -p rocketmq-classic-remoting --test transport p3_async_go_away_retry --locked --offline` — PASS (2 tests before adding second-GO_AWAY case). Second-GO_AWAY case targeted run — PASS.
+- Full validation after all changes: `cargo fmt --all --check`, `cargo test --workspace --locked --offline` (89 unit/integration tests plus doc tests), `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`, metadata check, differential self-test, and `git diff --check` — PASS.
+- Commits: implementation/tests `cce7c67`; compatibility docs `04a1382`; this execution log will be a separate commit.
+
+## Remaining status
+
+- Additional GO_AWAY callback metadata paths are now covered. Phase 3 is still NOT ACCEPTED: error/cause taxonomy and timeout races, oneway post-return failures, NameServer/reconnect semantics, executor/event lifecycle and saturation, outbound hook exception behavior/equality, and TLS configuration reload/encrypted keys still need source-based review and parity work.
+- P3-V04 remains deferred to Phase 19; no Broker/Docker/Maven tests run. Phase 04 remains blocked.
+- Implementation/docs/log commit IDs and final status are to be added after review.

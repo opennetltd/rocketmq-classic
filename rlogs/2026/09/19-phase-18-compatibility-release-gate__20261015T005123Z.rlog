@@ -1,0 +1,5 @@
+# Phase 18 Common public-surface audit — 20261015T005123Z
+
+- Reconciled Java 5.5.1 `Message.toString()` / `MessageExt.toString()` with Rust `Display`/`ToString`. Made the Common crate's `Message::java_to_string`, `MessageExt::java_to_string`, and `MessageHostAddress::java_to_string` helpers private; no wire or formatting behavior changed. Added compile-fail rustdoc cases and recorded this bounded boundary in the Phase 6 API map and release checklist.
+- PASS: `cargo test -p rocketmq-classic-common --all-features --locked` (21 unit tests, 8 integration tests, 9 doctests); `cargo clippy -p rocketmq-classic-common --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- This closes only the three formatting-helper exports. Common Message constructors/property accessors, overload/input branches, the remaining Core/Common reverse surface, and broad P18-V01 source/API/error/control-flow reconciliation remain open. No plan file changed.

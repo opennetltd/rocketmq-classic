@@ -1,0 +1,43 @@
+# Phase 18 ResponseFuture display rendering compatibility
+
+- Recorded: 2026-10-24 17:07:14 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Code revision: `669d8a0c`
+- Host: macOS AArch64, Rust 1.85.0
+- Java reference: RocketMQ 5.5.1, source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Change
+
+- Rust `ResponseFuture` now formats a populated `RemotingCommand` through its
+  Java-compatible `Display` implementation instead of Rust `Debug` output.
+- The invoked Java API fixture records the exact nested command string. It
+  pins response code 206, opaque ID 42, version 0 and JSON serialization so
+  earlier Maven probes cannot alter the value through process-wide defaults.
+- The Java fixture verifier now reports changed top-level keys and the actual
+  response-future rendering when fixture drift occurs.
+- Fixture SHA-256:
+  `afdd50f4a3410b74e7f641bd89f6b9627a7509f99f13efc6bc680657d1df6656`.
+- Fixture generator SHA-256:
+  `f76653a22f69143d52f87c8355a09c7c684e4e7761654c08dfe4c9975a623066`.
+- Pinned Java `ResponseFuture.java` SHA-256:
+  `63789320d327604995dadfa80ae126f9b321e50571fca68d67d371fb5fa065bf`.
+- Rust implementation/test source SHA-256:
+  `bbf446f88b6e162d2c34c615ca73ae5def230478594adac1e77ad8d4ddca46ca`.
+
+## Verification
+
+- `response_future_display_preserves_java_to_string_state_fields` passes.
+- Strict all-target/all-feature Remoting Clippy passes.
+- Pinned offline Maven `verify` passes all 37 scenarios, 11 message fixtures,
+  106 typed headers and 19 typed bodies.
+- `cargo fmt --all -- --check` and `git diff --check` pass.
+
+## Remaining audit status
+
+- Non-null callback identity formatting and Java `Throwable.toString()` class/
+  message formatting remain runtime-specific gaps. The commit closes nested
+  response-command rendering only; broad P18-V01 remains `PARTIAL`.
+- Native Windows runtime and current-revision remote Ubuntu CI remain
+  unverified. No push or remote CI ran.
+- Phase 19 user-owned paths remain unchanged and unstaged.

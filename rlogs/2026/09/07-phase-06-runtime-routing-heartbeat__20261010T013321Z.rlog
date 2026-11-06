@@ -1,0 +1,7 @@
+Session: 2026-10-10T01:33:21Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Runtime inbound Failed-state continuation: extended the availability regression to induce startup failure with `poll_name_server_interval = 0`, then invoke the still-bound processor and verify `SYSTEM_ERROR` / `client runtime is not running`. The test now covers unbound, Created, Failed, and Stopped states and is named `unbound_and_non_running_states_return_system_error`. Code commit `c8d8c50b`; matrix/audit commit `1b060ac2`.
+
+Verification passed: `cargo test -p rocketmq-classic-core --lib unbound_and_non_running_states_return_system_error --locked`; `cargo clippy -p rocketmq-classic-core --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`. No production behavior changed.

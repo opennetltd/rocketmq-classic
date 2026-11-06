@@ -1,0 +1,32 @@
+# Phase 18 compatibility release gate — execution session 2026-10-23T23:10Z
+
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Phase branch: `phase/18-phase-18-compatibility-closure`
+- Starting code revision: `df5c3c59`; starting documentation revision: `38d554d7`.
+- Java repository: `/Users/bruce.tsai/Projects/3rd/rocketmq`, active worktree at RocketMQ 5.3.3 with pre-existing untracked `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java`; left unchanged. Pinned 5.5.1 source commit `efa1be59d6fc747ad220f036c86030f05f0419f9` is available by Git object lookup.
+- Starting Phase 19 worktree changes remain unstaged: `integration-tests/README.md`, `tests/differential/run.sh`, `integration-tests/run-local.sh`, and the Phase 19 Docker local validation run log.
+- Re-read the Phase 18 plan and coding skill. P18-V01 requires all Java client APIs/settings/flows and reverse exports to be reconciled; Phase 18 acceptance is not yet proven.
+
+## Initial controller DTO finding
+
+The current Core `api/controller.rs` exposes 41 distinct Rustdoc public names and RPC request coverage, but pinned Java 5.5.1 DTO behavior is incomplete: `BrokerReplicasInfo.addReplicaInfo` and three `ReplicasInfo.isExistIn*` methods have no Rust equivalents; Java `ReplicaIdentity.equals`/`hashCode` ignore `alive`; nullable map/list states and `BrokerMemberGroup.minimumBrokerId` null behavior need parity work. This session is addressing the observable DTO methods and preserving test evidence before changing the crosswalk.
+
+## Controller DTO implementation and fixture
+
+Implemented nullable map keys/values and list elements for the controller DTOs; `BrokerReplicasInfo::add_replica_info`; all three replica membership methods with Java `ArrayList.contains` equality, null failure, and short-circuit paths; `ReplicaIdentity::java_equals` and `java_hash_code` ignoring `alive`; Java `minimumBrokerId` null/error semantics; hash-code and `toString` mappings where the pinned Java classes override them; and `EpochEntry::from_entry` for the Java copy constructor. Removed structural equality traits from DTOs whose Java classes inherit identity equality.
+
+Added `controllerDtoApi` and `controllerDtoOperations` to the pinned producer-core Java fixture. Regenerated `fixtures/producer/core.json`, SHA-256 `b45df3622bca04a1ea4ba93e5700abe235745908ea2342af4b6ad51ca75fdeb6`. Pinned source artifact SHA-256: `ac2d2ad39cbe35e2125ce8cfdd2dd1c20ff7007f9960c1c4b597e292123a6bf6`.
+
+## Controller DTO validation
+
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target CARGO_NET_OFFLINE=true cargo test --offline --locked -p rocketmq-classic-core`: passed all Core unit, integration, and doc tests on the current source revision.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target CARGO_NET_OFFLINE=true cargo clippy --offline --locked -p rocketmq-classic-core --all-targets --all-features -- -D warnings`: passed.
+- `mvn -o -f compat/java-reference/pom.xml verify`: passed the pinned Java reference self-test, 37-scenario manifest, producer-core DTO fixture, all configured offline fixture checks, and Rust/Java typed DTO cross-decodes.
+- All-feature Core Rustdoc JSON generation passed. Distinct public names: Core 799; controller module 52.
+- `git diff --check`: passed after documentation cleanup.
+
+These results close the controller DTO findings only. Broad P18-V01 API/settings/control-flow reconciliation, remaining Phase 18 gates, and live/platform evidence remain outstanding. No plan file, Phase 19 protected path, Java external worktree file, remote CI, or push was changed/run.
+
+## Stale internal Producer latency-fault note correction
+
+Reviewed the previously open `sendLatencyEnable=true` note against the later internal Producer implementation and tests at `ea17b8fc`. The follow-up routes retry-topic sends through the runtime-owned Producer extension and verifies the copied settings, shared fault table, latency-based Broker choice, and detector startup. Updated the compatibility audit/release checklist so the older “remains open” language is explicitly historical; broad P18-V01 remains partial for other inventory rows.

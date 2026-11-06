@@ -1,0 +1,55 @@
+P18-V01 direct `decodes` malformed-tail parity and local gate refresh —
+2026-10-22 21:08 UTC
+
+Environment: macOS AArch64, Apple M5 Max (18 logical CPUs), Rust 1.85.0.
+Branch: `phase/18-phase-18-compatibility-closure`. Pinned RocketMQ Java
+client/source: 5.5.1, commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Implementation commit: `2c1f0a73 fix(common): match Java decodes partial
+batches`. Crosswalk follow-up confirmed that pinned Java
+`MessageDecoder.decodes(ByteBuffer, readBody)` has the same null-stop prefix
+behavior as `decodesBatch`. Rust adds `decode_many_compatible` for
+`isClient=false`, and `client_decodes` / `client_decodes_with_body` now keep
+the valid prefix on malformed tails. Strict `decode_many` and
+`decode_many_as_client` continue reporting errors. The invoked Java fixture
+checks `decodes`, `decodesBatch(isClient=true)`, and
+`decodesBatch(isClient=false)` against a valid record followed by one malformed
+byte, including prefix count, runtime subtype, and final cursor position. The
+fixture SHA-256 is
+`2be37d4f72d8e088a7bc52eb77de5d36192d48ba17de849619c02da31d6c2b97`.
+
+Validation on the implementation tree:
+- Focused Common malformed-tail regression — PASS.
+- `cargo test --offline --workspace --locked --quiet` and
+  `cargo test --offline --workspace --all-features --locked --quiet` — PASS.
+- Strict all-target/all-feature Clippy, workspace format check, and
+  `git diff --check` — PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS; 37 scenarios,
+  11 message decoder fixtures, 36 route/VIP cases, 106 typed headers, and 19
+  typed bodies.
+- Differential comparator self-test and 37-scenario manifest validation —
+  PASS.
+- Bounded remoting fuzz smoke — PASS (163 frame seeds, 11 message seeds,
+  2,784 mutations, 245 frame decodes, 189 message decodes).
+- Offline deterministic race/leak smoke — PASS (16 cases x 3 repetitions).
+- Release facade examples and offline benchmark execution — PASS.
+- Workspace metadata checks and all seven product package listings — PASS;
+  each contains `LICENSE` and `NOTICE`.
+- Four Core Unique ID tests under both `TZ=UTC` and `TZ=Asia/Taipei` — PASS.
+- Windows GNU Core all-target check and Consumer unit-test cross-compilation —
+  PASS; native Windows execution remains unverified.
+
+Offline benchmark sample on this machine: Remoting encode/decode 2,260.4 ns
+(40 allocations / 4,676 bytes); Zstd message decode 1,123.3 ns
+(17 / 197,493 bytes); Producer request construction 1,192.7 ns
+(54 / 3,665 bytes); route lookup 14.0 ns (0 / 0 bytes); loopback pending
+completion 68,004.5 ns (81 / 9,546 bytes). No threshold is defined and timings
+are machine/run specific.
+
+This closes the direct `decodes` and generic batch malformed-tail behavior
+slice only. Broad P18-V01 API/settings/source/input/error/control-flow and
+reverse-export reconciliation, current-revision remote Ubuntu CI, native
+Windows execution, and Phase 19 Broker/Docker evidence remain open. The
+differential manifest still has 30 Phase 19 live-runner cases pending. No push,
+external CI, publication, or release action was performed. Protected Phase 19
+working-tree paths remain unstaged.

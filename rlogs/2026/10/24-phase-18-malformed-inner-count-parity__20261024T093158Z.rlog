@@ -1,0 +1,60 @@
+# Phase 18 malformed inner-message count parity
+
+- Recorded: 2026-10-24 09:31 UTC
+- Branch: phase/18-phase-18-compatibility-closure
+- Code/test revision: 0cfb20ad
+- Documentation head before this record: 8ef16848
+- Pinned Java source: RocketMQ 5.5.1, efa1be59d6fc747ad220f036c86030f05f0419f9
+- Host: macOS 26.6.1, AArch64, Apple M5 Max, 18 logical CPUs
+- Rust: rustc 1.85.0 (4d91de4e4 2025-02-17)
+
+## Change
+
+- Rust `count_inner_messages` now follows Java's same-position zero-size loop
+  and finite in-range negative-size cursor cycles instead of returning a
+  Rust-only `InvalidInnerSize` guard error.
+- Pinned Java fixture checks zero-size and cyclic calls in daemon threads and
+  records that they remain active after 50 ms. Rust's integration regression
+  starts each call in a subprocess, waits for a marker written immediately
+  before the call, observes that the process remains active, and terminates it.
+- Finite negative rewinds and Java's out-of-range position failure remain
+  covered. The Java fixture regenerated 11 message cases.
+- Fixture SHA-256:
+  `bd128623b1e311bcc095f73802325403d79487e2559442fcdeb8aae62f41a133`.
+- Java fixture source SHA-256:
+  `f8e30456418e5462ac03e9b42311f527667a745931bbbc4d5a1c17b657ee5ca0`.
+
+## Verification
+
+- Focused `cargo test --locked -p rocketmq-classic-common --test
+  message_decode` — passed 28 tests, including child-process probes.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target cargo test --workspace
+  --locked` and the corresponding `--all-features` command — both passed
+  workspace package tests and doctests. The repository-target default run was
+  interrupted after the Remoting fuzz-regression launcher took an unusually
+  long time to start; the independent-target run passed the same test and all
+  remaining suites.
+- Strict all-target/all-feature workspace Clippy — passed.
+- Release facade examples — passed.
+- Windows GNU all-target/all-feature workspace check and strict Clippy —
+  passed as compile-only evidence.
+- Offline stress smoke — passed 20 deterministic cases × 3 repetitions.
+- Fixed-seed fuzz smoke — passed 163 frame seeds, 11 message seeds, 2,784
+  bounded mutations, 564 frame decodes, and 192 message decodes.
+- Pinned offline Maven `verify` — passed 37 scenarios, 11 message fixtures,
+  106 typed headers and 19 typed bodies. The first verify correctly stopped
+  on fixture drift; after regenerating the fixture from the pinned Java oracle,
+  the full verify passed.
+- Differential comparator self-test, 37-scenario manifest validation,
+  `cargo fmt --all -- --check`, and `git diff --check` — passed.
+- Offline benchmark — passed; results appended to
+  `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+
+## Scope
+
+This closes the malformed inner-count cursor discrepancy only. Broad P18-V01
+bidirectional API/settings/input/error/control-flow and reverse-export
+reconciliation remains PARTIAL. Native Windows runtime and current-revision
+remote Ubuntu CI remain unverified; Phase 19 Broker/Docker evidence remains
+separate. No push or remote CI was run. The four protected Phase 19 worktree
+paths remain untouched and unstaged.

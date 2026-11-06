@@ -1,0 +1,56 @@
+# Phase 18 Remoting callback/channel API slice — 2026-10-15T15:58:18Z
+
+## Source review
+
+- Compared the pinned Java 5.5.1 `ResponseFuture`, `InvokeCallback`,
+  `ChannelEventListener`, `NettyRemotingClient.invokeAsync`, and
+  `NettyRemotingAbstract.invokeAsyncImpl` / response-future completion paths.
+- Java exposes mutable response/cause/send state, response waiting, callback
+  execution, interruption, one-shot release, channel-bearing event callbacks,
+  and callback metadata whose timing differs between successful internal
+  futures and exceptional wrapper futures.
+
+## Implementation
+
+- Code commit: `a74171df fix(remoting): expose Java-shaped callback context`.
+- Added public Rust `ResponseFuture` and `ChannelHandle` types. The former
+  exposes Java callback metadata, scoped command mutation, response latch,
+  Java-shaped direct callback error categories, callback-once behavior,
+  interruption, and owned permit release. The latter exposes channel identity,
+  state, close, and deadline-bound command writes through the owned connection.
+- Updated all five channel event callbacks to carry a `ChannelHandle`; pending
+  connection handles can cancel connection setup when closed. Channel equality
+  uses object identity.
+- Replaced the read-only callback result context with `&ResponseFuture`. Result
+  closures now report success/failure exactly once, including a failed initial
+  connection. Callback metadata samples success timing after admission and
+  uses a fresh wrapper timestamp for exceptional completion, matching Java's
+  two paths. Existing cached channels remain usable when the supplied deadline
+  has already expired.
+- Added regression coverage for response mutation/waiting, direct send/timeout/
+  generic error selection, permit release, handle identity/close/write,
+  expired-deadline cached-channel behavior, closure connect failure, and
+  callback executor rejection/panic.
+- Updated the Phase 3 Remoting inventory and Phase 18 compatibility overview.
+  No plan files or Java reference sources were modified.
+
+## Verification
+
+- `cargo test -p rocketmq-classic-remoting --all-features --locked`: passed;
+  96 unit, 6 codec, 1 fuzz regression, 5 security, 99 transport, 5 doctests.
+- `cargo test -p rocketmq-classic-core --all-features --locked`: passed;
+  159 unit, all integration targets, and 12 doctests.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`:
+  passed.
+- `mvn -f compat/java-reference/pom.xml verify`: passed; 37 scenarios,
+  Java/Rust cross-decodes, and Remoting live-config probe.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+
+## Status
+
+- This closes the bounded Remoting callback/channel API and timing rows only.
+  Broad P18-V01 and the final full-workspace P18-V02 rerun remain open.
+- Current-revision GitHub Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker
+  automation, and release version/registry-resolution checks remain open.
+  Owner-run deployment/live Broker checks remain Phase 19 manual validation.
+- No push, tag, publication, deployment, or live Broker action was performed.

@@ -1,0 +1,6 @@
+Session 20261004T070334Z; branch 06-phase-05-typed-rpc-api from d0d51c8; initial worktree clean.
+Plan: plan/2026/09/06-phase-05-typed-rpc-api.md; pinned Java 5.5.1 MQClientAPIImpl getTopicRouteInfoFromNameServer inspected from local sources jar.
+Implemented initial core crate, structured response/transport errors and one-attempt route lookup with loopback success, missing topic, unknown status, missing/malformed body and empty NameServer cases.
+Validation: cargo test -p rocketmq-classic-core --offline PASS; cargo fmt --check PASS; cargo clippy --workspace --all-targets --all-features --locked -- -D warnings PASS; cargo test --workspace --locked PASS.
+Status: partial Phase 5 only. P5-01 error taxonomy incomplete; selected NameServer peer not exposed by existing remoting API, so route error uses explicit unavailable marker. P5-02 failover scripted test outstanding. P5-03 through P5-08, P5-V01/V03/U01 remain outstanding; P5-V02 deferred to Phase 19. No acceptance claim.
+Final plan reread: scope includes producer, consumer, lifecycle/extension RPCs, Java fixtures, per-method branch tests and executable differential evidence; none of these are complete in this session.

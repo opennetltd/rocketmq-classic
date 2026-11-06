@@ -1,0 +1,35 @@
+# Phase 18 Running Info nested DTO text API — 2026-10-18 17:48 UTC
+
+- Branch: `phase/18-phase-18-compatibility-closure`.
+- The invoked Java API inventory exposed explicit `toString()` overrides on
+  `ProcessQueueInfo` and `PopProcessQueueInfo` that had no Rust text rendering.
+  Added Rust `Display`/`ToString` implementations. `ProcessQueueInfo` uses
+  Java's `UtilAll.timeMillisToHumanString` shape through the existing
+  timezone-aware Java timestamp formatter; `PopProcessQueueInfo` preserves its
+  Java labels, separators, and numeric timestamp. The Java fixture records
+  both exact strings; the Protocol test compares them.
+- Fixture SHA-256 (`fixtures/consumer/running-info.json`):
+  `cefcb0d2f68f88acc12996a5068e9f12449676d8313b502fe8d2e9eeccbc69c5`.
+- Code commit: `4953cde5 fix(protocol): match running info toString output`.
+
+## Validation
+
+- PASS: `mvn -o -q -f compat/java-reference/pom.xml compile exec:java
+  -Dexec.args='consumer-running-info-fixture
+  /Users/bruce.tsai/Projects/trio/rocketmq-classic/fixtures/consumer/running-info.json'`.
+- PASS: `CARGO_TARGET_DIR=/tmp/rocketmq-classic-target cargo test -p
+  rocketmq-classic-protocol --test headers
+  consumer_running_info_body_matches_pinned_java_5_5_1_json --all-features
+  --locked --offline -- --exact`.
+- PASS: strict all-target/all-feature Protocol Clippy with `-D warnings`.
+- PASS: `mvn -o -q -f compat/java-reference/pom.xml verify`; all 37 scenarios,
+  fixture checks, 66 typed-header cross-decodes, and 15 typed-body
+  cross-decodes.
+- PASS: `cargo fmt --all -- --check` and `git diff --check`.
+
+## Remaining work
+
+- This closes two DTO text-rendering methods only. Broad P18-V01
+  source/API/settings/input/error/flow and Rust reverse-export reconciliation
+  remains open. The final current-revision workspace P18-V02 gate and current
+  Ubuntu/native Windows P18-V04 evidence remain open.

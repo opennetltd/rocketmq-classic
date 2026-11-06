@@ -1,0 +1,30 @@
+Phase 18 Remoting ResponseFuture public-method crosswalk — 2026-10-16
+
+Context
+- Plan: `plan/2026/09/19-phase-18-compatibility-release-gate.md`; no plan edits.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`, release
+  commit `[ISSUE #10680] Release Apache RocketMQ 5.5.1 (#10961)`.
+
+Actions
+- Compared the Rust `ResponseFuture` inherent methods with the pinned Java
+  declaration and `fixtures/remoting/response-future-api.json`.
+- Added explicit mapping for each Java-declared method, including nullable
+  values, command mutation closures, timeout/latch behavior, and `Display`.
+- Confirmed the pinned Java source file and current Java worktree file are
+  byte-identical (SHA-256
+  `63789320d327604995dadfa80ae126f9b321e50571fca68d67d371fb5fa065bf`). The
+  fixture SHA-256 is
+  `4739b82304af6d251fe963f87f90f829215add80632976ccd6d9ef411c6494f4`.
+
+Validation
+- The existing invoked Java fixture records both public constructors and all
+  20 declared public methods. Existing Rust regressions cover accessor
+  mutation/callback ordering, latch release, interruption, and permit release.
+- No tests were rerun because this change only documents the already-tested
+  surface. Run `git diff --check` before commit.
+
+Scope status
+- This closes the ResponseFuture declared-method crosswalk documentation slice
+  only. Broad P18-V01, final-revision full-workspace P18-V02, current-revision
+  GitHub CI, and Phase 19 Broker/Docker execution remain open.

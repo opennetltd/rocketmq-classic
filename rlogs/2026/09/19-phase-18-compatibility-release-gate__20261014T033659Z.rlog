@@ -1,0 +1,7 @@
+# Phase 18 Producer lifecycle and async helper call-site crosswalk — 2026-10-14T03:36:59Z
+
+- Reviewed pinned 5.5.1 `DefaultMQProducerImpl.start()`, `start(boolean)`, `shutdown()`, `shutdown(boolean)`, and `executeAsyncMessageSend(...)` against all Java client call sites.
+- The no-argument lifecycle methods pass `true`; `MQClientInstance.start()` uses `start(false)` for its internal Producer, and client-factory teardown uses `shutdown(false)` to prevent recursive factory shutdown. The Rust owner path manages one shared `ClientRuntime` through leases and has no public boolean lifecycle setting.
+- The raw async helper has exactly three call sites: default async send, explicit-queue async send, and selector async send. Its `BackpressureSendCallBack` argument is package-private. Rust keeps the raw `Runnable` dispatcher internal and routes typed async sends through the owned sender executor and backpressure path.
+- Updated the Phase 7 Producer matrix and release checklist with these bounded source/call-site dispositions. No behavior changed and no tests were rerun for this documentation-only slice.
+- P18-V01 remains PARTIAL for remaining per-overload input/branch mapping, Java reverse-export, inherited/trait API reconciliation, and broad source/input reconciliation. Full workspace P18-V02, current Ubuntu CI, Phase 19 Broker/Docker scenarios, and release-version/registry resolution remain outstanding. Final owner-run Windows/BSD/IPv6-only platform checks remain separate.

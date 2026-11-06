@@ -1,0 +1,22 @@
+# Phase 18 compatibility release gate — execution log
+
+- 2026-10-17: Continued Phase 18 on branch
+  `phase/19-phase-18-compatibility-release-gate` at `a9d02723`.
+- Inspected pinned Fastjson2 2.0.63 `JSONWriter` behavior and invoked runtime
+  fixtures. `WriteEnumsUsingName` and `WriteEnumUsingToString` have no output
+  overrides across the mapped body, route, and heartbeat fixtures; covered
+  Java enum names and `toString()` values match the existing serialized text.
+- Added both flags to the implemented writer-feature inventory and extended
+  applicable Rust fixture comparisons. No Java fixture regeneration was needed.
+- `cargo test -p rocketmq-classic-protocol --all-features --locked`: passed,
+  126 unit tests, all Protocol integration targets, and 42 doctests.
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features
+  --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- Code/test commit: `d13636e8 feat(protocol): map enum name writer flags`.
+  Maven verify passed on fixture revision `02ae239d`; this code commit adds no
+  Java source or fixture changes. The final full-workspace P18-V02 run remains
+  required after all Phase 18 code changes.
+- Current writer-feature mapping count is 32/48; 16 remain unmapped. Broad
+  P18-V01, current platform CI/P18-V04 evidence, and Phase 19 Docker/Broker
+  automation remain open.

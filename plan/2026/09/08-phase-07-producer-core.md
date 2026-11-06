@@ -82,9 +82,9 @@ Port latency isolation tables, unavailable-broker fallback and optional detector
 
 Write the failing check/oracle fixture before its implementation. The cases below must become runnable checks, not manual checklist-only claims. Run these checks without Docker or a live Broker; use Java fixtures, controlled clocks and scripted peers. Shared commands and evidence rules are in the execution index.
 
-- [ ] **P7-V01** — Default values and validation boundaries match Java, including threshold−1/threshold/threshold+1 and max-size ±1.
+- [x] **P7-V01** — Default values and validation boundaries match Java, including threshold−1/threshold/threshold+1 and max-size ±1.
 
-- [ ] **P7-U01** — Scripted two-address failures and Java decision fixtures verify retries, statuses, deadlines, body/ID preservation and repeated lifecycle cleanup.
+- [x] **P7-U01** — Scripted two-address failures and Java decision fixtures verify retries, statuses, deadlines, body/ID preservation and repeated lifecycle cleanup.
 
 ### 5.1 Local commands after implementation
 

@@ -14,6 +14,8 @@ Java client **5.5.1** 是 source／行為基準；server **V5_3_4（5.3.4）**�
 
 英文為 authoritative 主版本；繁中配對檔具有相同要求。完成目前 phase 門檻才開始下一階段；Push 的明確累積驗收例外見第 3 節。
 
+每個實作 phase 以獨立 branch 區分。commit 僅記錄該 phase branch 內的階段性進度，不是 phase 邊界，也不代表 phase 已通過驗收。phase 門檻通過前可以 commit，但須如實標示尚存缺口與驗證狀態；驗收通過前不可將 phase 標為完成或交接至下一 phase。
+
 | 順序 | Phase | 英文主版本 | 繁體中文 |
 | ---: | ---: | --- | --- |
 | 01 | 0 | [Freeze the reference and test oracle](01-phase-00-reference-oracle.md) | [凍結參考基準與測試 Oracle](01-phase-00-reference-oracle.zh-tw.md) |

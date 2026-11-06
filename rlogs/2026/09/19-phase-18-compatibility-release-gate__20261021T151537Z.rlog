@@ -1,0 +1,45 @@
+# Phase 18 compatibility closure continuation — 2026-10-21T15:15:37Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Starting revision: `1c95d9a702f0a11664723adbafcbb4618c8b6a18`
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`
+External Java checkout HEAD observed: `2238256de1d227a4384ba969dfa31473187b4d08`.
+Source claims below were checked with `git show` at the pinned source commit,
+not inferred from the newer external checkout.
+
+## P18-V01 rebalance continuation
+
+- Corrected Push assignment-source selection to use the pinned
+  `RebalancePushImpl.clientRebalance(topic)`. The `isOrder` argument no longer
+  selects local versus Broker assignment; LiteSelective follows the same
+  pinned distinction.
+- Restored pinned clustering route handling: a missing or empty route is
+  handled before membership lookup, leaves active assignments and the current
+  balance result intact, and notifies empty sets for non-retry topics.
+  Broadcasting with a missing route also notifies empty sets without marking
+  the pass unbalanced.
+- New Push `ProcessQueue` assignments now start with `locked=true`; the
+  initialization timestamp is captured before offset lookup, matching the
+  pinned create/setLocked/compute-offset order. A Broker lock request is sent
+  only for `isOrder` assignments outside the broadcasting branch.
+- Focused regressions cover missing/empty clustering routes, missing
+  broadcasting routes, client-rebalance source selection, LiteSelective Broker
+  selection, and the initial ProcessQueue lock flag.
+- Final verification on this change: `cargo test -p
+  rocketmq-classic-consumer --lib` (241 passed), strict consumer Clippy with all
+  targets/features and `-D warnings`, `cargo fmt --check`, and `git diff
+  --check` all pass. An earlier Clippy run exposed a test mutex-guard scope;
+  the test was corrected and the final lint run passed.
+
+## Remaining gate status
+
+- Broad P18-V01 source/config/API/DTO/error-flow/reverse-export audit remains
+  open; this entry closes only the rebalance branches above.
+- The full workspace P18-V02 gate must be rerun after the final code revision.
+- P18-V04 remains open for current-revision GitHub Ubuntu address-profile and
+  native Windows stack-runtime evidence. No CI was triggered and no branch was
+  pushed.
+- Existing Phase 19 paths remain pre-existing and untouched:
+  `integration-tests/README.md`, `tests/differential/run.sh`,
+  `integration-tests/run-local.sh`, and
+  `rlogs/2026/09/20-phase-19-docker-local-validation__20261017T224455Z.rlog`.

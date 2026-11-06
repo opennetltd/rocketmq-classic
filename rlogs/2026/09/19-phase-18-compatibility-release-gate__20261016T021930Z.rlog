@@ -1,0 +1,38 @@
+Session: 2026-10-16T02:19:30Z
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Branch: phase/19-phase-18-compatibility-release-gate
+Base code revision: a4967f39
+
+P18-V01 RequestResponseFuture and RequestFutureHolder implementation:
+- Added public mutable `RequestResponseFuture` state, async latch, typed callback
+  contract and exactly-once callback execution in Core. The process-wide
+  `RequestFutureTable` now stores the same future entries used by Producer
+  request registration, inbound reply completion, send failure and expiry.
+- Re-exported the future/table/holder through Producer and the primary facade.
+  Producer startup/shutdown manages a process-wide timeout scanner using the
+  pinned three-second initial delay and one-second period; unregistering an
+  individual Producer leaves pending futures in the live table.
+- Runtime-owned scans are scoped to their registry while the public holder scan
+  sees the process-wide table. This preserves runtime isolation with a shared
+  table. The latch countdown uses an atomic watch update, and its concurrent
+  regression passes.
+- The first combined Core run exposed cross-test correlation-key collisions,
+  global expiry crossing runtime boundaries, and an exact-deadline test relying
+  on a request future created after its deadline timestamp. Scoped expiry,
+  test-specific keys and a post-deadline clock assertion fixed these issues.
+- `cargo test -p rocketmq-classic-core --all-features --locked` — PASS (163
+  Core unit tests; all Core integration and doc-test targets pass).
+- `cargo test -p rocketmq-classic-producer -p rocketmq-classic --all-features
+  --locked` — PASS (142 Producer unit tests; request/reply timeout, send-failure,
+  shutdown and facade live-table tests; all selected integration/doc targets).
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings` — PASS.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+- Updated the Phase 15 request/reply matrix and release checklist. This closes
+  the public future/live-table request/reply slice only. Broad P18-V01, the
+  full current-tree P18-V02 rerun, current GitHub Ubuntu/P18-V04 evidence,
+  Phase 19 Docker/Broker automation, and pre-publication version/registry
+  resolution remain open. Owner-run deployment and production checks remain
+  Phase 19 manual validation.
+- No Java checkout changes, Docker/live Broker run, plan edits, push, tag,
+  publication or deployment.

@@ -1,0 +1,147 @@
+# Phase 18 offset request header compatibility and current-revision P18-V02 gate — 2026-10-17T21:37:56Z
+
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Implementation commit: `607be744 fix(protocol): match Java offset request header decoding`.
+- Java behavior oracle: RocketMQ client 5.5.1 source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; the external Java checkout was
+  read-only and was not used as a substitute for the pinned revision.
+- Scope: the four offset-boundary request headers now preserve Java's nullable
+  topic/boxed numeric fields under both `useFastEncode` hints, including the
+  inherited `lo` field. Search header behavior also covers nullable timestamp
+  and boundary type, `liteTopic`, and the Java getter's `LOWER` fallback; max
+  offset `committed` retains the primitive `true` default and Java boolean
+  conversion. Call sites now handle the nullable decoded fields at their
+  source-equivalent owner boundary.
+- Added invoked Java and Rust fixtures for absent, valid, and malformed input
+  under both decode hints. Fixture SHA-256:
+  `f6cf1cc07b0f9c0c3263f7210393595cfb0c8898257dfdd3fc81f39afebe71a3`.
+- Updated the Phase 9 header coverage and method matrices and the Java 5.5.1
+  compatibility record. No plan file changed.
+
+## Current-revision server-free verification
+
+- On `rust:1.85.0-bookworm`, Linux ARM64, standard Docker bridge, with
+  `--test-threads=1`: `cargo test --workspace --locked --offline` PASS and
+  `cargo test --workspace --all-features --locked --offline` PASS. The focused
+  offset-boundary header tests and header validation matrix passed as part of
+  both full runs.
+- `cargo check --workspace --all-targets --all-features --locked --offline`:
+  PASS.
+- `cargo clippy --workspace --all-targets --all-features --locked --offline --
+  -D warnings`: PASS.
+- `TZ=UTC mvn -o -q -f compat/java-reference/pom.xml verify`: PASS; all 37
+  scenario rows, Java fixture drift checks, and Rust/Java cross-decodes passed.
+- `python3 tests/differential/compare.py --self-test` and
+  `python3 tests/differential/compare.py --validate-manifest`: PASS; 37 rows.
+- `bash tests/stress/run-offline-smoke.sh`: PASS; 16 deterministic race/leak
+  cases × 3 repetitions. `fuzz_smoke`: PASS; 105 frame seeds, 11 message
+  seeds, 1,856 bounded mutations, 146 frame decodes, and 113 message decodes.
+- Release examples built; `cargo bench --workspace --no-run --locked --offline`
+  compiled all workspace benchmarks. The offline benchmark ran on Linux ARM64,
+  Rust 1.85.0: frame encode/decode 1,228.9 ns, Zstandard message decode
+  725.0 ns, Producer request construction 938.7 ns, 128-entry route lookup
+  14.5 ns, pending completion 6,148.9 ns. Allocation observations were 4,676;
+  197,493; 3,665; 0; and 9,530 bytes per iteration respectively. These are
+  observations, not acceptance thresholds.
+- `cargo metadata --locked --format-version 1 --no-deps`, workspace metadata
+  and dependency-direction check, and `cargo package --workspace --list
+  --locked --allow-dirty`: PASS. Package listings contain LICENSE and NOTICE.
+  `cargo fmt --all -- --check` and `git diff --check`: PASS.
+- The first macOS workspace test process stalled in `_dyld_start` before
+  entering its test binary and was interrupted. A first Linux container run
+  with `--network none` failed host-address and signal-selection tests because
+  it lacked a normal container interface; the standard-bridge full default and
+  all-feature runs then passed. No code failure reproduced.
+
+## Remaining work — separate from final owner manual checks
+
+- Broad bidirectional P18-V01 Java source/API/settings/overload/input/error/
+  control-flow and inherited-surface mapping, plus the Rust reverse-export
+  audit, remains open.
+- Current-revision GitHub Ubuntu and native Windows P18-V04 evidence remains
+  open.
+- Phase 19 still has 30 of 37 local Docker/Broker scenarios to execute, and
+  required multi-Broker, TLS/ACL, and feature-specific profiles to complete.
+  `integration-tests/compose.yaml` exists; `integration-tests/run-local.sh`
+  does not, so the fail-closed full local runner remains unfinished.
+- Before publication, confirm the intended crate version set and registry
+  dependency resolution. Local package-content checks passed but do not prove
+  unpublished dependencies resolve from the registry.
+- Owner-only production connectivity, organization credentials/CA, approved
+  HA/fault injection, and capacity/soak evidence remain the final manual items;
+  `docs/owner-validation.md` records their blocked inputs.
+- No Broker profile, Java source checkout, remote branch, tag, publication, or
+  deployment was touched. The Docker containers used here ran server-free
+  Rust tests only.
+
+# POP change-invisibility response header and current-revision P18-V02 gate — 2026-10-17T22:23:58Z
+
+- Code commit: `dff482d9 fix(protocol): add change invisibility response header`.
+- Java behavior oracle: RocketMQ client 5.5.1, source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9` (read-only).
+- Added the missing public Rust `ChangeInvisibleTimeResponseHeader` typed
+  protocol header and direct Java 5.5.1 fixture. It encodes `popTime`,
+  `invisibleTime`, and `reviveQid`; missing and malformed primitive values
+  retain Java's independent zero defaults. The fixture compares constructor,
+  declared method inventory, identity methods, both `useFastEncode` hints,
+  null/empty maps, signed limits, Unicode decimal digits, setters, and encoded
+  fields. The Core POP/ACK owner now decodes this typed header. Fixture SHA-256:
+  `967d3146d0da1467714c96a1fa7464c7375888e2ba09f6fc0c097126bab67c2a`.
+- The first protocol header-inventory run exposed the missing validation-matrix
+  row; adding it then exposed matrix assumptions that primitive fields must be
+  present and malformed values must fail. Updated the matrix to check Java's
+  zero defaults for absent/invalid primitive values. The focused matrix,
+  Remoting API fixture, Core POP/ACK fixture, and full default/all-feature
+  workspace tests pass.
+- The first Maven fixture check exposed nondeterministic nested JSON field
+  order from `Map.of`. Replaced nested case maps with `TreeMap`; after compiling
+  and generating the fixture twice, both outputs had the same SHA-256. Final
+  `TZ=UTC mvn -o -q -f compat/java-reference/pom.xml verify` passes all 37
+  scenarios, Java fixture drift checks, and Rust/Java cross-decodes.
+
+## Current-revision server-free verification — commit `dff482d9`
+
+- `cargo test --workspace --locked --offline`: PASS.
+- `cargo test --workspace --all-features --locked --offline`: PASS.
+- `cargo check --workspace --all-targets --all-features --locked --offline`:
+  PASS.
+- `cargo clippy --workspace --all-targets --all-features --locked --offline --
+  -D warnings`: PASS.
+- `python3 tests/differential/compare.py --self-test` and
+  `python3 tests/differential/compare.py --validate-manifest`: PASS; 37 rows.
+- `bash tests/stress/run-offline-smoke.sh`: PASS; 16 cases × 3 repetitions.
+- `cargo run --locked --offline -p rocketmq-classic-remoting --example
+  fuzz_smoke`: PASS; 106 frame seeds, 11 message seeds, 1,872 bounded
+  mutations, 156 frame decodes, and 110 message decodes.
+- `cargo build -p rocketmq-classic --examples --release --locked --offline`:
+  PASS. `cargo bench --workspace --no-run --locked --offline`: PASS.
+- `cargo bench -p rocketmq-classic --bench offline --locked --offline`: PASS
+  on macOS ARM64, Apple M5 Max, Rust 1.85.0. Iteration observations in ns:
+  frame encode/decode 2,140.8; Zstd message decode 1,104.1; Producer request
+  construction 1,191.8; 128-entry route lookup 16.4; pending completion
+  64,665.5. Allocation observations in bytes: 4,676; 197,493; 3,665; 0;
+  9,546. Values are observations, not thresholds.
+- Locked Cargo metadata, `python3 scripts/check-workspace-metadata.py`, and
+  `cargo package --workspace --list --locked --allow-dirty`: PASS; seven
+  publishable crate listings include `LICENSE` and `NOTICE`.
+- `TZ=UTC cargo test --locked -p rocketmq-classic-core unique_id` and the same
+  command under `TZ=Asia/Taipei`: PASS; four Unique ID tests pass in each zone.
+  `cargo fmt --all -- --check` and `git diff --check`: PASS.
+
+## Remaining work — separate from final owner manual checks
+
+- Broad bidirectional P18-V01 Java source/API/settings/overload/input/error/
+  control-flow/inherited-surface mapping and Rust reverse-export audit remain
+  open; this closes only the missing POP response-header surface.
+- Current-revision GitHub Ubuntu and native Windows P18-V04 CI evidence remains
+  open.
+- Phase 19 still has 30 of 37 local Docker/Broker scenarios, required
+  multi-Broker/TLS/ACL/feature profiles, and the full local runner to complete.
+  `integration-tests/run-local.sh` is absent.
+- Intended crate version combination and registry dependency resolution remain
+  to be confirmed before publication.
+- Owner production connectivity/identity/CA, approved HA/fault injection, and
+  capacity/soak evidence remain manual/blocked items recorded in
+  `docs/owner-validation.md`; MAN-05 awaits classification after the local
+  Phase 19 matrix. No plan, Java oracle, remote branch, tag, publication,
+  Broker operation, or deployment was touched.

@@ -1,0 +1,27 @@
+P18-V02 current-revision shutdown-boundary gate —
+2026-10-22 22:09 UTC
+
+Environment: macOS AArch64, Rust 1.85.0. Branch:
+`phase/18-phase-18-compatibility-closure`. Verified after commits
+`dc625424`, `d7b5d934`, and `477825cc`.
+
+Verification:
+- `cargo test --offline -p rocketmq-classic-remoting --lib --locked` — PASS
+  (140 tests).
+- `cargo test --offline -p rocketmq-classic-remoting --test transport --locked`
+  — PASS (107 tests).
+- `cargo test --offline --workspace --all-features --lib --quiet --locked`
+  — PASS.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked --
+  -D warnings` — PASS.
+- `bash tests/stress/run-offline-smoke.sh` completed all 17 selected cases x 3
+  with passing test results. The summary initially printed the old count 16;
+  the text was fixed and `bash -n` plus the 17-case count check then passed.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+
+This is current-revision evidence for the shutdown-admission behavior, not a
+complete P18-V02 refresh. Broad P18-V01 source/API/settings/input/error/
+control-flow and reverse-export reconciliation remains open. Current-revision
+remote Ubuntu CI, native Windows execution, and Phase 19 Broker/Docker
+validation remain unverified. No push, publication, or release operation was
+performed. Protected Phase 19 working-tree paths remain unstaged.

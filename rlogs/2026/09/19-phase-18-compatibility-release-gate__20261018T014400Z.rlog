@@ -1,0 +1,59 @@
+P18-V01 `querySubscriptionByConsumer` slice (2026-10-18 01:44 UTC)
+
+## Scope and decision
+
+- Continued the source-backed reconciliation of Java 5.5.1
+  `client/MqClientAdmin.java` after `queryTopicsByConsumer`.
+- Added the second method slice, `querySubscriptionByConsumer`. The broader
+  P18-V01 audit remains open; 17 interface methods remain unreconciled.
+- Kept the Java oracle at `/Users/bruce.tsai/Projects/3rd/rocketmq` read-only.
+  Existing Phase 19 worktree changes in `integration-tests/`,
+  `tests/differential/`, and its validation log were not staged.
+
+## Implementation
+
+- Added `QuerySubscriptionByConsumerRequestHeader` with nullable group, topic,
+  and inherited topic-request fields; request code 345 is used by
+  `MQClientApi::query_subscription_by_consumer`.
+- Added `QuerySubscriptionResponseBody`, preserving Java's omitted-null JSON,
+  nullable `SubscriptionData`, and getter alias. Added an invoked Java fixture
+  for default/populated JSON, accessors, and nested-object identity.
+- Extended Java/Rust header decode-mode fixtures for valid, missing, and
+  malformed Boolean values under both decode hints. Added typed Java/Rust
+  cross-decode fixtures and the missing public-header inventory/validation
+  rows for both consumer-query headers.
+- Added scripted Core RPC coverage for successful decoding, nullable response
+  data, and Broker error mapping.
+- Code commit: `2ac9351b feat(admin): add query subscription by consumer RPC`.
+
+## Validation
+
+Environment: macOS 26.6.1 aarch64, Rust/Cargo 1.85.0, Maven 3.10.0, Java 27.
+
+- `cargo test --locked -p rocketmq-classic-protocol --all-features` — the first
+  run exposed missing inventory and header-validation rows for the two
+  `MqClientAdmin` request headers. After adding the rows, the full suite passed,
+  including 130 unit tests, header inventory/validation, and 46 doctests.
+- `cargo test --locked -p rocketmq-classic-remoting --all-features` — passed,
+  including 137 unit tests, 107 transport tests, and 18 doctests.
+- `cargo test --locked -p rocketmq-classic-core --all-features --test admin_rpc`
+  — passed all 22 admin RPC tests.
+- `mvn -q -f compat/java-reference/pom.xml verify` — passed 37 scenarios,
+  fixture drift checks, and Java/Rust cross-decodes for 58 typed headers and
+  14 typed bodies.
+- `cargo clippy --locked -p rocketmq-classic-protocol
+  -p rocketmq-classic-remoting -p rocketmq-classic-core --all-targets
+  --all-features -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+## Remaining work
+
+- P18-V01 remains open: 17 `MqClientAdmin` methods and the broad bidirectional
+  Java/Rust API, settings, input, error/control-flow, and reverse-export audit
+  remain unreconciled.
+- Refresh the full-workspace P18-V02 gate after remaining implementation work.
+  Current-revision Ubuntu/native Windows P18-V04 evidence and the final
+  P18-V03 package/provenance review remain open.
+- Phase 19 still needs its local Docker/Broker runners, required profiles, and
+  full local scenario reconciliation. Owner-only production evidence remains
+  separate manual work; no Broker was contacted.

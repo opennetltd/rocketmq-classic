@@ -58,11 +58,11 @@ Use Phase 5 query/update RPCs and runtime broker resolution. Read modes determin
 
 ### 4.3 P9-03 — Persist local offsets without corrupting the previous file
 
-Fixture the Java JSON layout, default path derivation and backup recovery. Support an explicit storage directory; validate/encode group and client-ID path components against traversal. Write a unique temporary file in the same directory, flush/sync it, retain the last valid backup, rename atomically and sync the directory where supported. On malformed primary, use a valid backup; if both are unreadable return an error instead of resetting to zero. Define single-writer ownership or reject concurrent writers to one file.
+Fixture the Java JSON layout, `rocketmq.client.localOffsetStoreDir` process-property override, default path derivation and backup recovery. Expose only that Java-equivalent process-level root setting; keep explicit root injection private for tests. Validate/encode group and client-ID path components against traversal. Write a unique temporary file in the same directory, flush/sync it, retain the last valid backup, rename atomically and sync the directory where supported. On malformed primary, use a valid backup; if both are unreadable return an error instead of resetting to zero. Define single-writer ownership or reject concurrent writers to one file.
 
 ### 4.4 P9-04 — Expose explicit pull and offset control
 
-Validate queue, expression, nonnegative requested offset/count and timeout/suspend relationships before I/O, preserving Java sentinel handling only in offset-store APIs. Resolve suggested broker per queue and apply pull flags/commit-offset rules from Java. Return Phase 8 decoded outcomes without committing offsets. Register/unregister the pull consumer cleanly and expose explicit persist/commit operations through the facade.
+Validate queue, expression, nonnegative requested offset/count/response size and timeout/suspend relationships before I/O, preserving Java sentinel handling only in offset-store APIs. Expose Java's custom `maxSizeInBytes` pull overload alongside the default `Integer.MAX_VALUE`. Resolve suggested broker per queue and apply pull flags/commit-offset rules from Java. Return Phase 8 decoded outcomes without committing offsets. Register/unregister the pull consumer cleanly, expose configured/selected offset-store access, and expose explicit persist/commit operations through the facade.
 
 ### 4.5 P9-05 — Add offset-boundary primitives for later rebalance
 
@@ -72,10 +72,10 @@ Add typed header/response fixtures and single-attempt RPCs for search offset, mi
 
 Write the failing check/oracle fixture before its implementation. The cases below must become runnable checks, not manual checklist-only claims. Run these checks without Docker or a live Broker; use Java fixtures, controlled clocks and scripted peers. Shared commands and evidence rules are in the execution index.
 
-- [ ] **P9-V01** — All read/update/freeze modes match Java, including missing offsets, increase-only races and transport failure distinction.
-- [ ] **P9-V02** — Fault injection before/after each local-file write/rename step preserves a recoverable old or new snapshot; corrupt primary/backup and path traversal are tested.
+- [x] **P9-V01** — All read/update/freeze modes match Java, including missing offsets, increase-only races and transport failure distinction.
+- [x] **P9-V02** — Fault injection before/after each local-file write/rename step preserves a recoverable old or new snapshot; corrupt primary/backup and path traversal are tested.
 
-- [ ] **P9-U01** — Scripted pull/offset responses and temporary-file restart tests verify every pull status, next-offset recovery, broker selection and boundary RPC.
+- [x] **P9-U01** — Scripted pull/offset responses and temporary-file restart tests verify every pull status, next-offset recovery, broker selection and boundary RPC.
 
 ### 5.1 Local commands after implementation
 

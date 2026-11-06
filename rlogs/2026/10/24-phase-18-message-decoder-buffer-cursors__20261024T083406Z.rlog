@@ -1,0 +1,50 @@
+# Phase 18 MessageDecoder buffer cursor parity
+
+Recorded: 2026-10-24 08:34 UTC
+Branch: phase/18-phase-18-compatibility-closure
+Code commit: b2326a3a fix(common): preserve message decoder buffer cursors
+Pinned Java reference: RocketMQ 5.5.1 at efa1be59d6fc747ad220f036c86030f05f0419f9
+
+## Change
+
+The public `MessageDecoder.createMessageId(ByteBuffer, ByteBuffer, long)` Rust
+mapping now uses `Cursor` inputs to preserve output flip/reset, source/output
+positions, bytes returned from the backing array, and the Java put failure
+order. Its invoked fixture covers IPv4/IPv6, a positioned source/output pair,
+a short address, output capacity failure, address-put overflow and offset-put
+overflow.
+
+`countInnerMsgNum(ByteBuffer)` now maps to a mutable cursor and advances to its
+limit on success. The fixture covers nonzero start, truncated size prefix,
+incomplete positive size, and a positive size below four followed by Java's
+next read/position failure. Negative size at position zero preserves the
+Java exception boundary and cursor position. Rust returns a bounded error for
+zero and negative sizes because Java can loop without progress or rewind.
+
+Fixture SHA-256:
+
+- `fixtures/messages/records.json`: `8447099d7fa609a9898cffb6045432d7a0252a94785aa118ed08ca7ecbf7ed2f`
+- `MessageDecodeFixtures.java`: `cdef8c8a47a751a4c1030777eacc97678972bf5a74207cc5e461adb05f9c0b05`
+
+## Verification
+
+- Focused Common `message_decode` integration suite: 27 passed.
+- Locked default workspace tests and doctests: passed.
+- Locked all-feature workspace tests and doctests: passed.
+- Strict all-target/all-feature workspace Clippy: passed.
+- Release facade examples: passed.
+- Windows GNU all-target/all-feature workspace check and strict Clippy: passed as compile-only evidence.
+- Differential comparator self-test and 37-scenario manifest validation: passed.
+- Pinned offline Maven `verify`: passed, 37 scenarios, 11 message fixtures, 106 typed headers and 19 typed bodies.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+
+## Scope and remaining audit
+
+This closes the two cursor-side-effect review items and corrects the Common
+`MessageDecoder` crosswalk. Zero/negative count-size handling remains a bounded
+Rust safety difference documented in `docs/compatibility/KNOWN_DIFFERENCES.md`.
+Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export
+reconciliation remains PARTIAL. Native Windows runtime and current-revision
+remote Ubuntu CI remain unverified. Phase 19 Broker/Docker validation remains
+separate. No push or remote CI was run. The protected Phase 19 worktree paths
+remain unstaged and unchanged.

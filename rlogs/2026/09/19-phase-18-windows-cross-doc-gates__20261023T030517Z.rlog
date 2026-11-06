@@ -1,0 +1,16 @@
+# Phase 18 supplementary platform/documentation gate log
+# Recorded: 2026-10-23 03:05:17 UTC
+# Code revision: 9fdea903584f893158a4ab1d5622c36b27fbf910
+
+## Results
+
+- `CC_x86_64_pc_windows_gnu=/opt/homebrew/bin/x86_64-w64-mingw32-gcc cargo check --offline --workspace --all-features --locked --target x86_64-pc-windows-gnu` — PASS.
+- `RUSTDOCFLAGS='-D warnings' cargo doc --offline -p rocketmq-classic-core -p rocketmq-classic-consumer --all-features --locked --no-deps` — PASS.
+- `RUSTDOCFLAGS='-D warnings' cargo doc --offline --workspace --all-features --locked --no-deps` — BLOCKED by a Rust 1.85.0 rustdoc ICE while indexing an opaque `Message::body` return type in the integration crate. Targeted Core and Consumer docs pass.
+- `cargo check --offline --workspace --all-features --locked --target x86_64-pc-windows-msvc` — BLOCKED because host clang has no Windows C runtime headers (`stdlib.h`) for `zstd-sys` and `aws-lc-sys`.
+
+The GNU cross-target check adds compile evidence for the current Phase 18
+changes; it does not replace native Windows runtime execution. Broad P18-V01
+source/API/settings/input/error/control-flow and reverse-export reconciliation
+remains PARTIAL. Current-revision remote Ubuntu CI, native Windows runtime,
+and Phase 19 Broker/Docker evidence remain open.

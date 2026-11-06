@@ -1,0 +1,7 @@
+Session: 2026-10-10T00:43:11Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Follow-up documentation reconciliation: `PHASE_6_RUNTIME_INVENTORY.md` and ADR-0026 now record that `SERVICE_THREAD_JOIN_TIME_MILLIS` exposes the fixed Java `getJoinTime()` value while per-worker access, Java join timing/interrupt controls, daemon behavior, and standalone `makeStop()` remain absent. `git diff --check` passes. Documentation commit `34be8aa1`; implementation/API docs remain in `5ce83461`/`0ccfcaf4`.
+
+This corrects only the API-boundary description. Full Phase 6 method/field/input/reverse-export reconciliation and platform evidence remain open; P6-V04 stays `PENDING_PHASE_19`.

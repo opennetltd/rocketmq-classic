@@ -1,0 +1,27 @@
+Session: 2026-10-16T02:32:59Z
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Branch: phase/19-phase-18-compatibility-release-gate
+Base code revision: e4c11696
+
+P18-V01 request-future scheduler runtime-clock isolation:
+- A full Producer suite run exposed that one process-wide Tokio task could be
+  attached to another test/runtime's paused clock and expire futures too early.
+  The timeout scheduler now tracks one shared-table scan per Tokio runtime ID;
+  every scan expires entries registered in that runtime only. Request
+  preparation ensures a scanner exists on its current runtime.
+- Added a deterministic regression using two paused current-thread Tokio
+  runtimes: advancing runtime B does not expire runtime A's future, and
+  advancing runtime A beyond the timeout does. Correlation assertions remain
+  key-scoped because the table is process-wide and other tests run concurrently.
+- `cargo test -p rocketmq-classic-producer --all-features --locked` — PASS
+  (142 Producer unit tests and all Producer integration/doc targets).
+- `cargo test -p rocketmq-classic-core -p rocketmq-classic-producer
+  -p rocketmq-classic --all-features --locked` — PASS (164 Core unit tests,
+  142 Producer unit tests, facade API tests, and all selected integration/doc
+  targets).
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`, `cargo fmt --all -- --check`, and `git diff --check` — PASS.
+- This closes the runtime clock-isolation issue only. The full workspace
+  current-tree P18-V02 rerun, broad P18-V01 audit, current GitHub Ubuntu/P18-V04
+  evidence, Phase 19 Docker/Broker automation, and version/registry resolution
+  remain open. No Docker or live Broker was run.

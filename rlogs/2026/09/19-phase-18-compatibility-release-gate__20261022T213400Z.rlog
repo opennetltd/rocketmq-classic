@@ -1,0 +1,40 @@
+P18-V01 strict batch decoder public-surface correction —
+2026-10-22 21:34 UTC
+
+Environment: macOS AArch64, Apple M5 Max (18 logical CPUs), Rust 1.85.0.
+Branch: `phase/18-phase-18-compatibility-closure`. Pinned RocketMQ Java
+client/source: 5.5.1, commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Implementation commit: `95525c06 fix(common): hide non-Java strict batch APIs`.
+Reverse API review found that Common exported `decode_many` and
+`decode_many_as_client`, which returned strict errors for malformed batch
+records although pinned Java only exposes prefix-preserving batch methods.
+No production owner used the strict exports. The exports and wrappers are
+removed; production/test/fuzz callers now use the Java-compatible batch APIs.
+Strict decode failure details remain private inside the Common decoder. The
+Common aggregate-limit unit test and malformed-tail internal test retain
+coverage of safety accounting and private failure detection.
+
+Validation on the implementation tree:
+- `cargo test --offline --workspace --locked --quiet` and
+  `cargo test --offline --workspace --all-features --locked --quiet` — PASS.
+- Strict all-target/all-feature workspace Clippy, formatting, and diff check —
+  PASS.
+- `cargo doc --offline -p rocketmq-classic-common --all-features --no-deps
+  --locked` — PASS. Generated public Common decoder docs include the Java-mapped
+  compatible methods and no longer list `decode_many` or
+  `decode_many_as_client`.
+- Differential self-test and manifest validation — PASS (37 scenarios).
+- Bounded fuzz smoke — PASS (163 frame seeds, 11 message seeds, 2,784
+  mutations, 245 frame decodes, 192 message decodes).
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS; 37 scenarios,
+  11 message decoder fixtures, 36 route/VIP cases, 106 typed headers, and 19
+  typed bodies.
+
+This closes this Rust-only public decoder surface mismatch only. Broad P18-V01
+API/settings/source/input/error/control-flow and reverse-export reconciliation,
+current-revision remote Ubuntu CI, native Windows execution, and Phase 19
+Broker/Docker evidence remain open. The differential manifest still has 30
+Phase 19 live-runner cases pending. No external CI, push, publication, or
+release action was performed. Protected Phase 19 worktree paths remain
+unstaged.

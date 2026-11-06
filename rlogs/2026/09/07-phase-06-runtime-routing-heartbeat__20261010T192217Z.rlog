@@ -1,0 +1,7 @@
+# Phase 6 raw route reentrant clear — 2026-10-10T19:22:17Z
+
+- Pinned Java 5.5.1 confirms `ConcurrentHashMap.clear()` called inside a same-key `compute` callback returns normally and removes the key before the callback returns. The callback's value is returned from `compute`, but remains absent from the map.
+- Rust `TopicRouteTable::clear` now bypasses a per-topic gate only when the current thread already owns it. Other threads continue to wait for a same-key computation. Added four fixture-backed outcomes and native differential assertions.
+- Code, Java oracle, and fixture commit: `18903e3a`. `runtimeTopicRouteTable.primitives` has 81 outcomes; `fixtures/runtime/route.json` SHA-256: `1eb5f057f1a1855674fddda7313ec63874bbf3462228de03d8d03da50189803e`.
+- Focused raw-table differential and full `cargo test --workspace --all-targets --locked` pass; strict `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` passes; pinned offline `mvn -o verify` passes with 22 scenarios, route fixture verification and Java cross-decodes; comparator self-test, manifest22 validation, `cargo fmt --all -- --check`, and `git diff --check` pass.
+- Broader Phase 6 source/API/input/platform reconciliation remains open; P6-V04 stays a Phase 19 handoff.

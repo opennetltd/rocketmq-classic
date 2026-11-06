@@ -1,0 +1,5 @@
+# Phase 6 direct default-route API oracle — 2026-10-10T21:29:42Z
+
+- Added `RuntimeLookupFixtures.defaultTopicRouteApiCase`, which directly invokes pinned Java 5.5.1 `MQClientAPIImpl.getDefaultTopicRouteInfoFromNameServer(1234)` through a proxy `RemotingClient`. It captures both `GET_ROUTEINFO_BY_TOPIC` requests (`TBW102`, timeout 1234), parsed success route values, and the `TOPIC_NOT_EXIST` exception/result code without a live broker.
+- Regenerated `fixtures/runtime/lookup.json` from the compiled Java fixture. Verified the fixture with `mvn -o -q -Dmaven.repo.local=/private/tmp/p6-maven-repository -f compat/java-reference/pom.xml exec:java@verify-runtime-lookup-fixtures`; 14 runtime lookup checks pass. The JVM emits a denied log-file appender diagnostic for the default path outside the workspace, but the fixture verification exits successfully and does not write there.
+- Updated the exact API map row and requirement audit item 25. This is Java oracle evidence only; the Rust direct-call differential is the next isolated change. Whole Phase 6 source/input/platform reconciliation remains PARTIAL; P6-V04 stays `PENDING_PHASE_19`.

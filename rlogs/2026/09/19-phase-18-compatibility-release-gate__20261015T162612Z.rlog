@@ -1,0 +1,87 @@
+# Phase 18 current-revision server-free gates — 2026-10-15T16:26:12Z
+
+## Revision and verification
+
+- Tested code/documentation revision: `ae08e42d` on
+  `phase/19-phase-18-compatibility-release-gate`; worktree clean before runs.
+- `cargo test --workspace --locked`: passed, exit 0.
+- `cargo test --workspace --all-features --locked`: passed, exit 0.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`:
+  passed, exit 0.
+- `mvn -q -o -f compat/java-reference/pom.xml verify`: passed, exit 0;
+  37 scenarios and Java/Rust fixture cross-decodes. JDK/Netty emitted deprecated
+  `Unsafe` warnings; Maven completed successfully.
+- `python3 tests/differential/compare.py --self-test` and
+  `python3 tests/differential/compare.py --validate-manifest`: passed;
+  manifest validated 37 scenarios.
+- `bash tests/stress/run-offline-smoke.sh`: passed; 16 deterministic
+  race/leak cases × 3 repetitions.
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`:
+  passed; 104 frame seeds, 10 message seeds, 1,824 bounded mutations.
+- `cargo build -p rocketmq-classic --examples --release --locked`: passed.
+- `cargo bench --workspace --no-run --locked`: passed; all workspace bench
+  targets compiled.
+- `cargo package --workspace --list --locked --allow-dirty`: passed.
+- `cargo metadata --format-version 1 --locked --no-deps` and
+  `python3 scripts/check-workspace-metadata.py`: passed; package licenses and
+  dependency direction validated.
+- `TZ=Asia/Taipei cargo test -p rocketmq-classic-core --all-features --locked
+  unique_id::tests::`: passed; four unique-ID tests.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+
+## Status
+
+- Server-free P18-V02 is verified on `ae08e42d`. It must be rerun after any
+  later implementation revision.
+- Broad P18-V01, current-revision GitHub Ubuntu/P18-V04 evidence, Phase 19
+  local Docker/Broker automation, and release version/registry resolution
+  remain open. Owner-run deployment/live Broker checks remain manual.
+- No plan files or Java reference sources were changed. No push, tag,
+  publication, deployment, or live Broker action was performed.
+
+P18-V01 ClientConfig reverse-surface slice (2026-10-15): compared Rust's
+ClientConfig definition and consumer call sites with pinned Java 5.5.1
+ClientConfig at efa1be59d6fc747ad220f036c86030f05f0419f9. Java exposes its 33
+setting values through methods; Rust had exposed the backing fields publicly,
+including namesrvAddr/namespace storage whose direct writes bypass Java setter
+cache behavior. Made all 33 fields crate-private, retained mapped accessors,
+added an external compile-fail rustdoc guard, and migrated Core/Producer/
+Consumer cross-crate code and integration tests to accessors. Consumer running
+information retains Java MixAll.object2Properties field semantics through a
+read-only, doc-hidden bridge; raw NameServer/namespace values and null omission
+remain unchanged. The first Core config differential run exposed that calling
+setNamespace in its fixture builder marks namespaceInitialized true; updated
+the builder to construct Java's cloneClientConfig state for uninitialized but
+non-null namespace cases. The 21 Core config tests then passed.
+
+Scoped validation on this slice: `cargo check --workspace --all-targets
+--locked` passed; `cargo test -p rocketmq-classic-core --test config --locked`
+passed (21); `cargo test -p rocketmq-classic-core --doc --locked` passed (13);
+`cargo test -p rocketmq-classic-consumer --all-features --locked` passed (219
+unit tests plus all integration/doc targets); and
+`cargo test -p rocketmq-classic-producer --all-features --locked` passed (142
+unit tests plus all integration/doc targets). Full current-revision P18-V02
+gates remain required after this implementation change. No Java reference
+files or plan files were modified.
+
+Current-tree server-free P18-V02 rerun after the ClientConfig visibility slice
+(2026-10-15; branch `phase/19-phase-18-compatibility-release-gate`, HEAD
+`fc8ce548` plus the tested worktree changes): `cargo test --workspace --locked`
+and `cargo test --workspace --all-features --locked` passed; strict workspace
+Clippy (`--all-targets --all-features -- -D warnings`) and workspace/all-target
+check passed; pinned offline Maven `verify` passed all 37 scenarios and Java/Rust
+cross-decodes; comparator self-test and 37-scenario manifest validation passed;
+the deterministic race/leak smoke passed (16 cases × 3); fuzz smoke passed
+(104 frame seeds, 10 message seeds, 1,824 mutations); release examples and all
+workspace benchmark targets compiled; Cargo metadata, workspace metadata/license/
+dependency checks and all seven package listings passed; unique-ID tests passed
+under UTC and Asia/Taipei; rustfmt and `git diff --check` passed. The first
+strict Clippy run identified three test-only redundant `Option::as_deref`
+calls; those assertions were corrected, and the final strict Clippy and full
+all-feature workspace rerun passed. No Java reference sources or plan files
+were modified. Broad P18-V01, current-revision GitHub Ubuntu/P18-V04 evidence,
+Phase 19 local Docker/Broker automation, and release version/registry resolution
+remain open. Owner-run deployment/live Broker checks remain manual; no push,
+tag, publication, deployment, or live Broker action occurred.
+
+Remoting setting-timing audit documentation reconciliation (2026-10-15): compared the 20 pinned `NettyClientConfig` fields and their current inventory rows against the latest P18-V01 slices. All rows now record Java's read/capture boundary and the corresponding Rust adapter or snapshot; idle timeout and `disableNettyWorkerGroup` have live per-channel adapters, while socket/bootstrap/TLS and runtime values record their respective start, proxy-first-use, or operation timing. Updated the Phase 3 inventory summary and `KNOWN_DIFFERENCES.md` so they no longer describe the completed Remoting timing slice as still pending. The broader API/input/error/control-flow and reverse-export P18-V01 audit remains open. Documentation-only change; `git diff --check` passed. No plan, Java reference source, implementation, or test files changed.

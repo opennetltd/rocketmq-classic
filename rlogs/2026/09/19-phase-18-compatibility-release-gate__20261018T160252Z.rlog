@@ -1,0 +1,30 @@
+# P18-V01 Consumer list DTO API visibility — 2026-10-18T16:02:52Z
+
+- Branch: `phase/18-phase-18-compatibility-closure`.
+- Closed one P18-V01 API slice for Java 5.5.1 `GetConsumerListByGroupResponseBody`.
+  The Rust DTO's `consumer_id_list` field is now private; core RPC access and
+  the fixture generator use the public accessors. Added an external compile-fail
+  check for field visibility and Java reflection assertions for the public
+  no-argument constructor, declared getter/setter signatures, and public-field
+  inventory. Existing alias, null/default, and identity behavior remains
+  covered.
+- Regenerated `fixtures/runtime/lookup.json` through the pinned Java 5.5.1
+  Maven harness. SHA-256:
+  `21f6d58affb63528aad0ccc25ac21e4b8e2131c8521ccbdffeb8c68eccf8408c`.
+- Code commit: `e5887718` (`fix(protocol): match consumer-list DTO visibility`).
+- Passed: `cargo test -p rocketmq-classic-protocol -p rocketmq-classic-core
+  --locked --offline`; `cargo test -p rocketmq-classic-protocol --doc --locked
+  --offline` (59 doctests); strict all-target/all-feature Clippy for Protocol,
+  Core, and Remoting; `cargo check -p rocketmq-classic-remoting --example
+  generate_fixtures --locked --offline`; Maven `verify` (37 scenarios, fixture
+  checks, 66 typed-header and 15 typed-body cross-decodes); `cargo fmt --all --
+  --check`; and `git diff --check`.
+- Maven emitted its existing JDK `Unsafe` and reflective-final-field warnings;
+  verification exited successfully.
+- Phase 19's pre-existing README/runner changes were not staged. The Java
+  checkout was not modified. No plan, Docker/Broker state, remote CI, package
+  publication, release tag, or push changed.
+- Broad P18-V01 remains open, including source/API/configuration/input/error/
+  flow coverage and the Rust reverse-export audit. P18-V03 provenance/version/
+  registry preflight, current Ubuntu/native Windows P18-V04 evidence, and
+  Phase 19's missing local scenario runners/profiles also remain open.

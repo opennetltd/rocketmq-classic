@@ -1,0 +1,41 @@
+# Phase 18 Fastjson repeated trailing EOF marker parity
+
+- Recorded: 2026-10-24 00:05:54 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Source revision before this change: `d209d296`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Evidence and change
+
+- Added two direct pinned Java heartbeat DTO inputs: repeated terminal
+  U+001A markers, and repeated markers separated by JSON whitespace.
+  Fastjson accepts both.
+- The expanded Rust differential failed before the fix on both cases with
+  `trailing characters`; the old normalizer removed only one final marker.
+- The shared normalizer now removes U+001A markers from the trailing
+  whitespace/marker suffix. Existing Java/Rust cases continue to reject
+  markers in root-prefix and structural positions; raw controls inside JSON
+  strings remain supported.
+- Heartbeat DTO input corpus: 1,086 -> 1,088 cases.
+
+## Verification
+
+- `mvn -o -f compat/java-reference/pom.xml compile exec:java -Dexec.args='runtime-heartbeat-fixtures fixtures/runtime/heartbeat.json'` — passed; regenerated the invoked Java fixture.
+- Red/green: `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target CARGO_NET_OFFLINE=true cargo test -p rocketmq-classic-protocol heartbeat_dto_inputs_match_invoked_java_fastjson --locked` — failed before the normalizer fix on both new cases; passed after the fix.
+- `CARGO_TARGET_DIR=/tmp/rocketmq-phase18-target CARGO_NET_OFFLINE=true cargo test -p rocketmq-classic-protocol removes_repeated_fastjson_eof_markers_after_the_document --locked` — passed.
+- `mvn -o -f compat/java-reference/pom.xml verify` — passed; validates the 37-scenario manifest, fixture drift, Java/Rust cross-decodes, 106 typed headers, and 19 typed bodies.
+
+## Artifacts
+
+- `fixtures/runtime/heartbeat.json` SHA-256:
+  `2f55c06fd34dabb708de5c5455da71bbcc3ec19f0a5df19b0e9e65e9d18b706b`
+- `compat/java-reference/src/main/java/compat/RuntimeHeartbeatFixtures.java`
+  SHA-256: `9bdd9f60374358bb7ec5d3a83b53193004e4e01c3932da29cb570f1b76b7156a`
+- `crates/rocketmq-classic-protocol/src/serde_fastjson.rs` SHA-256:
+  `7fcbd9f6f08a43030460f619a241c80e0fd9945691d9fcac1057256d3c82c73e`
+
+No plan was edited. No push, remote CI, Broker, or Docker action was run.
+The four protected Phase 19 worktree paths remain untouched and unstaged.
+Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export
+reconciliation remains open.

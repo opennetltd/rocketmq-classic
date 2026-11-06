@@ -1,0 +1,5 @@
+# Phase 6 execution session — 2026-10-10T17:02Z
+
+- Updated the `namesrvAddr` configuration and `start()` API mapping for the third Java/native mutation case: configured→empty skips discovery and keeps the constructor-time active list.
+- Reconciled `PHASE_6_REQUIREMENT_AUDIT.md` and `PHASE_6_RUNTIME_INVENTORY.md` with the three cases, `036429a0`, and the current `start.json` SHA-256 `89c41d361d878842cd59128cd197a8b59790080e2aeaa43b30868d8b5b22a364`. Marked the older no-invocation note as a historical checkpoint superseded by the forked start probe.
+- Validation recorded in the implementation commit: pinned offline Maven verify regenerated and then verified the fixture; 22 Java scenarios passed; all three native `start_*` tests, strict config-test Clippy, fmt, and diff checks passed. No production behavior changed.

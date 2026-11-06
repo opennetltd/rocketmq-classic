@@ -1,0 +1,31 @@
+# Phase 18 TopicRouteData clone alias audit correction
+
+- Recorded: 2026-10-23 16:59:52 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Audited revisions: `45b8a5fc` (`Preserve TopicRouteData collection aliases`),
+  `8b69c09e` (`Match route DTO copy alias semantics`)
+- Pinned Java source: RocketMQ 5.5.1,
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Java fixture: `fixtures/runtime/route.json`, SHA-256
+  `0fcad65ecc00a9c55657113ed494d0d818621f5dcd4fa11e5da87e49c61d9470`
+
+## Finding
+
+An older Phase 6 audit entry still described shallow `TopicRouteData` clone
+identity as an owned-value difference. The pinned Java `TopicRouteData` source
+uses `addAll`/`putAll` to allocate new outer collections while sharing nested
+DTO/list references. Current Rust `java_copy_constructed` and
+`clone_topic_route_data` do the same through shared handles; the deep clone
+creates distinct nested handles. The Java fixture records outer and nested
+identity flags, and the Protocol differential compares them against Rust
+`SharedValue::ptr_eq` checks. The historical caveat was stale, not a current
+implementation gap; the audit now states that explicitly.
+
+## Verification
+
+- `cargo test --offline -p rocketmq-classic-protocol topic_route_data_copy_and_clone_methods_match_invoked_java_values_and_failures` — passed.
+- `git diff --check` — passed.
+- Pinned Java source was read from the cached 5.5.1 `rocketmq-remoting` sources jar. Java source and fixture were unchanged; Maven fixture verification was not rerun.
+- No Phase 19 user-owned paths were staged. No push or remote CI was run.
+
+This corrects the clone-helper audit record only. Broad P18-V01 remains PARTIAL.

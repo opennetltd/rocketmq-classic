@@ -1,0 +1,18 @@
+# Phase 3 remoting transport — execution log (20260927T030610Z)
+
+## Scope and decisions
+- Continued the Phase 3 request to treat non-RocketMQ capabilities as explicit exceptions and resolve other actionable parity gaps. User selected per-client TLS isolation as an accepted Rust-native exception; Java process-global TLS reload/shared state is documented, not implemented, and is not claimed as strict lifecycle parity.
+- Resolved an interrupted channel-event-queue revert: restored the bounded Tokio queue at capacity 10001 and `try_send`, matching Java admission/drop threshold (Java accepts while existing size <= 10000), rather than retaining an accidental unbounded variant. Constructor/test harness channels and worker receiver now consistently use bounded channel types.
+- Replaced periodic (one-second scan) idle closure with a resettable Tokio timer local to each connection task. Read activity, including partial frames, and successful writes reset the ALL_IDLE deadline; expiry emits IDLE and ends the connection task. Java Netty IdleStateHandler is still different in scheduling and lifecycle precision.
+- Audited zero config values: Java accepts zero connect timeout and semaphore capacities. Rust validation now accepts them; zero connect timeout removes the extra connection-time cap but remains constrained by the operation's absolute deadline, and zero semaphore capacity naturally rejects admission. Tests assert accepted config cases. Java worker-thread zero remains rejected in Rust.
+- Avoided a Tokio panic when Java permits a zero connect-timeout scan interval: Rust scan ticker clamps the scheduler interval to 1 ms. This is a runtime safety mapping; exact zero-delay scheduling cannot be identical.
+- Updated compatibility inventory and known differences for idle timer, event queue lifecycle, TLS isolation exception, zero settings and timeout heuristic.
+
+## Validation
+- `cargo test -p rocketmq-classic-remoting --test transport --offline` — passed (66 tests) after restoring bounded event queue and updating idle timer timing.
+- Initial full command chain passed fmt and all workspace tests (11 common, 9 protocol, 1 fixture, 35 remoting unit, 4 codec, 66 transport), but Clippy found the newly singleton config-validation loop (`clippy::single_element_loop`). Rewrote it as a direct assertion; `cargo clippy --workspace --all-targets --offline -- -D warnings` then passed.
+- Final verification after scan-interval/doc edits: `cargo fmt --all --check`; `cargo test --workspace --offline` (11 common, 9 protocol, 1 protocol fixture, 35 remoting unit, 4 codec, 66 transport); `cargo clippy --workspace --all-targets --offline -- -D warnings`; `python3 scripts/check-workspace-metadata.py`; `python3 tests/differential/compare.py --self-test`; and `git diff --check` — all passed.
+
+## Status / blockers
+- Phase 3 is not accepted. Full bidirectional public API/config review and remaining timeout, oneway, callback, executor/event lifecycle, SOCKS caching, NameServer/reconnect and context semantics are still in progress. P3-V04 remains Phase 19; Phase 4 has not started.
+- No implementation or validation in this log establishes live Broker, TLS/auth cluster or cross-language results.

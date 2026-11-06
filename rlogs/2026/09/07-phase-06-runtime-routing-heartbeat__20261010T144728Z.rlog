@@ -1,0 +1,17 @@
+Execution session: 2026-10-10T14:47:28Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Initial state: clean worktree at `a8ad3f45` after documenting lazy callback executor capacity. The VIP map covered live conversion for check-client, consumer-list and assignment RPCs but did not state or test the explicit heartbeat address boundary.
+
+Selected slice: verify whether Java applies `vipChannelEnabled` when sending a heartbeat to an explicit Broker address.
+
+Source/oracle: pinned Java 5.5.1 `MQClientInstance.sendHeartbeatToBroker` passes its address argument into `MQClientAPIImpl.sendHeartbeat`, and the API method passes it unchanged to `RemotingClient.invokeSync`. An actual runtime with VIP enabled records input/API addresses both as `127.0.0.1:10911`, V1 success. Oracle/fixture commit `71eea91e`; `fixtures/runtime/heartbeat.json` SHA-256 `ad12d7c32697ec2459b725599c0e92d4cb7581a16f1c7187fa03887c1712f643`.
+
+Native differential: a runtime with VIP enabled sends its explicit heartbeat to the supplied loopback listener; the peer receives `HEART_BEAT` and replies successfully. The test retains its producer owner for the runtime's weak registry binding. Test commit `a7e1eecc`; no production change was needed.
+
+Validation: full `cargo test --workspace --all-targets --locked` passed; strict all-target/all-feature Clippy passed; pinned offline Maven verify passed (22 scenarios and fixture/cross-decode checks); comparator self-test and manifest validation passed (22 scenarios); `cargo fmt --all -- --check` and `git diff --check` passed.
+
+Documentation update: `PHASE_6_API_CONFIG_MAP.md` adds the heartbeat exception to `vipChannelEnabled`; `PHASE_6_REQUIREMENT_AUDIT.md` records the source chain, fixture digest and loopback differential. This closes only the explicit heartbeat VIP boundary; the larger Phase 6 source/API/input/platform audit remains open and P6-V04 remains pending Phase 19.
+
+Documentation/log commit: pending.

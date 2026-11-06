@@ -1,0 +1,7 @@
+# Phase 6 execution session — 2026-10-10T16:51Z
+
+- Continued the public Rust method reverse scan for `ClientRuntime`, manager and table views, registry owners, route snapshots, and route-table handles.
+- Added exact API-map names for the nullable route address, consumer lookup, and cached/query route methods. Classified `ClientRuntime::register_admin` / `unregister_admin` as native `GroupLease` lifecycle adapters alongside the distinct Java-style `register_admin_ext` / `unregister_admin_ext` owner-table operations.
+- Recorded `TopicRouteDataHandle::downgrade` and `WeakTopicRouteDataHandle::upgrade` as Rust Arc/Weak lifetime utilities used by the table-retention integration test; they expose no route operation. The only unlisted method names are on internal `ManagerLink` and `GroupRegistry` types, not publicly re-exported surfaces.
+- Corrected the lease description: `register_admin` returns the identity token and `unregister_admin` accepts it by reference.
+- Validation: reverse-name scan, exact visibility/type inspection for the remaining internal methods, API-map table-row inspection, and `git diff --check`. No production source changed. This does not close whole-phase public API/input/source reconciliation; P6-V04 remains `PENDING_PHASE_19`.

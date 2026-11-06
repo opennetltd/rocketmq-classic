@@ -1,0 +1,10 @@
+# Phase 18 execution session — 2026-10-13T10:33:52Z
+
+- Continued the P18-V01 Phase 9 `DefaultMQPullConsumerImpl` audit on `phase/19-phase-18-compatibility-release-gate`; the worktree was clean at session start and the Java 5.5.1 source checkout remained read-only.
+- Java `resetTopic(List<MessageExt>)` returns without work for a null or empty list and, when a namespace is configured, restores only that namespace on each message topic. Added invoked Java fixture cases for null/empty lists, ordinary/already-logical/foreign namespace topics, retry/DLQ topics, and no configured namespace.
+- Added public `PullConsumer::reset_topic(Option<&mut [MessageExt]>) -> Result<(), PullConsumerError>` and routed Pull and query message topic restoration through it. Null list is represented with `None`; `MessageExt` uses a non-null topic and Rust slices cannot contain null entries.
+- Extended the Rust accessor differential test and Phase 9 matrix. The initial test-first Rust run failed to compile because `reset_topic` did not exist yet; after implementation, the targeted test passed.
+- PASS: `mvn -q -f compat/java-reference/pom.xml compile exec:java -Dexec.args="pull-implementation-accessor-fixture /Users/bruce.tsai/Projects/trio/rocketmq-classic/fixtures/consumer/pull-implementation-accessor.json"` generated the pinned Java fixture; `mvn -q -f compat/java-reference/pom.xml verify` passed, including 37 scenarios and the pull accessor fixture.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (168 unit tests, 43 integration tests, doc tests); `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. This closes only the `resetTopic` row; other Phase 9 raw methods, broad Phase 6 reconciliation, P18-V01, and P9-V03 live validation remain open.
+- Implementation, fixture, matrix, and execution-log commit: pending.

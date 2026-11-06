@@ -1,0 +1,24 @@
+Phase 9 execution resumed 2026-10-11T09:30:28Z.
+Current branch `phase/10-phase-09-pull-offset-store` is based on Phase 8 and contains the committed P9-01/P9-02/P9-03 work; the worktree was clean at resume. Phase 9 English/Traditional Chinese plans and the coding-general workflow were read. The Java checkout remains at an unrelated 5.3.3 commit with a pre-existing untracked file; reference only the pinned 5.5.1 source archive in `/tmp/rmq-offset-oracle.vwTta7`, and leave the checkout untouched.
+Remaining work: P9-04 explicit pull and offset facade; P9-05 boundary RPCs/headers/fixtures and runnable example; final Phase 9 matrix/docs/gates. Phase 19 live Broker case P9-V03 must remain pending.
+
+### P9-04 progress — explicit pull facade
+
+- Confirmed the initial `cargo check -p rocketmq-classic-consumer --locked` stop was caused by the root facade adding the consumer crate without a matching `Cargo.lock` entry. Ran `cargo check -p rocketmq-classic-consumer --offline` to refresh the lockfile and compile without network access. This exposed implementation issues (missing Java `ExpressionType.isTagType` behavior, private class-filter router visibility, and `SharedValue` conversion); fixed those and removed the sibling-private `OffsetTable` placeholder test.
+- Added `PullConsumerConfig`, `PullConsumerError`, explicit `PullConsumer` methods, lifecycle registration/unregistration, namespace wrapping for the consumer group and queues, per-queue Broker suggestion routing, slave flag handling, filter hooks, offset-store selection, and explicit update/read/persist APIs. Pull responses are decoded through `PullAPIWrapper`; pulling does not update or persist offsets.
+- Corrected broker-name header encoding to Java's inherited `RpcRequestHeader.bname` field for pull and offset RPCs, confirmed against the pinned 5.5.1 source. Updated the existing remote-offset scripted test to assert `bname`.
+- Added config and pull-input unit checks plus a loopback NameServer/Broker test covering routed queues, TAG request fields, decoded FOUND, all three non-FOUND pull statuses, unit-mode hooks, no implicit offset mutation/persistence, explicit offset update/read/persist, and consumer lifecycle.
+- Verification: `cargo test -p rocketmq-classic-consumer --locked` passed (24 unit, 4 offset, 1 pull-facade, 7 pull-result tests); `cargo check -p rocketmq-classic --locked` passed; `cargo fmt --all -- --check` and `git diff --check` passed. P9-V03 live-Broker validation remains pending for Phase 19.
+- P9-04 is ready for its independent commit after final staged-diff review.
+
+P9-05 implementation and final offline verification (2026-10-11):
+- Added typed request/response models and one-attempt RPCs for search/min/max/earliest-store-time; request codes 29–32 use signed i64 timestamp/offsets and successful -1 values remain valid. Added Java 5.5.1 fixtures for all eight headers, boundary RPC scripted fixtures (success and Broker error), runnable pull-consumer example, and at-least-once recovery guidance.
+- Expanded both public-header inventories. The first workspace run found the validation matrix also needed the P9-04 `bname` fields; updated it to exercise legal `BoundaryType` values and the max-offset `committed=true` default. Focused header validation now passes.
+- Java fixture regeneration: `mvn -o -q compile exec:java -Dexec.args='header-fixtures --output ../../fixtures/remoting'` passed. Rust reverse frames generated with `cargo run --locked -p rocketmq-classic-remoting --example generate_fixtures -- p4-headers target/p9-rust-header-fixtures`; Java 5.5.1 decoded all 46 with `mvn -o -q compile exec:java -Dexec.args='verify-rust-fixtures --dir ../../target/p9-rust-header-fixtures'`.
+- Final checks passed: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `cargo test --workspace --locked` including doc tests; `cargo build -p rocketmq-classic --examples --locked`; `git diff --check`.
+- Re-read the Phase 9 plan and matched P9-01–P9-05 deliverables to implementation, fixtures, and the offline method matrix. P9-V01, P9-V02, and P9-U01 are unit-verified; P9-V03 remains `PENDING_PHASE_19`. No live Broker or Docker was contacted. P9-05 and handoff commits are pending.
+
+Commit and handoff result (2026-10-11):
+- P9-05 implementation, fixtures, and automated checks committed as `c50c0baa` (`feat(consumer): add offset boundary primitives`).
+- Phase 9 compatibility matrix, recovery guide, compatibility references, and execution record committed as `8c9455f0` (`docs(consumer): record phase 9 offset handoff`).
+- Final plan audit: P9-01–P9-05 offline deliverables are complete; P9-V01/V02/U01 are unit-verified. P9-V03 remains intentionally `PENDING_PHASE_19`; no manual or live Broker check was performed in this phase.

@@ -1,0 +1,45 @@
+name: ${COMPOSE_PROJECT_NAME:-rocketmq-classic-p19-lite-supplementary}
+
+services:
+  namesrv:
+    image: apache/rocketmq:5.5.0@sha256:7e8f6c9dbd9df742ed26ba69c00d4ad69e2f86a56f3ca7782ff8144dd0798132
+    command: ["nameserver"]
+    ports:
+      - "127.0.0.1:${ROCKETMQ_SUPPLEMENTARY_NAMESRV_PORT:-29876}:9876"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9876'"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+      start_period: 3s
+
+  store-init:
+    image: apache/rocketmq:5.5.0@sha256:7e8f6c9dbd9df742ed26ba69c00d4ad69e2f86a56f3ca7782ff8144dd0798132
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c", "chown -R rocketmq:rocketmq /data"]
+    volumes:
+      - broker-store:/data
+    restart: "no"
+
+  broker:
+    image: apache/rocketmq:5.5.0@sha256:7e8f6c9dbd9df742ed26ba69c00d4ad69e2f86a56f3ca7782ff8144dd0798132
+    command: ["broker", "-c", "/etc/rocketmq/broker.conf"]
+    depends_on:
+      namesrv:
+        condition: service_healthy
+      store-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./config/broker-lite-5.5.0.conf:/etc/rocketmq/broker.conf:ro
+      - broker-store:/home/rocketmq/store
+    ports:
+      - "127.0.0.1:${ROCKETMQ_SUPPLEMENTARY_BROKER_PORT:-29911}:10911"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/10911'"]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+      start_period: 8s
+
+volumes:
+  broker-store:

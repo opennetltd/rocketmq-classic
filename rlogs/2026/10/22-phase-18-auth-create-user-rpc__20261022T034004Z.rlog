@@ -1,0 +1,46 @@
+# Phase 18 compatibility release gate — 2026-10-22 03:40:04 UTC
+
+Base revision: `5af0810d`. This entry records the request 3001
+`createUser` Broker RPC slice. Pinned Java source is
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Compatibility changes
+
+- Added `UserInfo`, preserving Java's four nullable string properties,
+  null-omitting JSON encoding, public accessors/factories, and identity
+  equality; added nullable `CreateUserRequestHeader`.
+- Added `MQClientApi::create_user` for request 3001 with the Java header/body,
+  caller timeout, Broker error mapping, and the supplied address unchanged
+  even when VIP channels are enabled.
+- Added invoked Java/Rust cases for populated/default/null-field bodies,
+  success, Broker rejection, exact body bytes, timeout, and VIP-enabled
+  unchanged-address behavior. Added the header to the public inventory and
+  Java/Rust typed-frame cross-decode.
+- Updated request-code and Phase 6 API/reverse-audit documentation. The
+  direct-operation reverse audit now has 7 open rows; wider Phase 18 work
+  remains open.
+
+## Local verification
+
+- `cargo test -p rocketmq-classic-protocol --locked`: 155 unit tests, 57
+  integration tests, and 157 doctests passed.
+- `cargo test -p rocketmq-classic-core --test admin_rpc --locked`: 102 passed.
+- `cargo test -p rocketmq-classic-core --lib --locked`: 201 passed.
+- `cargo clippy -p rocketmq-classic-protocol -p rocketmq-classic-core -p rocketmq-classic-remoting --all-targets --all-features --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- `mvn -o -f compat/java-reference/pom.xml verify`: BUILD SUCCESS; Java
+  decoded 97 Rust typed-header fixtures and 19 Rust typed-body fixtures.
+- SHA-256 `fixtures/producer/core.json`:
+  `d8330b270ab1584647beaa392204ae02d4076f530fec785a75052cc2d85b1303`.
+- SHA-256 `fixtures/remoting/header-create-user-request.json`:
+  `464c18093ffff83f003b1aa666303a3ef062da19d34d98aa66fecda0d95a4e40`.
+- SHA-256 `fixtures/remoting/header-create-user-request.bin`:
+  `c04052f1a4201f03bb30cc35a8e0d4a2967ba8d02d6aa9fea81e27d6fe9c66e8`.
+
+## Remaining work
+
+Request 3001 is closed. The direct-operation reverse audit still has 7 open
+rows, and the broader Phase 18 settings, input, error, control-flow,
+reverse-export, and platform reconciliation remains open. No Broker, Docker,
+or remote CI was used. Pre-existing Phase 19 worktree paths remain unstaged
+and outside this slice.

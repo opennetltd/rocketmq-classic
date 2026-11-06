@@ -76,9 +76,9 @@ total length 與 24-bit header length 使用 checked arithmetic。拒絕 total_l
 
 先寫對應失敗測試／Oracle fixture，再依序實作；以下 case 必須成為可執行檢查，而非人工勾選。以下檢查不依賴 Docker 或 live Broker，使用 Java fixture、可控時鐘及 scripted peer；共通命令與證據規則見執行索引。
 
-- [ ] **P2-V01** — 依 Java codec 允許範圍，以兩種 serialization 交叉解碼 route/heartbeat/send/pull/offset/lock/transaction/reply fixtures。
-- [ ] **P2-V02** — 測試 length 0/1/0xFFFFFF/overflow、frame limit ±1、high-bit total length、nested truncation 與 unknown field/code。
-- [ ] **P2-V03** — 每個 fragmentation point 與 concatenated-frame case 只產生預期 commands；畸形 bytes 不得 panic 或造成無界 reserve。
+- [x] **P2-V01** — 依 Java codec 允許範圍，以兩種 serialization 交叉解碼 route/heartbeat/send/pull/offset/lock/transaction/reply fixtures。
+- [x] **P2-V02** — 測試 length 0/1/0xFFFFFF/overflow、frame limit ±1、high-bit total length、nested truncation 與 unknown field/code。
+- [x] **P2-V03** — 每個 fragmentation point 與 concatenated-frame case 只產生預期 commands；畸形 bytes 不得 panic 或造成無界 reserve。
 
 ### 5.1 實作完成後的本機命令
 

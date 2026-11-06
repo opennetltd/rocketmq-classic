@@ -1,0 +1,51 @@
+# Phase 18 current-revision subtype test and P18-V02 server-free gates — 2026-10-21T19:06:51Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `f6cf78fc` (`test(common): compare MessageExt property views by value`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `3633f3ac0098815df76790a969a15e7a9e2edda45f30723bd67a2753468facab`.
+
+## Test correction
+
+- The first post-subtype workspace test compile exposed an `E0308` in a
+  Common regression: `properties()` returns opaque guard types that cannot be
+  compared directly across `Message` and `MessageExt`.
+- Changed the assertion to compare the dereferenced property views by value.
+  This affects only the test assertion; production behavior is unchanged.
+
+## Verification on `f6cf78fc`
+
+- PASS: `cargo test --workspace --locked --quiet` and
+  `cargo test --workspace --all-features --locked --quiet`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify`; 37 scenarios,
+  fixture drift, 9 Running Info, 27 direct-consume and 15 reset cases, 83 typed
+  headers, 16 typed bodies and Java/Rust cross-decodes. Existing JDK Unsafe and
+  reflectively-mutated final-field warnings were emitted.
+- PASS: differential self-test and 37-scenario manifest validation.
+- PASS: offline deterministic stress smoke, 16 cases × 3 repetitions.
+- PASS: release fuzz smoke, 137 frame seeds, 11 message seeds, 2,368 bounded
+  mutations, 201 frame decodes and 118 message decodes.
+- PASS: release workspace examples and `cargo bench --workspace --no-run
+  --locked`.
+- PASS: `cargo metadata --locked --format-version 1` (8 workspace members,
+  216 total packages, 208 registry packages); no-deps metadata (8 packages);
+  workspace metadata/license/dependency checks; all seven publishable crate
+  package listings contain `LICENSE` and `NOTICE`.
+- PASS: four Core Unique ID tests under each of `TZ=UTC` and
+  `TZ=Asia/Taipei`.
+- PASS: offline benchmark on Apple M5 Max, macOS aarch64, Rust 1.85.0:
+  frame encode/decode 2,455.8 ns/iteration; zstd message decode 1,169.3 ns;
+  producer request construction 1,288.5 ns; 128-entry route lookup 14.3 ns;
+  loopback pending completion 67,553.7 ns. These are observations, not
+  thresholds.
+
+## Remaining status
+
+Broad P18-V01 source/API/settings/input/error/control-flow/reverse-export
+reconciliation and the custom `MessageExt.getProperties()` mutable map
+identity gap remain open. Current-revision GitHub Ubuntu and native Windows
+P18-V04 runtime evidence remain absent. Phase 19 Broker/Docker validation
+remains separate. No push, remote CI, Broker or Docker run was performed. The
+pre-existing Phase 19 working-tree paths were left untouched and unstaged.

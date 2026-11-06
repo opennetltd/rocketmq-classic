@@ -1,0 +1,27 @@
+# Phase 18 Broker statistics view RPC — 2026-10-22T01:40:10Z
+
+- Closed the pinned Java 5.5.1 `MQClientAPIImpl.viewBrokerStatsData` request
+  315 slice. `MQClientApi::view_broker_stats_data` sends nullable
+  `statsName`/`statsKey`, applies configured VIP conversion, and honors the
+  caller timeout. Added `BrokerStatsData` and `BrokerStatsItem` DTOs with
+  nullable minute/hour/day periods, shared nested values, and Java primitive
+  defaults, including explicit-null-to-zero decoding.
+- Extended the invoked Java 5.5.1 oracle for populated/default/null DTOs,
+  nullable header fields, success with JSON null, success without a body, and
+  Broker error. Added the typed header fixture and header/API inventories.
+  `fixtures/producer/core.json` SHA-256:
+  `ddf0c3b7f2dac39efd681d7611a16b1f71737c40d31c33d4c4e86ac3934588de`.
+  Request-header fixture SHA-256:
+  `76ad6872dfcd536ba93cfbd1b0176a0d3391b9b53182eec6523c4fb7bf3f7db2`.
+- Validation passed: full protocol/core locked tests; strict workspace
+  all-target/all-feature Clippy; pinned Java Maven `verify` (37 scenarios, 90
+  Rust-generated typed headers, 16 typed bodies); `cargo fmt --all`; and
+  `git diff --check`. A focused Core unit test confirms VIP port conversion
+  and the RPC test verifies the Java timeout boundary.
+- Updated the Phase 6 API map, request-code inventory, and direct-operation
+  audit. Thirteen initial direct-operation rows remain open; broad P18-V01
+  source/API/input/error/control-flow/reverse-export reconciliation remains
+  open. Current-revision Ubuntu and native Windows P18-V04 evidence remains
+  unavailable under the no-remote-CI constraint. No Broker or Docker work was
+  run.
+- Phase 19 worktree files remain untouched and unstaged.

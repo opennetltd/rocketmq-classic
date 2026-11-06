@@ -1,0 +1,58 @@
+# Phase 18 current server-free workspace gate
+
+- Recorded: 2026-10-23 14:13:33 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Code revision: `0c372d0a`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Verification
+
+- `cargo test --offline --locked --workspace` — passed, including unit,
+  integration and documentation tests across the workspace.
+- `cargo test --offline --locked --workspace --all-features` — passed, including
+  unit, integration and documentation tests across the workspace.
+- `cargo clippy --offline --locked --workspace --all-targets --all-features
+  -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- `mvn -q -o -f compat/java-reference/pom.xml verify` — passed; 37 scenarios,
+  11 message fixtures, 106 typed-header cross-decodes and 19 typed-body
+  cross-decodes.
+- `python3 tests/differential/compare.py --self-test` — passed.
+- `python3 tests/differential/compare.py --validate-manifest` — passed,
+  37 scenarios.
+- `bash tests/stress/run-offline-smoke.sh` — passed 17 deterministic race/leak
+  cases repeated three times.
+- `cargo run --offline -p rocketmq-classic-remoting --example fuzz_smoke
+  --locked` — passed 163 frame seeds, 11 message seeds, 2,784 bounded
+  mutations, 245 frame decodes and 192 message decodes.
+- `cargo build --offline --locked -p rocketmq-classic --examples --release` —
+  passed.
+- `cargo bench --offline -p rocketmq-classic --bench offline --locked` —
+  passed on Apple M5 Max / macOS AArch64 / Rust 1.85.0. The fixed-input sample
+  reported 2,209.3 ns/frame encode-decode, 1,094.7 ns/message decode,
+  1,280.9 ns/send-request construction, 13.9 ns/128-entry route lookup, and
+  66,814.8 ns/loopback pending completion. Allocation observations were
+  respectively 40 calls/4,676 bytes, 17/197,493, 54/3,665, 0/0 and 82/9,561
+  per measured operation. These are local observations, with no acceptance
+  threshold.
+- `cargo metadata --offline --locked --format-version 1 --no-deps` and
+  `python3 scripts/check-workspace-metadata.py` — passed; workspace metadata,
+  seven product package license files, and dependency direction were checked.
+- `cargo package --workspace --list --locked --allow-dirty --offline` — passed;
+  package contents include `LICENSE` and `NOTICE`.
+- `cargo check --offline -p rocketmq-classic-core --all-targets
+  --all-features --locked --target x86_64-pc-windows-gnu` — passed. This is a
+  cross-target compile check, not native Windows execution.
+- `RUSTDOCFLAGS='-Z unstable-options --output-format json' cargo +nightly doc
+  --offline --workspace --all-features --locked --no-deps` — passed. Distinct
+  public-name counts are Common 439, Consumer 460, Core 747, Producer 361,
+  Protocol 1,524 and Remoting 337. Existing workspace `publish` and Consumer
+  `AtomicU64::fetch_update` warnings remain.
+
+No push, external CI, native Windows execution, or Broker/Docker validation was
+run. The four existing user-owned Phase 19 paths were left untouched and
+unstaged. Broad P18-V01 Java source/API/settings/input/error/control-flow and
+Rust reverse-export reconciliation remains partial; current-revision remote
+Ubuntu evidence, native Windows runtime, and Phase 19 Broker/Docker evidence
+remain open.

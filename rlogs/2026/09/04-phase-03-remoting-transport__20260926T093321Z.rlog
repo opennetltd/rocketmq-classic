@@ -1,0 +1,11 @@
+# Phase 3 remoting transport execution log
+
+- Date/session: 2026-09-26 UTC, `20260926T093321Z`.
+- Scope: execute parity recommendations, Phase 3 only; plans not modified. Java RocketMQ 5.5.1 is the API/flow oracle. Phase 4 remains blocked.
+- Decision implemented: Rust `invoke_oneway` now exposes `Result<Ready<Result<(), TransportError>>, TransportError>`. Synchronous call-boundary failures (shutdown, expired deadline, invalid address) are outer `Err`; after passing those checks the ready future is returned and later operation failures remain post-return/unobservable, as Java returns after registering its connection-future listener. The acquisition future is still polled once before return and any pending work moves into owned tasks.
+- Tests: migrated all call sites for nested result; renamed/updated regression to `p3_oneway_reports_invalid_address_synchronously`. Existing one-way send/drop/single-flight tests retained. A sync test initially panicked because `RemotingClient` construction requires a Tokio runtime; retained Tokio test harness, while the assertion verifies `invoke_oneway` itself returns the validation error immediately before any await.
+- Documentation: Java compatibility narrative and Phase 3 inventory updated to show the public return contract and test. Both Phase 3 plans were read previously and remain unchanged.
+- Validation PASS: `cargo fmt --all --check`; `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`; `cargo test --workspace --locked --offline` (13 library unit tests, 4 codec integration, 56 transport integration, doc tests pass); `python3 scripts/check-workspace-metadata.py`; `python3 tests/differential/compare.py --self-test`; `git diff --check`.
+- Not run: Java Maven, Docker/live Broker; P3-V04 remains Phase 19.
+- Remaining blockers are substantial and unchanged beyond the oneway call-boundary API: public config/API coverage and mutation timing; Java TLS property/config lifecycle and encrypted key strategy; hook panic/equality semantics; executor/event lifecycle, rejection and overload; channel/context capabilities; callback/error/cause/timeout races; ChannelWrapper/NameServer flow. These remain acceptance blockers; no parity claim.
+- Commit status: implementation and docs/log changes uncommitted at log creation; commit after review.

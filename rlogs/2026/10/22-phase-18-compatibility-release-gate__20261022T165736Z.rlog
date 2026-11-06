@@ -1,0 +1,53 @@
+Phase 18 compatibility release-gate continuation — 2026-10-22 16:57 UTC
+
+Code revision: `2887a032`. Environment: macOS AArch64, Apple M5 Max, 18 logical
+CPUs, Rust 1.85.0. Java reference: RocketMQ client 5.5.1 tag commit
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Compatibility slice:
+- Pinned Java `TopicMessageType.getMetricsValue()` calls no-argument
+  `String.toLowerCase()`. Rust now follows locale-sensitive lowercase using
+  `LC_ALL`, `LC_CTYPE`, then `LANG`, including Turkish/Azeri `I` handling.
+- The invoked Java producer-core fixture sets `Locale` to `tr-TR` and records
+  all eight enum labels. The Rust subprocess test compares the full vector
+  under `LC_ALL=tr_TR.UTF-8`.
+- Producer core fixture SHA-256:
+  `3743dd869f394f995422d6849e67741a14d44a643f74b3c9e23a253aaac52919`.
+
+PASS:
+- `cargo test -p rocketmq-classic-protocol --test topic_config_public_api
+  --locked`: all four API fixture tests
+- `cargo test -p rocketmq-classic-common --locked`: 87 unit, integration,
+  and doctest cases
+- `cargo test --workspace --locked`
+- `cargo test --workspace --all-features --locked`
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+- `cargo fmt --all -- --check`; `git diff --check`
+- `mvn -o -q -f compat/java-reference/pom.xml
+  -Dproducer.core.fixture.verify=true verify`: 37 scenarios, 36 runtime
+  route/VIP cases, Java decoding of 106 typed headers and 19 typed bodies
+- `python3 tests/differential/compare.py --self-test`
+- `python3 tests/differential/compare.py --validate-manifest`: 37 scenarios
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`:
+  163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes,
+  112 message decodes
+- `bash tests/stress/run-offline-smoke.sh`: 16 deterministic race/leak cases
+  x 3 repetitions
+- `cargo build -p rocketmq-classic --examples --release --locked`
+- `cargo bench -p rocketmq-classic --bench offline --locked`
+- `cargo clippy -p rocketmq-classic --bench offline --all-features --locked
+  -- -D warnings`
+- `python3 scripts/check-workspace-metadata.py`; locked Cargo metadata;
+  package-list checks for all seven product crates, each with `LICENSE` and
+  `NOTICE`
+- Four Core Unique ID tests under both `TZ=UTC` and `TZ=Asia/Taipei`
+- Windows GNU Core all-target check and Consumer stack-capture test
+  cross-compilation (`--no-run`)
+
+The current single-run benchmark observations are appended to
+`docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md` without thresholds.
+Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export
+reconciliation remains open. Current-revision remote Ubuntu CI and native
+Windows execution remain unverified. No push, external CI, Broker, or Docker
+run was performed. Protected Phase 19 worktree files were not staged or
+modified.

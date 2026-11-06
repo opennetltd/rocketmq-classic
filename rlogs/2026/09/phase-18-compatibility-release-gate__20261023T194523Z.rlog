@@ -1,0 +1,34 @@
+# Phase 18 compatibility release gate — 2026-10-23 19:45:23 UTC
+
+Base revision: `e6e1d62e` on `phase/18-phase-18-compatibility-closure`.
+This follow-up makes the Java lifecycle fixture network-isolated and records
+the completed local Maven gate after the inbound shutdown-flow correction.
+
+## Offline fixture adjustment
+
+`ConsumerLifecycleFixtures.failedLitePullMetadataSchedule` now configures
+`127.0.0.1:1` as the NameServer address before the expected zero-interval
+startup failure. The previous unset-address behavior entered the default
+external NameServer DNS resolver. The fixture retains its expected failure
+assertions and now completes without default NameServer discovery.
+
+## Verification
+
+- Consumer lifecycle fixture `--verify` — passed.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — exited 0. The run
+  validated 37 scenarios, 11 Java message fixtures, 106 typed headers,
+  19 typed bodies, Java/Rust cross-decodes, and runtime fixture verifications
+  including four inbound shutdown cases.
+- Current-tree sequential `cargo test --workspace --locked --quiet` and
+  `cargo test --workspace --all-features --locked --quiet` — passed.
+- Strict workspace Clippy and Windows GNU workspace check/Clippy — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+## Remaining scope
+
+The inbound shutdown version-gate correction is one narrow P18-V01 closure;
+the broad source/API/settings/input/error/control-flow and reverse-export audit
+remains PARTIAL. Native Windows runtime, current-revision remote CI, and Phase
+19 Broker/Docker scenarios were not run. No plan was edited, no push or remote
+CI was run, and the four pre-existing Phase 19 paths remain untouched and
+unstaged.

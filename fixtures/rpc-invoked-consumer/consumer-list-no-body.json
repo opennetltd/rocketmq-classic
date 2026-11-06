@@ -1,0 +1,1 @@
+{"case":"consumer-list-no-body","mode":"SYNC","outcome":"MQBrokerException;code=0;malformed","provenance":{"client":"org.apache.rocketmq:rocketmq-client:5.5.1","entrypoint":"MQClientAPIImpl","serverBaselineContacted":false,"transport":"mock RemotingClient"},"request":{"code":38,"ext":{"consumerGroup":"consumer"}},"response":{"code":0,"ext":{}}}

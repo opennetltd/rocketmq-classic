@@ -1,0 +1,6 @@
+# Phase 18 Producer interface-method disposition — 2026-10-14T04:06:32Z
+
+- Audited pinned `DefaultMQProducerImpl implements MQProducerInner`. Its seven interface signatures are `getPublishTopicList`, `isPublishTopicNeedUpdate`, `checkListener`, `getCheckListener`, `checkTransactionState`, `updateTopicPublishInfo`, and `isUnitMode`; the methods are already present in the pinned 82-method implementation inventory.
+- Added exact signature assertions for the transaction-listener getters/check entrypoint and documented the complete Rust owner mapping: route callbacks through `ProducerRuntime`, listener handles through `TransactionProducer`, unit mode through Producer config, and inbound check through the runtime-owned transaction processor. No production behavior change.
+- PASS: targeted pinned implementation-surface inventory test; format check; `git diff --check`.
+- This closes the `MQProducerInner` method disposition only. Java inherited API, Rust trait/export reverse audit, and broad source/input/overload branch reconciliation remain PARTIAL.

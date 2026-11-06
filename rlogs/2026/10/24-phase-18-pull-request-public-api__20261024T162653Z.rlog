@@ -1,0 +1,54 @@
+# Phase 18 Java-compatible PullRequest public API
+
+- Recorded: 2026-10-24 16:26:53 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Code revision: `25b1a8e2`
+- Host: macOS AArch64, Rust 1.85.0
+- Java reference: `org.apache.rocketmq:rocketmq-client:5.5.1`, source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Change
+
+- Added public `rocketmq_classic_consumer::PullRequest` and exported it through
+  the facade.
+- Mapped Java's no-argument defaults and 14 declared public methods, `PULL`
+  mode, equality/hash selection, UTF-16 String hashing, shared mutable
+  `MessageQueue` and `ProcessQueue` references, offset/lock state, and text
+  rendering. Equality/hash use only consumer group and message queue.
+- Kept the directly constructible value separate from the crate-private
+  scheduler request. Nullable group state uses the existing nullable
+  `MessageRequest` route.
+- Added invoked Java surface and behavior cases to
+  `ConsumerFacadeApiFixtures.java`; fixture SHA-256:
+  `0a5f273c4fbe904fd6dbf255d2ba22e71a83a9558c94efa4cdb52cd261f58499`.
+- Java fixture source SHA-256:
+  `c039d95a655b90fabf0768f13c41ebfe54d40acd15c91e09273123df4aeb3869`.
+- Pinned Java `PullRequest.java` source SHA-256:
+  `28250c43552471c12ec84491c85635dab85aaad89f0af41802170ab5da84f257`.
+
+## Verification
+
+- Focused PullRequest fixture differential and consumer/facade public-type
+  tests pass.
+- `cargo test --workspace --all-features --locked` passes the workspace tests
+  and doctests.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings` passes after deriving the default implementation.
+- Pinned offline Maven `verify` passes with 37 scenarios, 11 message fixtures,
+  106 typed headers, and 19 typed bodies.
+- All-feature Rustdoc JSON generation passes. Excluding crate roots, it reports
+  442 Common, 479 Consumer, 800 Core, 379 Producer, 1,528 Protocol, and 341
+  Remoting distinct public names. Consumer has 701 public item records;
+  Remoting has 404. The root facade direct-export scan covers 128 names.
+  Rustdoc reports the existing workspace `publish` and Consumer
+  `AtomicU64::fetch_update` warnings.
+- `cargo fmt --all -- --check` and `git diff --check` pass.
+
+## Remaining audit status
+
+- This closes the Java `PullRequest` direct value/API row only. Broad P18-V01
+  source/settings/input/error/control-flow and reverse-export reconciliation
+  remains PARTIAL.
+- Native Windows runtime and current-revision remote Ubuntu CI remain
+  unverified. No push or remote CI ran.
+- Phase 19 user-owned paths remain unchanged and unstaged.

@@ -1,0 +1,57 @@
+# Phase 18 compatibility release gate — 2026-10-23 18:11:37 UTC
+
+Base revision: `00e63f7a`. This entry records the controller/replica API
+compatibility slice against the pinned RocketMQ Java 5.5.1 source revision
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Compatibility changes
+
+Added seven public `MQClientAPIImpl` counterparts to Core `MQClientApi`:
+`get_controller_meta_data`, `get_in_sync_state_data`,
+`get_broker_epoch_cache`, `get_controller_config`,
+`update_controller_config`, `elect_master`, and
+`clean_controller_broker_data`. Added their nullable Java DTOs, request
+headers, controller leader lookup, timeout handling, fallback/no-op behavior,
+and nullable response decoding. The previously implemented
+`check_rocksdb_cq_write_progress` was removed from the audit's missing list.
+
+Added seven API signatures and ten invoked Java request-envelope cases to the
+producer Core fixture, plus Rust request/body comparisons. Corrected the
+same-day API audit: caller location in `DefaultMQAdminExt` or `tools` does not
+remove a public `MQClientAPIImpl` capability from Phase 18 scope. The revised
+document records counterparts and evidence while retaining broad P18-V01 as
+open. Fixture SHA-256:
+`4e646f238644b34f5ee15f8bc11538d4a0c13aa2f5a886bd8b68aaaa29a4bd30`.
+
+## Validation
+
+Toolchain: Cargo 1.85.0, rustc 1.85.0, Maven 3.10.0, OpenJDK 21.0.12.1.
+All checks completed successfully on the final source and fixture state:
+
+- `cargo fmt --all -- --check`
+- `git diff --check`
+- `cargo test -p rocketmq-classic-core --test controller_api --locked`
+- `cargo test -p rocketmq-classic-core --locked`
+- `cargo clippy -p rocketmq-classic-core --all-targets --locked -- -D warnings`
+- `mvn -o -q -Dproducer.core.fixture.verify=false compile exec:java@verify-java-producer-core-fixtures` (from `compat/java-reference`)
+- `mvn -o -q -Dproducer.core.fixture.verify=true exec:java@verify-java-producer-core-fixtures` (from `compat/java-reference`)
+- `mvn -o -q verify` (from `compat/java-reference`; full compatibility verification and cross-decoding)
+
+The Rust Core suite passed, including 249 library tests, 120 admin RPC tests,
+7 controller API tests, other Core integration targets, and 21 doctests. Full
+Maven verification completed with exit code zero, including runtime probes,
+Java fixture verification, and decoding of Rust-generated Java header/body
+fixtures.
+
+## Corrections made during implementation
+
+- Replaced an incorrect Apache Commons `Pair` use with RocketMQ's `Pair` API.
+- Normalized the Java invocation-time field in the targeted fixture and
+  restored an unrelated helper line after detecting fixture drift.
+- Matched Java defaults for empty `BrokerMemberGroup` address maps and missing
+  `EpochEntry.endOffset` (`Long.MAX_VALUE`).
+- Fixed a clippy needless borrow and reran clippy successfully.
+
+No plan files were changed. The pre-existing Phase 19 worktree paths remain
+untouched and unstaged. No remote CI, Docker validation, or full Phase 18
+closure was performed; broad P18-V01 remains open.

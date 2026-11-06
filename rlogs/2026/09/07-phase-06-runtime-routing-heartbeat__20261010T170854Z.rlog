@@ -1,0 +1,6 @@
+# Phase 6 execution session — 2026-10-10T17:08Z
+
+- Extracted the Windows IP Helper table join into a host-testable candidate builder used by the `cfg(windows)` enumerator. It joins address rows by LUID, applies the captured AdminStatus/OperStatus/AccessType predicates and unicast DAD filter, preserves per-table and interface order, maps scoped socket addresses, and applies the IPv4-stack filter.
+- Added `windows_interface_candidate_pipeline_joins_filters_and_orders_tables`, covering valid/down/point-to-point interfaces, multiple LUIDs, unmatched rows, invalid/preferred/deprecated unicast states, anycast ordering, IPv4/IPv6, and named IPv6 scope behavior.
+- Validation: all 18 `local_address::tests` pass; strict core all-target Clippy and formatting/diff checks pass; the exact repository module and its tests type-check offline for `x86_64-pc-windows-gnu` in `/private/tmp/p6-windows-address-check`.
+- This tests the combined table-processing algorithm with synthetic rows. Windows IP Helper runtime enumeration, non-macOS Unix enumeration, and real IPv6-only host behavior remain unverified.

@@ -1,0 +1,18 @@
+Phase 18 compatibility crosswalk refresh
+
+Date: 2026-10-21 UTC
+Branch: `phase/18-phase-18-compatibility-closure`
+
+Scope:
+- Audited current statements in the request-code crosswalk against the latest pinned Java Maven `verify` output.
+- Corrected its current Rust-to-Java typed-header frame count from 72 to 80 and added the new Lite dispatch trigger to the operation-owner summary.
+- Kept dated historical gate counts unchanged.
+
+Evidence:
+- `mvn -f compat/java-reference/pom.xml verify`: passed on code commit `f521c5b5`; Maven reported Java decoded 80 Rust-generated typed-header frames and 15 typed-body frames.
+- `git diff --check`: passed.
+
+Remaining:
+- Broad P18-V01 bidirectional source/API/settings/input/error/control-flow/reverse-export audit remains open.
+- Current Ubuntu/native Windows P18-V04 evidence and Phase 19 live Broker scenarios remain open.
+- Phase 19 worktree paths remain unstaged and untouched.

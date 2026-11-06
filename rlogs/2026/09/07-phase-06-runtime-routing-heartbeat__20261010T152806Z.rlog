@@ -1,0 +1,11 @@
+# Phase 6 execution session — 2026-10-10T15:28Z
+
+- Continued source/input reconciliation on `07-phase-06-runtime-routing-heartbeat`. The nullable assignment-field implementation already preserved non-null values; this slice adds direct evidence for the empty-string boundary.
+- Pinned Java 5.5.1 `MQClientInstance.queryAssignment(topic, "", "", BROADCASTING, timeout)` forwards empty consumer-group and strategy strings. `MQClientAPIImpl` sends request code 400 with those fields present as empty strings and the model present as `BROADCASTING`; the empty success response decodes to an empty Set.
+- Oracle/fixture commit `9a264e0b` precedes the Rust regression commit `2aae44ac`. `empty_assignment_fields_match_java_request_body` checks Java runtime/API observations and the actual Rust loopback body/result. No production implementation change was needed.
+- `fixtures/runtime/lookup.json` SHA-256: `5ea388cd3b1f87f768d0f7e9de20f710faa7657ee4cee745fed51a6624fafd88`.
+- Validation passed: `cargo test --workspace --all-targets --locked` with local socket access; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; pinned offline Maven verify (22 scenarios, runtime fixture drift and Java cross-decodes); comparator self-test and manifest validation (22 scenarios); formatting and `git diff --check`.
+- Correction to `20261010T152232Z.rlog`: that note called the assignment request code 301; the actual pinned Java fixture records `QUERY_ASSIGNMENT` as code 400. The current API map and requirement audit use 400.
+- Corrected the reverse API inventory to describe `GetConsumerListByGroupResponseBody`'s shared List handle and owned RPC snapshot boundary (documentation commit `afa92fb4`). The current audit now also records both nullable and empty assignment lookup inputs.
+- Full Phase 6 source/API/input/platform reconciliation remains open; P6-V04 stays `PENDING_PHASE_19`.
+- Documentation/log commit: pending.

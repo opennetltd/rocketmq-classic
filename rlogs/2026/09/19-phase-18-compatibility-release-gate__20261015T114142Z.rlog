@@ -1,0 +1,25 @@
+# Current-revision Phase 18 server-free gates — 2026-10-15T11:41:42Z
+
+- Ran the P18-V02 server-free verification on `78bf82ca`, after the Netty
+  frame-limit setting parity change.
+- PASS: `cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked`.
+- PASS: strict all-target/all-feature workspace Clippy; pinned Maven verify
+  (37 scenarios, default/configured Java frame-limit probes, 2 Rust-generated
+  base frames, 54 typed headers, and 14 typed bodies); differential comparator
+  self-test and 37-scenario manifest validation.
+- PASS: `bash tests/stress/run-offline-smoke.sh` (16 cases × 3); remoting fuzz
+  smoke (104 frame seeds, 10 message seeds, 1,824 bounded mutations); release
+  examples; workspace benchmark compilation; locked Cargo metadata; workspace
+  metadata/license/dependency check; and all seven package-content listings.
+- PASS: Java unique-ID fixture under `TZ=UTC` and `TZ=Asia/Taipei`, formatting,
+  and `git diff --check`.
+- Updated the release checklist. P18-V02 server-free gates are complete on
+  `78bf82ca`. P18-V01's broad bidirectional API/settings/input/error/flow and
+  reverse-export audit remains open; P18-V04 still needs current-revision
+  GitHub Ubuntu address-profile evidence. Phase 19 local Docker/Broker
+  automation and pre-publication version/registry-resolution checks remain
+  implementation/release-preparation work. Owner-run live/deployment checks
+  remain assigned to Phase 19.
+- No plan, push, tag, publication, or Broker validation was performed. The
+  pinned Java source repository remains read-only.

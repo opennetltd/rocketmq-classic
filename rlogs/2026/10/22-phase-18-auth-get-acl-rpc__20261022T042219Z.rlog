@@ -1,0 +1,48 @@
+# Phase 18 compatibility release gate — 2026-10-22 04:22:19 UTC
+
+Base revision: `7b869b0f`. This entry records the request 3009 `getAcl`
+Broker RPC and DTO slice. Pinned Java source is
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Compatibility changes
+
+- Added nullable `GetAclRequestHeader` with Java's no-op `checkFields()`
+  behavior and included it in the typed-header inventory and Java/Rust frame
+  cross-decode.
+- Added nullable `AclInfo`, `AclPolicyInfo`, and `AclPolicyEntryInfo` models.
+  They preserve missing/null/empty collections and null policy, entry, action,
+  and source-IP members while using Java's camelCase JSON field names.
+- Added `MQClientApi::get_acl` for request 3009. It sends the nullable subject
+  to the supplied Broker address with the caller timeout and returns a nullable
+  ACL DTO for absent and JSON-null response bodies.
+- Added invoked Java/Rust cases for populated/default/null/empty policies,
+  null policy members, null and empty subjects, success, Broker rejection,
+  timeout, and VIP-enabled unchanged-address behavior.
+- Updated the request-code and direct API audits. Four auth operations remain
+  open: `createAcl`, `updateAcl`, `deleteAcl`, and `listAcl`.
+
+## Local verification
+
+- `cargo test -p rocketmq-classic-protocol --locked`: 156 unit tests, 57
+  integration tests, and 157 doctests passed.
+- `cargo test -p rocketmq-classic-core --test admin_rpc --locked`: 112 passed.
+- `cargo test -p rocketmq-classic-core --lib --locked`: 206 passed.
+- `cargo clippy -p rocketmq-classic-protocol -p rocketmq-classic-core -p rocketmq-classic-remoting --all-targets --all-features --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- `mvn -o -f compat/java-reference/pom.xml verify`: BUILD SUCCESS; Java
+  decoded 102 Rust typed-header fixtures and 19 Rust typed-body fixtures.
+- SHA-256 `fixtures/producer/core.json`:
+  `e7a7be35a115719e458ba47544cd66bf6b14ac74a53cc77e0ca541bb83163ac4`.
+- SHA-256 `fixtures/remoting/header-get-acl-request.json`:
+  `5c0e8618f298e362650483f288b255114fffde8e1b981f41af8ca945f5c82f48`.
+- SHA-256 `fixtures/remoting/header-get-acl-request.bin`:
+  `c974e0a58ee5722f16a480840740895c5fcc326b6deef9c5da6894ed48b0a672`.
+
+## Remaining work
+
+Request 3009 is closed for the nullable ACL response states described above.
+`createAcl`, `updateAcl`, `deleteAcl`, and `listAcl` remain unimplemented.
+Broader Phase 18 settings, input, error, control-flow, reverse-export, and
+platform reconciliation also remains open. No Broker, Docker, or remote CI was
+used. Pre-existing Phase 19 worktree paths remain unstaged and outside this
+slice.

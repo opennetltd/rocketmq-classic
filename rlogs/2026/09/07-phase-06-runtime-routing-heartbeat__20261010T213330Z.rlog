@@ -1,0 +1,6 @@
+# Phase 6 Java NameServer provider iteration oracle — 2026-10-10T21:33:30Z
+
+- Pinned `DefaultTopAddressing.fetchNSAddr()` bytecode shows a ServiceLoader list traversal that returns the first non-null/non-empty provider address; `registerChangeCallBack` forwards the callback to every loaded provider. Rust `DefaultTopAddressing` currently stores only one provider, so chained `with_provider` drops earlier values.
+- Extended `RuntimeDiscoveryFixtures.providerSequence` to invoke the pinned Java methods with three proxy providers. Provider 1 returns null, provider 2 returns `second:9876`, provider 3 is skipped for fetch; callback registration reaches all three. No broker or socket is used.
+- Regenerated `fixtures/runtime/discovery.json`; the invoked output records `fetchCalls=[first,second]`, `fetchResult=second:9876`, and `callbackCalls=[first,second,third]`. `mvn -o -q -Dmaven.repo.local=/private/tmp/p6-maven-repository -f compat/java-reference/pom.xml exec:java@verify-runtime-discovery-fixtures` passes (20 recorded cases). The pinned Java log configuration prints a denied write diagnostic for its default path outside the repository, but fixture verification exits 0.
+- Added audit item 27. This commit records oracle evidence only; the Rust builder fix and direct differential remain to be implemented as a separate change.

@@ -1,0 +1,50 @@
+# Phase 18 IPv6 host-flag subtype hooks and P18-V02 server-free refresh — 2026-10-21T20:10:00Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `c7354649` (`feat(common): dispatch subtype host flag setters`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `7cf4e8040b8e040117207c8819d67f1dd7bf7f9f0daa6374ce0f7c345bf9171c`.
+
+## Change
+
+- Java `MessageExt.setBornHostV6Flag()` and
+  `setStoreHostAddressV6Flag()` now dispatch through `MessageExtSubtype`.
+  The fallback path still sets each corresponding sysFlag bit.
+- The invoked direct-consume Java/Rust fixture overrides both setters and
+  compares the subtype write count and other metadata views.
+
+## Verification
+
+- PASS: focused direct-consume integration tests (3 cases).
+- PASS: serial `cargo test --workspace --locked --quiet` and
+  `cargo test --workspace --all-features --locked --quiet`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: pinned Maven `verify`: 37 scenarios, 9 Running Info, 27 direct-consume,
+  15 reset cases, 83 typed headers, 16 typed bodies and Java/Rust
+  cross-decodes. Existing JDK Unsafe and reflective-final-field warnings were
+  emitted.
+- PASS: differential comparator self-test and 37-scenario manifest validation.
+- PASS: offline deterministic race/leak smoke, 16 cases × 3 repetitions.
+- PASS: release fuzz smoke, 137 frame seeds, 11 message seeds, 2,368 bounded
+  mutations, 201 frame decodes and 118 message decodes.
+- PASS: release workspace examples and `cargo bench --workspace --no-run
+  --locked`.
+- PASS: locked Cargo metadata (8 workspace members, 216 total packages,
+  208 registry packages), no-deps metadata (8 packages), workspace
+  metadata/license/dependency checks, and seven publishable package listings
+  containing `LICENSE` and `NOTICE`.
+- PASS: four Core Unique ID tests under both `TZ=UTC` and `TZ=Asia/Taipei`.
+- PASS: offline benchmark on Apple M5 Max, macOS aarch64, Rust 1.85.0:
+  frame encode/decode 2,392.3 ns/iteration; zstd decode 1,211.7 ns; producer
+  request construction 1,294.3 ns; 128-entry route lookup 14.8 ns; loopback
+  pending completion 63,931.1 ns. These are observations, not thresholds.
+
+## Current status
+
+This refresh closes current-revision server-free P18-V02 gates on `c7354649`.
+Broad P18-V01 API/settings/input/error/control-flow/reverse-export
+reconciliation, Java live `getProperties()` map identity and current-revision
+GitHub Ubuntu/native Windows P18-V04 runtime evidence remain open. No push,
+remote CI, Broker or Docker run was performed. Pre-existing Phase 19 paths
+were left untouched and unstaged.

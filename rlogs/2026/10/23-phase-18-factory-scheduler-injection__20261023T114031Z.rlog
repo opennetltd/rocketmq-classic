@@ -1,0 +1,66 @@
+# Phase 18 Java factory scheduler injection compatibility
+
+- Recorded: 2026-10-23 11:40:31 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Starting revision: `e0937f80`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: `MQClientAPIFactory` constructor scheduler parameter and current Rustdoc export reconciliation
+
+## Finding and change
+
+The pinned Java class exposes two public constructors, both accepting a
+`ScheduledExecutorService`; the seven-argument overload additionally accepts
+`ObjectCreator<RemotingClient>`. Rust already mapped remoting-client creation
+but both constructor paths always used factory-owned Tokio scheduling. This
+left Java's scheduler-injection capability unavailable to Rust callers.
+
+Core now exposes `FactoryRefreshScheduler`, `FactoryRefreshTask`, and
+`FactoryRefreshFuture`, plus `MQClientApiFactory::with_refresh_scheduler`.
+Domain discovery registers one callback per client at a 10-second initial
+delay and 120-second fixed rate. The caller owns the injected scheduler. The
+default constructors retain Tokio-owned workers. Registration rejection maps
+to `MQClientApiFactoryError::RefreshScheduleFailed` after already-started
+clients remain visible, preserving startup order.
+
+The same audit refreshed the distinct public Rustdoc name set. Counts are
+Common 439, Consumer 460, Core 744, Producer 362, Protocol 1,524, and Remoting
+337. Compared with the 2026-10-22 `1dc3a7e2` baseline, Core adds 62 names and
+Consumer adds 15, with no removed names. The four Core names since the prior
+scan are the scheduler trait, its two callback aliases, and the builder.
+
+## Verification
+
+- `cargo +nightly rustdoc --offline -p rocketmq-classic-core --all-features --lib -- -Z unstable-options --output-format json` — passed; Core count 744.
+- `cargo test --offline -p rocketmq-classic-core --lib --locked` — passed; 242 tests.
+- `cargo test --offline -p rocketmq-classic-core --all-features --locked` — passed; unit, integration, and 20 doctests, including both injected-scheduler regressions.
+- `cargo clippy --offline -p rocketmq-classic-core --all-targets --all-features --locked -- -D warnings` — passed.
+- `cargo fmt --all` — passed.
+
+## Acceptance boundary
+
+This closes the Java factory scheduler-injection public capability and
+current Rustdoc reverse-name delta only. Broad P18-V01 source/API/settings/
+input/error/control-flow reconciliation remains open. No push or remote CI
+was run. Existing Phase 19 working-tree files were left untouched.
+
+## Follow-up verification — 2026-10-23 11:44:59 UTC
+
+- `cargo test --offline --workspace --all-features --locked` — passed; all workspace unit, integration, and doctests passed, including the new public scheduler adapter and dependent facade crates.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+## P18-V02 current-tree refresh — 2026-10-23
+
+- `cargo test --offline --workspace --locked` — passed, including all workspace doctests.
+- `cargo test --offline --workspace --all-features --locked` — passed, including all workspace doctests.
+- `mvn -q -o -f compat/java-reference/pom.xml verify` — passed; 37 Java 5.5.1 differential scenarios, invoked runtime cases, 106 typed header frames, and 19 typed body fixtures verified.
+- `python3 tests/differential/compare.py --self-test` — passed; `--validate-manifest` — passed with 37 scenarios.
+- `python3 scripts/check-workspace-metadata.py` — passed metadata, license-file, and dependency-direction checks.
+- `bash tests/stress/run-offline-smoke.sh` — passed 17 deterministic race/leak cases × 3 repetitions.
+- `cargo run --offline -p rocketmq-classic-remoting --example fuzz_smoke --locked` — passed 163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes, and 192 message decodes.
+- `cargo build --offline -p rocketmq-classic --examples --release --locked` — passed.
+- `cargo bench --offline -p rocketmq-classic --bench offline --locked` — passed on Apple M5 Max / macOS AArch64 / Rust 1.85.0 with fixed fixture inputs.
+- `cargo check --offline -p rocketmq-classic-core --all-targets --all-features --locked --target x86_64-pc-windows-gnu` — passed; cross-compilation only.
+- `cargo fmt --all -- --check`, `git diff --check`, and strict all-target/all-feature workspace Clippy — passed.
+
+Native Windows runtime and current-revision remote Ubuntu CI were not run. No Broker/Docker validation, push, or remote CI was performed. The four user-owned Phase 19 worktree paths remain untouched and unstaged. P18-V01 broad source/API/settings/input/error/control-flow reconciliation remains PARTIAL.

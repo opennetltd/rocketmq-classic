@@ -1,0 +1,44 @@
+# Phase 18 MessageExt property-map override follow-up — 2026-10-21T18:54:35Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `13a68d1d` (`feat(common): dispatch subtype property maps`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `348f65888fbce4d8d36fec26ac88c9279deacb6bbbcaf3514646e2efa3f460e5`.
+
+## Source audit and change
+
+- Pinned Java Push retry/send-back code calls virtual `Message.getProperties()`
+  and passes the returned map to the retry message. Rust previously copied
+  property entries only from the base `Message` map.
+- Added a nullable `MessageExtSubtype::properties` hook and explicit
+  `MessageExt` property views/entry iterators. Custom maps are read as owned
+  snapshots; base messages retain their existing live read guards. Retry
+  message property copying now iterates the virtual subtype entries.
+- The invoked Java custom subtype returns a map with
+  `subtype-only=visible`; the direct-consume fixture compares the callback
+  value and virtual getter count. Rust matches both. The ProcessQueue
+  `MAX_OFFSET` override still yields `msgAccCnt=12`.
+- Java's `getProperties()` returns its mutable map reference. The Rust hook
+  snapshots it, so map identity and mutation aliasing remain an open semantic
+  gap. Updated Phase 6, Phase 10 and Phase 18 records and the release checklist.
+
+## Verification
+
+- PASS: focused
+  `cargo test --locked -p rocketmq-classic-consumer --test runtime_direct_consume`
+  (3 tests).
+- PASS: pinned Java runtime fixture regeneration through Maven; 9 Running
+  Info, 27 direct-consume and 15 reset cases verified. Existing JDK Unsafe
+  warnings were emitted.
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- Full workspace tests, Maven `verify`, strict Clippy, and supplemental P18-V02
+  differential/stress/fuzz/example/benchmark/metadata/time-zone gates have not
+  been rerun on this revision; refresh them after the remaining local changes.
+
+## Remaining status
+
+Broad P18-V01 source/API/settings/input/error/control-flow/reverse-export
+reconciliation remains open, as do current-revision GitHub Ubuntu and native
+Windows P18-V04 runtime evidence. Phase 19 Broker/Docker validation remains
+separate. No push, remote CI, Broker or Docker run was performed. Pre-existing
+Phase 19 worktree paths were left untouched and unstaged.

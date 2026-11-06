@@ -1,0 +1,6 @@
+2026-10-04 UTC Phase 5 offline Java oracle session (scope: harness/new fixtures and tests only).
+Inspected Phase 5 plan, existing Main.java fixture/Maven conventions, Java 5.5.1 pinned source artifact MQClientAPIImpl and typed response header models. No live Broker contacted; no plan edits.
+Implemented Java response generator for 15 send/pull/offset/route cases, including negative and missing-header cases. Outcome labels are source-derived, not executions of MQClientAPIImpl. Added Rust checked-in fixture decoder/assertions and Rust-to-Java semantic frame verification script.
+Validation: compat/java-reference/run-rpc-differential.sh PASS (15 Rust frames checked by Java decoder); mvn -q -f compat/java-reference/pom.xml test PASS; cargo fmt --all -- --check PASS; git diff --check PASS. Fastjson2 emitted a JVM Unsafe deprecation warning.
+Remaining Phase 5 verification: P5-V01, P5-V03, P5-U01 not complete; request modes, full RPC method/branch inventory, Java method execution, scripted transport and all Phase 19 live comparisons remain open. See harness README coverage gaps.
+Final check: this session covers a subset of P5-08 evidence, not Phase 5 acceptance. Scope respected; no core API or existing core tests modified.

@@ -1,0 +1,77 @@
+# Phase 18 P18-V01 continuation — Producer method crosswalk guard
+
+Session started: 2026-10-14T10:58:23Z
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Branch: phase/19-phase-18-compatibility-release-gate
+Base revision: d2bf174d
+Pinned Java client source: efa1be59d6fc747ad220f036c86030f05f0419f9
+
+## Audit findings and changes
+
+- Confirmed the Phase 19 manifest currently contains the live handoff IDs
+  P12-V03 through P17-V02. `tests/differential/compare.py` derives the later
+  handoffs from the Phase 19 sections of the Phase 12–17 plans and its
+  self-test rejects a missing P17-V02 case.
+- Rechecked the pinned `DefaultMQProducerImpl` inventory: 82 declared public
+  signatures and 61 distinct method names. Spelled out formerly abbreviated
+  method names in the Producer matrix, including both raw semaphore setter
+  signatures and available-permit getters.
+- Added `pinned_java_producer_impl_method_names_have_phase_crosswalks`. It
+  checks every reflected Java method name against the Phase 7 and owning
+  Phase 14–17 compatibility matrices so newly inventoried methods cannot be
+  omitted from those crosswalks.
+- This guards name-level documentation coverage; it does not prove every
+  overload's input, error or control-flow branches equivalent.
+
+## Validation
+
+- PASS: `cargo test -p rocketmq-classic-producer --test producer pinned_java_producer_impl_method_names_have_phase_crosswalks --locked`.
+- PASS: `cargo clippy -p rocketmq-classic-producer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all -- --check` and `git diff --check`.
+- PASS: `python3 tests/differential/compare.py --self-test`.
+- PASS: `python3 tests/differential/compare.py --validate-manifest` — 37 scenarios.
+- Source-name audit: 82 signatures, 61 distinct method names, no missing
+  crosswalk name across Phase 7 and owner matrices for Phases 14–17.
+
+## Commits
+
+- `adf571f6 docs(compat): spell out producer implementation methods`
+- `a6e49acb test(compat): guard producer method crosswalk inventory`
+- `40e7f34b docs(compat): describe producer name coverage guard`
+- This execution record is committed separately.
+
+## Remaining work
+
+- Full P18-V01 Java source/API/input/control-flow reconciliation and Rust
+  reverse-export/inherited-trait audit remain open.
+- Phase 19 Broker/Docker scenarios remain an automated integration gate; no
+  Broker or Docker was used in this session.
+
+## Producer per-request timeout retry continuation — 2026-10-14T11:18:55Z
+
+- Compared pinned Java `DefaultMQProducerImpl.sendDefaultImpl` and
+  `sendKernelImpl` with Rust `send_default_until`. Java catches a local
+  request-scoped `RemotingTooMuchRequestException` and proceeds to the next
+  sync retry while the overall send budget remains. Rust returned a local
+  `ProducerError::Timeout` without retrying.
+- Added the invoked Java `perRequestTimeoutRetry` fixture. It configures
+  request cap 0 with one retry, uses a 5 ms send hook to force the local
+  timeout before transport on the first attempt, and records two before/after
+  hook invocations. It also records that Java accepts setter inputs `-2`,
+  `-1`, `0`, `125`, and `6000`. Fixture SHA-256:
+  `c303c79a59a2bc7220aae6c488d9dc6cfda18d28590aa3f4d8a50af55e8c4dc8`.
+- The new Rust regression failed before the fix: 2 hook calls versus Java's 4.
+  Rust now retries local timeouts only for sync attempts with a stricter
+  request deadline, a later configured attempt, and remaining total budget.
+  Boundary tests cover disabled sentinels, zero and positive caps, total
+  deadline clamping, and Future/Oneway/final-attempt exclusions.
+- PASS: producer crate tests (134 unit tests and all integration/doc targets);
+  strict producer all-target/all-feature Clippy; pinned Maven verify (37
+  scenarios, fixture drift and Java/Rust cross-decodes); comparator self-test;
+  37-scenario manifest validation; fmt and diff checks.
+- Commits: `8ae5183a` Java oracle/fixture, `0a7e7ce2` Rust fix and regression,
+  `3c17e8de` compatibility documentation. The log commit follows separately.
+- This closes the per-request timeout/retry slice only. Full P18-V01
+  bidirectional source/API/input/reverse-export reconciliation remains open;
+  a current-revision full workspace P18-V02 rerun and Phase 19 Broker/Docker
+  execution remain outstanding.

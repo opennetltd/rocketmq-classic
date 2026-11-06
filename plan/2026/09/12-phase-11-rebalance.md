@@ -70,18 +70,23 @@ Remove stale in-memory offsets only at the Java-defined point, then read the aut
 
 Own one periodic service with immediate startup, subscription-change and NOTIFY_CONSUMER_IDS_CHANGED wakeups. Use source-confirmed timing and bounded/coalesced signals. Reject work after shutdown begins. Add barrier-driven remove-versus-pull, remove-versus-listener, concurrent-trigger and rapid join/leave tests; finish the real public Push example and facade exports.
 
+### 4.7 P11-10 — Complete Pull consumer rebalance ownership
+
+Port the Pull consumer's Java allocation-strategy and `enableRebalance` defaults, queue-listener registration, topic/subscription registration, and live in-balance query. Wire these through the same runtime-owned serialized rebalance service: broadcasting assigns all subscribed queues; clustering uses broker membership and retains the current assignment when membership is unavailable. Namespace queue names consistently at subscription and query boundaries. Persist safe offsets before removing queues, retain failed removals for retry, notify listeners after assignment changes, and fence callbacks during shutdown. Keep this Pull facade work under P11-U02 and in the Phase 11 compatibility matrix.
+
 ## 5. Verification
 
 Write the failing check/oracle fixture before its implementation. The cases below must become runnable checks, not manual checklist-only claims. Run these checks without Docker or a live Broker; use Java fixtures, controlled clocks and scripted peers. Shared commands and evidence rules are in the execution index.
 
-- [ ] **P11-V01** — Java/Rust allocations match for 0/1/N queues, 1/N clients, 10q/3c, missing client, Unicode order and every Java strategy.
-- [ ] **P11-V02** — Initial-offset policies match Java; query/persist failure never resets to zero or removes a live replacement.
+- [x] **P11-V01** — Java/Rust allocations match for 0/1/N queues, 1/N clients, 10q/3c, missing client, Unicode order and every Java strategy.
+- [x] **P11-V02** — Initial-offset policies match Java; query/persist failure never resets to zero or removes a live replacement.
 
-- [ ] **P11-U01** — Java allocation fixtures, scripted membership changes and barrier tests verify join/leave convergence, startup, retry, safe offsets and shutdown ownership.
+- [x] **P11-U01** — Java allocation fixtures, scripted membership changes and barrier tests verify join/leave convergence, startup, retry, safe offsets and shutdown ownership.
+- [x] **P11-U02** — Pull rebalance defaults, public listener/registration/query APIs, namespace mapping, broadcasting/clustering assignments, offset-safe removal and unavailable-membership retention are covered by local tests.
 
 ### 5.1 Local commands after implementation
 
-Run after this phase or earlier phases create the named entry points. This documentation task does not execute these commands or claim their tests pass.
+The implementation run executed the focused commands below. Current package/workspace/Maven gate outcomes are recorded in the [Phase 11 compatibility matrix](../../../docs/compatibility/PHASE_11_OFFLINE_METHOD_MATRIX.md) and the later [Phase 11 continuation log](../../../rlogs/2026/09/12-phase-11-rebalance__20261012T011432Z.rlog).
 
 ```bash
 cargo test -p rocketmq-classic-consumer --test rebalance --locked

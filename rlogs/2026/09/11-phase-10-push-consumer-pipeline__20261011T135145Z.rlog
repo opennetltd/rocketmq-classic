@@ -1,0 +1,78 @@
+Phase 10 implementation session started (2026-10-11 UTC).
+
+Baseline revalidation
+- Branch: `phase/11-phase-10-push-consumer-pipeline`, based at Phase 9 commit `9b4ccb6d`; worktree was clean.
+- Read English/Traditional Chinese Phase 10 plans, shared implementation index, and coding-general workflow. Phase 10 implementation/tests are absent; plan is unchanged.
+- Java reference checkout is on a different commit with a pre-existing untracked `broker/.../aaaa.java`; it remains untouched. Audit reads the required pinned commit `efa1be59d6fc747ad220f036c86030f05f0419f9` with `git show`.
+- Confirmed owning boundaries: Phase 10 owns Push queue/pull/consume pipeline; private assignment seam and test-only fixed assignment only. Real allocation remains Phase 11; orderly callback execution remains Phase 12; P10-V03 belongs to Phase 19.
+
+Source audit started
+- Read Java `DefaultMQPushConsumerImpl.start/checkConfig/copySubscription/pullMessage`, `PullMessageService`, and `PullRequest` from the pinned source.
+- Confirmed Rust consumer crate currently contains only Pull consumer, offsets and pull-result modules. Existing core exposes consumer registration/runtime, async pull RPC, typed send-back RPC, route/subscription/heartbeat APIs.
+- Next: finish pinned `ProcessQueue` and concurrent-service audit, map Phase 10 public settings and source/test IDs, then implement P10-01/02.
+
+Java source mapping
+- Completed pinned-source mapping for `DefaultMQPushConsumer` settings/defaults; `DefaultMQPushConsumerImpl` startup, validation, pull outcomes, send-back fallback and shutdown; `PullMessageService`; `PullRequest`; `ProcessQueue`; and `ConsumeMessageConcurrentlyService`.
+- Recorded Phase 10 Java method/config-to-Rust owners, boundary values/defaults, unit case IDs, fixture provenance rule and explicit Phase 11/12/13/16 ownership in `docs/compatibility/PHASE_10_OFFLINE_METHOD_MATRIX.md`.
+- Added Phase 10 source rows to the Java compatibility matrix. All implementation rows remain TODO; P10-V03 remains PENDING_PHASE_19.
+- No Java checkout files changed. Documentation-only diff; no tests run.
+
+P10-01 / P10-02 implementation
+- Added Java-compatible Push settings, validation, TAG subscription entry points, concurrent/orderly listener contracts, offset-store selection, runtime registration and startup rollback. Orderly startup is rejected until Phase 12; real queue assignment and pull activation remain pending.
+- Started the bounded concurrent-consume worker owner after offset-store load and before registration. Startup failures stop/join it before unregistering/shutting down; normal shutdown quiesces it before offset persistence and unregister.
+- Added a startup fault point after worker startup and tests for all eight startup stages. The lifecycle test verifies the default 20 workers start, namespaced subscriptions and retry-topic subscriptions reach heartbeat data, and workers are gone after shutdown.
+- The first worker shutdown test exposed a double-poll of completed Tokio `JoinHandle`s. The shutdown path now awaits the handle only after timeout/abort; the focused test passes.
+- Checks passed: `cargo fmt --check`; `cargo test -p rocketmq-classic-consumer --locked` (36 unit, 12 integration, 0 doc tests failed); `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`.
+- Commits: `766153f7 feat(consumer): add push config and startup lifecycle`; `7e406250 test(consumer): verify Java push config boundaries`.
+- Matrix status: configuration and checkConfig rows UNIT_VERIFIED; subscription row UNIT_VERIFIED; startup row and P10-V04 PARTIAL. P10-V01/V02/U01 remain TODO; P10-V03 remains PENDING_PHASE_19.
+
+P10-03 ProcessQueue
+- Added ordered queue-offset storage with explicit cached count/bytes, queued/in-flight entry state, immutable assignment generation, dropped-state checks, last-pull/consume timestamps and lock metadata.
+- Duplicate ready messages replace the cached message with an exact body-byte delta; duplicates for in-flight offsets do not replace listener-owned content or add count. Completion removes terminal offsets and requeues the rest. Commit candidates stop at the lowest unresolved message and advance to highest-observed-plus-one only when drained.
+- Added four P10-V01 unit tests for duplicate/count/size accounting, gaps, out-of-order batches, partial requeue, in-flight accounting and stale-generation rejection. Oracle source hashes are recorded in the tests and ADR-0083. The requested ADR-0003 filename was already occupied by an unrelated accepted decision; recorded this decision under ADR-0083 without overwriting it.
+- Checks passed: `cargo fmt --check`; `cargo test -p rocketmq-classic-consumer --locked` (40 unit, 12 integration, 0 doc tests failed); `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`.
+- Commit: `94e7c1eb feat(consumer): add generation-safe process queue`.
+- Matrix status: ProcessQueue and P10-V01 UNIT_VERIFIED. P10-V02/U01 remain TODO; P10-V04 PARTIAL; P10-V03 remains PENDING_PHASE_19.
+
+P10-04 bounded pull scheduler foundation
+- Added one owned due-time scheduler worker to Push startup, startup rollback and shutdown. Its pending work is keyed by queue plus assignment generation and coalesces to one scheduled/in-flight request with at most one follow-up.
+- Added immediate/delayed scheduling, pause/resume, cancellation, stale-generation rejection, Java count/MiB/span threshold calculation, delayed-pull/backlog tracing, and Java-confirmed retry-delay constants. No pull response handling or fixed-assignment production API is claimed here.
+- Added paused-time tests for coalescing, single follow-up, pause/resume, cancellation, stale generation, flow-control inputs and worker start/stop. Push lifecycle tests now confirm the worker starts once, stops on shutdown, and startup fault injection includes the scheduler stage.
+- Checks passed: `cargo fmt --all`; `cargo test -p rocketmq-classic-consumer push::pull_service::tests --offline` (5 passed); `cargo test -p rocketmq-classic-consumer push::consumer::tests --offline` (5 passed). The interim build emits expected dead-code warnings for PullRequest/flow-control functions that P10-05 will attach; strict Clippy is deferred until the pipeline uses them.
+- Matrix status: PullRequest/PullMessageService P10-04/08 PARTIAL; P10-V02 PARTIAL pending outcome retry and send-back retention; P10-V04 startup lifecycle PARTIAL pending callback shutdown. P10-V03 remains PENDING_PHASE_19.
+
+P10-05 bounded Push pull pipeline
+- Wired private queue activation/removal to the due-time scheduler with assignment generations, suspend/resume handling, retry fencing while OFFSET_ILLEGAL correction is pending, and namespace/group validation before activation side effects.
+- Added bounded pull RPC workers so broker long polls do not occupy the shared runtime pull-dispatch worker. Pull requests now resolve broker routes, build namespace-aware headers, read clustering commit offsets, invoke the typed pull RPC, decode/filter through the Phase 8 wrapper, and remove message namespaces before caching.
+- Implemented queue pressure, paused, stale-generation and subscription checks; FOUND insertion/reschedule, safe NO_NEW/NO_MATCHED offset correction, OFFSET_ILLEGAL drop/freeze/persist/removal/rebalance flow, and Java-sourced 20ms/50ms/1s/3s delay selection.
+- Added tests for pull outcomes, safe tag-offset correction, stale responses, OFFSET_ILLEGAL fencing and RPC retry-delay classification. P10-V03 remains `PENDING_PHASE_19`; real queue allocation remains owned by Phase 11 and consume submission is P10-06.
+- Checks passed: `cargo fmt --check`; `cargo test -p rocketmq-classic-consumer --offline` (50 unit, 12 integration, 0 doc tests failed); `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --offline -- -D warnings`.
+- Updated the Phase 10 offline method matrix and top-level compatibility rows. Pull outcome and RPC path are PARTIAL pending bounded consume submission/real assignment; P10-V02 remains PARTIAL pending send-back retention; P10-V04 remains PARTIAL pending slow-listener shutdown.
+
+P10-06 / P10-07 concurrent consume and retry
+- Added bounded consume submission, concurrent listener execution with timeout/panic isolation, Java ackIndex handling, clustering send-back, retry-topic fallback and local redelivery when both retry paths fail. Broadcasting failures are discarded under Java semantics.
+- Added fixture-backed success, partial, missing-status, panic, retry fallback/failure, broadcasting and private fixed-assignment coverage. The fixed assignment stays crate-private; retry fallback checks namespace composition and Java retry metadata.
+- Pinned Java 5.5.1 inspection confirmed send-back uses the VIP channel, a fixed 5000 ms timeout, and the current message ID. Rust now matches these details. The Java reference checkout, including its pre-existing untracked file, was not modified.
+
+P10-09 shutdown
+- Shutdown stops pull/consume submission, drops assigned queue generations, cancels their scheduled pulls, waits within the configured budget, aborts a slow listener without committing it, persists offsets and joins owned tasks.
+- The slow-listener test verifies cached/in-flight messages and the persisted offset remain unresolved while scheduler, RPC and consume worker counts return to zero.
+
+Verification
+- `cargo fmt -p rocketmq-classic-consumer -- --check` passed.
+- `cargo check -p rocketmq-classic-consumer --all-targets --offline` passed.
+- `cargo test -p rocketmq-classic-consumer --all-targets --offline` passed: 59 unit tests and 12 integration tests.
+- `cargo clippy -p rocketmq-classic-consumer --all-targets --offline -- -D warnings` passed.
+- Updated the Phase 10 offline method matrix and Java compatibility rows. P10-V03 remains PENDING_PHASE_19; no live Broker/DLQ result is claimed.
+- Implementation commits: `229bdfb2 feat(consumer): implement concurrent consume retries`; `d7ca6032 fix(consumer): quiesce push shutdown safely`.
+- Documentation and this execution-log update are pending their own commit.
+
+P10 public API audit and final verification (2026-10-11 15:38 UTC)
+- Completed the Java 5.5.1 facade audit for listener/subscription getters and setters, direct `sendMessageBack` overloads, `updateCorePoolSize`, pause state and orderly-mode state. Added the missing Rust APIs and retained Java's distinct legacy subscription map behavior.
+- Push subscribe now applies the namespace and sends a heartbeat after startup; unsubscribe removes the exact supplied topic without wrapping it in the namespace or sending an immediate heartbeat, matching the pinned Java facade.
+- Direct pool updates accept only values greater than zero, no larger than `Short.MAX_VALUE`, and strictly less than `consumeThreadMax`. The bounded worker owner grows and retires tasks safely and joins retired tasks during shutdown. Java's scheduled automatic adjustment remains a no-op because its `incCorePoolSize` and `decCorePoolSize` methods are empty.
+- Public send-back overloads now share the consume retry path, including explicit Broker selection, `storeHost` fallback, VIP-channel routing, and retry-topic fallback. Added `tests/push_pipeline.rs`; private fixed assignment remains internal.
+- Updated the offline method matrix and top-level Java compatibility row. The implementation plan and Java checkout were not modified.
+- Verification passed: `cargo test -p rocketmq-classic-consumer --test push_pipeline --locked` (1 passed); `cargo test -p rocketmq-classic-consumer --all-targets --locked` (62 unit + 13 integration passed); `cargo fmt --check`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `cargo test --workspace --locked` (exit 0).
+- Remaining ownership is unchanged: actual queue assignment and normal Push startup hand off to Phase 11; orderly execution is Phase 12; live Broker DLQ case P10-V03 is `PENDING_PHASE_19`.
+- Commits: `2f18bbd7 feat(consumer): complete push control APIs and resize workers`; `1fddf76b test(consumer): add push pipeline public API target`; `7fb5ac1d docs(consumer): reconcile phase 10 compatibility matrix`.

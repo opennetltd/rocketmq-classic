@@ -1,0 +1,64 @@
+# Phase 18 P18-V01 continuation — Producer raw semaphore API
+
+Session started: 2026-10-14T09:41:30Z
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Branch: phase/19-phase-18-compatibility-release-gate
+Base revision: a0885f70
+Pinned Java client source: efa1be59d6fc747ad220f036c86030f05f0419f9
+
+## Audit finding and change
+
+- The pinned `DefaultMQProducerImpl` declares public
+  `setSemaphoreAsyncSendNum(int)` and `setSemaphoreAsyncSendSize(int)` methods.
+  Their Java behavior replaces the raw semaphore permits directly, accepts
+  negative permits, and leaves the facade's configured backpressure limit
+  unchanged. The previous Rust surface exposed the available-permit getters
+  and facade setters but had no direct mapping for these two implementation
+  helpers.
+- Added `Producer::set_semaphore_async_send_num` and
+  `Producer::set_semaphore_async_send_size`. The owned semaphore now retains
+  Java's `configuredLimit - availablePermits` accounting across replacement,
+  existing permit release and later facade resize.
+- Added invoked Java fixture coverage for initial permits, raw replacement,
+  negative values, release into the replacement semaphore, later facade resize,
+  and unchanged facade limits. Added Rust fixture tests and updated the Phase 7
+  Producer matrix.
+
+## Validation
+
+- PASS: `cargo test -p rocketmq-classic-producer --all-targets --locked`
+  (133 unit tests, 10 admin tests, 21 producer tests, 3 request/reply tests,
+  13 scripted-send tests, 7 transaction tests, and examples).
+- PASS: `cargo clippy -p rocketmq-classic-producer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml -Dproducer.core.fixture.verify=false verify`
+  regenerated the Producer core fixture; Java self-tests, fixture checks,
+  37 differential scenarios and cross-decodes passed.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` checked the updated
+  fixture for drift and completed the same 37-scenario verification.
+- PASS: `cargo fmt --all -- --check`, `git diff --check`, and
+  `shasum -a 256 fixtures/producer/core.json`.
+- The Maven run emitted existing JDK/Netty `Unsafe` and reflective-final-field
+  warnings; it exited successfully.
+
+## Commits
+
+- `d84f5a1b fix(producer): expose raw async semaphore setters`
+- `15939929 docs(compat): map producer semaphore helpers`
+- This execution record is committed separately.
+
+## Remaining work
+
+- This closes only the raw Producer semaphore helper slice. Full P18-V01 Java
+  source/API/input/control-flow and Rust reverse-export reconciliation remains
+  open, including the broad Phase 6 audit.
+- Current-revision GitHub Ubuntu CI and Windows/BSD/real IPv6-only-host runtime
+  evidence remain outstanding.
+- Phase 19 Broker/Docker scenarios remain an automated integration gate; no
+  Broker or Docker was used in this session.
+
+## Workspace gate addendum
+
+- PASS: `cargo test --workspace --all-features --locked`; all workspace unit,
+  integration and doctest targets completed successfully.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- PASS: the final worktree remained clean before this append-only log update.

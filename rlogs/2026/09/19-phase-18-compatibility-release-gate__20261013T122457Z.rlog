@@ -1,0 +1,10 @@
+# Phase 18 execution session — 2026-10-13T12:24:57Z
+
+- Continued the P18-V01 reverse audit of Java 5.5.1's deprecated `DefaultMQPushConsumer.getDefaultMQPushConsumerImpl()` surface. Confirmed the pinned source commit `efa1be59d6fc747ad220f036c86030f05f0419f9` and captured the public signature inventory from the 5.5.1 Maven artifact. The Java compatibility checkout remains read-only.
+- Added Rust `PushConsumer::get_default_mq_push_consumer_impl`, returning the same `Arc<PushConsumer>` as the facade/implementation owner. Added an invoked Java fixture proving the accessor is non-null, stable by identity, and retains the configured consumer group; Rust tests identity and group against the fixture. Fixture SHA-256: `075c6743a5817606aa2a08429fb636500dfdf55f547e9840b713423045b98672`.
+- Updated the Phase 10 matrix and release checklist. The accessor identity row is closed offline; the complete returned `DefaultMQPushConsumerImpl` method-by-method mapping remains open, so P18-V01 is not closed.
+- PASS: `mvn -q -f compat/java-reference/pom.xml compile exec:java -Dexec.args="push-implementation-accessor-fixture /Users/bruce.tsai/Projects/trio/rocketmq-classic/fixtures/consumer/push-implementation-accessor.json"`.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked raw_push_implementation_accessor_retains_identity`.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (179 unit tests and integration/doc targets); `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and Java fixture drift checks); `cargo fmt --all -- --check`; `git diff --check`.
+- No Docker or live Broker was used. Continue the raw Push method audit, Pull rebalance/wrapper audit, broad Phase 6 reconciliation, full final workspace gates, Ubuntu CI evidence, package contents/dependency provenance review, and Phase 19 local Docker scenarios.

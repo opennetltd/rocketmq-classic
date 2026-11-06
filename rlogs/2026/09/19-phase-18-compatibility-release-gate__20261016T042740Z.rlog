@@ -1,0 +1,31 @@
+P18-V02 server-free current-revision gate (`526a0b34`, 2026-10-16,
+macOS ARM64)
+
+At the current Phase 18 branch tip, completed the remaining local server-free
+validation after the signed Remoting property-source changes.
+
+Commands and results:
+- `cargo test --workspace --locked` passed.
+- `cargo test --workspace --all-features --locked` passed, including all
+  workspace unit, integration, and documentation tests.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+  passed.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+- `python3 tests/differential/compare.py --self-test` passed;
+  `--validate-manifest` validated all 37 Phase 19 handoff scenarios.
+- `scripts/check-workspace-metadata.py` passed workspace metadata, package
+  license-file, and dependency-direction checks.
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`
+  passed 105 frame seeds, 11 message seeds, and 1,856 bounded mutations.
+- `bash tests/stress/run-offline-smoke.sh` passed all 16 deterministic
+  race/leak cases at three repetitions each.
+- `mvn -f compat/java-reference/pom.xml verify` passed Java fixture probes,
+  fixture drift checks, the scenario manifest, and Java/Rust cross-decodes.
+- `cargo build -p rocketmq-classic --examples --release --locked` passed.
+- `cargo bench -p rocketmq-classic --bench offline --locked --no-run` passed.
+
+This closes the server-free P18-V02 gate on `526a0b34`. Broad P18-V01 source,
+API, input/error/control-flow, and reverse-export audit remains open, as do
+current-revision GitHub Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker
+automation, and pre-publication version/registry resolution. Deployment and
+production checks remain owner-executed Phase 19 manual validation.

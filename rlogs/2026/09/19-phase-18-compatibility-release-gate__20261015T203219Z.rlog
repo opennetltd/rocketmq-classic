@@ -1,0 +1,115 @@
+2026-10-15 20:32 UTC — closed the TLS process-state boundary slice for P18-V01.
+
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9` in the separate
+RocketMQ checkout `/Users/bruce.tsai/Projects/3rd/rocketmq`. `TlsSystemConfig`
+keeps mutable process-static fields; `TlsHelper.buildSslContext` reloads the
+selected property file into those fields, and omitted keys retain prior values.
+Previously, separately created Rust `TlsConfig` property sources kept
+independent maps. Normal Rust builds now share a process-wide retained property
+map across those sources. Existing RemotingClient instances keep the connector
+they constructed.
+
+Added an invoked Java fixture that builds two successive client contexts from
+separate files. The second file omits `tls.client.authServer`; Java records
+`false,false` for test mode and `true,true` for auth-server state. Added the
+Rust integration regression `tls_property_file_settings_are_process_wide_across_config_sources`
+and refreshed both TLS fixtures. Current SHA-256:
+
+- `fixtures/security/tls-settings-defaults.json`:
+  `48e1ac15883eaa795a7c3a2eefbf71752c3a9415d1f01171348e0a8b4d9d48a6`
+- `fixtures/security/tls-settings-system-properties.json`:
+  `81a4325d704f37713033dc5a6d7f6a2c8ffe5f24aa8e49bececf9ca5c33acd4a`
+
+The first direct `exec:java` fixture-generation attempt used the wrong Maven
+entrypoint and invoked `compat.Main` without its fixture subcommand; it changed
+no files. The corrected `compile exec:java` command ran the updated fixture
+successfully for both default and system-property inputs.
+
+PASS:
+
+- `cargo test -p rocketmq-classic-remoting --all-features --locked` — 97 unit,
+  8 codec, 1 fuzz regression, 6 security, 100 transport, 7 doctests.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features --locked -- -D warnings`
+- `mvn -f compat/java-reference/pom.xml verify` — all fixture checks and 37
+  differential scenarios.
+- `cargo fmt --all -- --check` and `git diff --check`.
+
+Code/fixture commit: `2d16427f`. Compatibility matrices and release evidence
+were updated separately. Broad P18-V01 remains open; the latest-revision GitHub
+Ubuntu/P18-V04 result, Phase 19 local Docker/Broker automation, and release
+version/registry resolution remain open. No plan, Java source checkout, Docker,
+Broker, push, tag, publication, or deployment was changed or used.
+
+2026-10-15 20:45 UTC — closed the Java TLS static-property initialization slice.
+
+Pinned Java source `efa1be59d6fc747ad220f036c86030f05f0419f9` reads
+`TlsSystemConfig` values at class initialization. A later JVM property mutation
+does not replace those fields. Rust process state now initializes from the
+first explicit property map, including a first Plain-mode selection, and later
+maps cannot overwrite it; property-file reloads still update present keys and
+retain omitted values across sources. Added Java fixture assertions and Rust
+regression coverage. Code/fixture commit: `e314b5e1`.
+
+PASS on `e314b5e1`:
+
+- `cargo test -p rocketmq-classic-remoting --all-features --locked` — 97 unit,
+  8 codec, 1 fuzz regression, 6 security, 100 transport, 7 doctests.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings`.
+- `mvn -f compat/java-reference/pom.xml verify` — all fixtures and 37
+  differential scenarios.
+- `cargo fmt --all -- --check` and `git diff --check`.
+
+Broad P18-V01 and final-revision full-workspace P18-V02 remain open, along with
+current-revision GitHub Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker
+automation, and pre-publication version/registry resolution. Owner production
+and topology checks remain the separate final manual validation. The Java
+reference repository remains unmodified; its pre-existing untracked
+`broker/src/test/java/org/apache/rocketmq/broker/aaaa.java` remains present.
+
+2026-10-15 20:56 UTC — closed server-free P18-V02 on code revision `e314b5e1`.
+
+PASS:
+
+- `cargo test --workspace --locked`.
+- `cargo test --workspace --all-features --locked`.
+- `cargo check --workspace --all-targets --all-features --locked`.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- `mvn -f compat/java-reference/pom.xml verify` — 37 scenarios and fixtures.
+- `python3 tests/differential/compare.py --self-test`.
+- `cargo build -p rocketmq-classic --examples --release --locked`.
+- `cargo fmt --all -- --check` and `git diff --check`.
+
+This closes only P18-V02 server-free gates. Broad P18-V01, current-revision
+GitHub Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker automation, and
+pre-publication version/registry resolution remain open. Owner production and
+topology checks remain the separate final manual validation.
+
+2026-10-15 21:10 UTC — closed the TLS mode-selection static-property slice.
+
+Pinned Java `TlsSystemConfig.tlsEnable` and `tlsConfigFile` are initialized
+from system properties and are excluded from `TlsHelper.extractTlsConfigFromFile`.
+The Java fixture mutates `tls.enable` after initialization and puts it in the
+TLS file; the static mode remains false. The Rust regression first reproduced
+the defect because `TransportMode` reread the later map. The implementation
+now keeps immutable initial system properties separately from file-overlaid
+TLS properties, and both mode selection and default path selection use that
+initial snapshot. Code/fixture commit: `746c35bc`.
+
+PASS on the code content committed as `746c35bc`:
+
+- `cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked`.
+- `cargo check --workspace --all-targets --all-features --locked`.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- `mvn -f compat/java-reference/pom.xml verify` — all fixture checks and 37
+  differential scenarios.
+- `python3 tests/differential/compare.py --self-test`.
+- `cargo build -p rocketmq-classic --examples --release --locked`.
+- `cargo fmt --all -- --check` and `git diff --check`.
+
+This closes server-free P18-V02 on `746c35bc` and only the listed TLS mode
+slice of P18-V01. The rest of broad P18-V01, current-revision GitHub
+Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker automation, and
+pre-publication version/registry resolution remain open. Owner production and
+topology checks remain the separate final manual validation.

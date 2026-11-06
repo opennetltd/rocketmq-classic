@@ -1,0 +1,233 @@
+Session: 2026-10-16T03:00:47Z onward
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Branch: phase/19-phase-18-compatibility-release-gate
+Starting revision: 7a4e7317a4d4d32ad0ac39d5db4a3c86408a8e53
+Java source baseline: efa1be59d6fc747ad220f036c86030f05f0419f9
+Environment: OpenJDK 21.0.12.1, macOS arm64
+
+P18-V01 follow-up — pin signed Remoting semaphore configuration.
+
+Source inspection confirmed Java NettyClientConfig exposes signed-int async
+and oneway semaphore getters/setters and passes those values to
+NettyRemotingAbstract, which constructs fair java.util.concurrent.Semaphore
+instances. Admission calls use timed Semaphore.tryAcquire.
+
+Added invoked RuntimeConfigFixtures evidence for defaults and boundary values
+Integer.MIN_VALUE, Integer.MIN_VALUE + 1, -2, -1, 0, 1, and Integer.MAX_VALUE.
+The Java oracle preserves values through both setters/getters. Timed acquisition
+rejects ordinary negative values, while Integer.MIN_VALUE wraps on the initial
+acquire and succeeds with Integer.MAX_VALUE remaining permits. This overflow
+case was unexpected and is retained as explicit fixture evidence. A probe that
+also released this acquired permit observed Java's Error "Maximum permit count
+exceeded"; the fixture currently records the admission boundary and does not
+assert downstream release-error behavior.
+
+Commands/results:
+- Direct exec:java with only -Dexec.mainClass failed because the repository's
+  configured entrypoint is compat.Main and the required subcommand was omitted;
+  no fixture was written by that attempt.
+- An initial Maven verify compiled the new fixture and correctly failed on the
+  expected client-config.json drift before generation.
+- `mvn -f compat/java-reference/pom.xml compile exec:java -Dexec.args='runtime-config-fixtures /Users/bruce.tsai/Projects/trio/rocketmq-classic/fixtures/runtime/client-config.json'`
+  regenerated the fixture successfully.
+- `mvn -f compat/java-reference/pom.xml -Dexec.args='runtime-config-fixtures /Users/bruce.tsai/Projects/trio/rocketmq-classic/fixtures/runtime/client-config.json --verify' exec:java`
+  passed against the final fixture.
+- `git diff --check` passed.
+- Final fixture SHA-256: e9951f21fa15bbe1bf028e0a95084e42d5a18ae52af9934482eb8fcdd537f952.
+
+This commit contains oracle evidence only. Next: change Rust semaphore fields to
+signed i32, map Java's negative admission behavior (including MIN_VALUE
+overflow) into the Rust semaphore implementation, add fixture-backed tests, and
+update the Remoting compatibility inventory and release checklist.
+
+Rust signed semaphore implementation (`c0f5c13d`): `ClientConfig` async and
+oneway capacities are now `i32`, accept every Java signed-int value, and feed
+Tokio admission capacities through a helper. Ordinary negative values map to
+zero admission; Java's `Integer.MIN_VALUE` acquire overflow maps to `2^31` on
+this 64-bit host. Fixture-backed tests cover async and oneway immediate
+acquisition, post-acquire permit counts, zero-deadline saturation, and positive
+deadline timeout. The public config values remain signed and unchanged.
+
+Validation on code revision `c0f5c13d`:
+- `cargo test -p rocketmq-classic-remoting --all-features --locked` passed:
+  98 unit, 8 codec, 1 fuzz regression, 7 security, 100 transport, and 8 doc
+  tests.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings` passed.
+- `mvn -f compat/java-reference/pom.xml verify` passed, including all 37
+  scenario-manifest validations, runtime fixture drift checks, and Java/Rust
+  cross-decodes.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+
+This closes only signed semaphore value and admission mapping. The Java system-
+property source for the two defaults remains an open P18-V01 setting source;
+the broad P18-V01 audit and final full-workspace P18-V02 rerun remain open.
+
+P18-V01 Remoting semaphore system-property source follow-up (`6497d5b4`,
+2026-10-16): the invoked Java `ClientConfigPropertiesProbe` now sets the pinned
+`com.rocketmq.remoting.clientAsyncSemaphoreValue` and
+`com.rocketmq.remoting.clientOnewaySemaphoreValue` properties and records the
+resulting `NettyClientConfig` values in
+`fixtures/runtime/client-config-properties.json`. The fixture values are
+async `-17` and oneway `2147483647`. Rust reads the same keys from process
+environment when `ClientConfig::default()` is first called, uses
+`java_number::parse_i32` to match Java signed-decimal parsing, defaults absent
+keys to `65535`, and retains the process-wide result in `OnceLock`. An isolated
+subprocess test verifies both fixture-seeded values and rejection of a value
+with leading whitespace.
+
+Validation on code revision `6497d5b4`:
+- `cargo test -p rocketmq-classic-remoting --all-features --locked` passed:
+  99 unit, 8 codec, 1 fuzz regression, 7 security, 100 transport, and 8 doc
+  tests.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings` passed.
+- `mvn -f compat/java-reference/pom.xml verify` passed, including 37
+  scenario-manifest validations, runtime fixture drift checks, and Java/Rust
+  cross-decodes.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+
+This closes the property-source slice for these two semaphore settings only.
+The broad P18-V01 source/API/input/error/control-flow and reverse-export audit,
+a final-revision full-workspace P18-V02 rerun, current-revision GitHub
+Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker automation, and
+pre-publication version/registry resolution remain open. Owner-run deployment
+and production checks remain Phase 19 manual validation.
+
+P18-V01 Remoting close-socket system-property source follow-up (`280bcfe0`,
+2026-10-16): the invoked Java `ClientConfigPropertiesProbe` now sets
+`com.rocketmq.remoting.client.closeSocketIfTimeout=false` and records
+`NettyClientConfig.isClientCloseSocketIfTimeout()` in
+`fixtures/runtime/client-config-properties.json`. Java source uses
+`Boolean.parseBoolean`, which recognizes case-insensitive `true` without
+trimming. Rust reads the same key from process environment on the first
+`ClientConfig::default()`, applies equivalent parsing, and retains the value in
+the same process-wide `OnceLock` as the two semaphore defaults. The isolated
+`client_remoting_defaults_follow_java_system_properties` test checks the Java
+fixture values and malformed semaphore integer rejection.
+
+Validation on code revision `280bcfe0`:
+- `cargo test -p rocketmq-classic-remoting --all-features --locked` passed:
+  99 unit, 8 codec, 1 fuzz regression, 7 security, 100 transport, and 8 doc
+  tests.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings` passed.
+- `mvn -f compat/java-reference/pom.xml verify` passed, including 37
+  scenario-manifest validations, runtime fixture drift checks, and Java/Rust
+  cross-decodes.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+
+This closes only the close-socket property-source slice. Remaining
+`NettySystemConfig` defaults and the broad P18-V01 source/API/input/error/
+control-flow and reverse-export audit remain open. A final-revision
+full-workspace P18-V02 rerun, current-revision GitHub Ubuntu/P18-V04 evidence,
+Phase 19 local Docker/Broker automation, and pre-publication version/registry
+resolution also remain open. Owner-run deployment and production checks remain
+Phase 19 manual validation.
+
+P18-V01 Remoting connection-timeout and idle-timeout property-source follow-up
+(`b5106ebc`, 2026-10-16): the invoked Java `ClientConfigPropertiesProbe` now
+sets `com.rocketmq.remoting.client.connect.timeout=-13` and
+`com.rocketmq.remoting.client.channel.maxIdleTimeSeconds=-7`, then records
+`NettyClientConfig.getConnectTimeoutMillis()` and
+`getClientChannelMaxIdleTimeSeconds()` in
+`fixtures/runtime/client-config-properties.json`. Rust reads both values from
+the same process environment keys on first `ClientConfig::default()`, applies
+Java signed-decimal parsing, and retains them in the shared process-wide
+`OnceLock`. The isolated `client_remoting_defaults_follow_java_system_properties`
+test verifies these signed values together with the semaphore and
+close-socket fixture values.
+
+Validation on code revision `b5106ebc`:
+- `cargo test -p rocketmq-classic-remoting --all-features --locked` passed:
+  99 unit, 8 codec, 1 fuzz regression, 7 security, 100 transport, and 8 doc
+  tests.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings` passed.
+- `mvn -f compat/java-reference/pom.xml verify` passed, including 37
+  scenario-manifest validations, runtime fixture drift checks, and Java/Rust
+  cross-decodes.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+
+This closes the `connectTimeoutMillis` and `clientChannelMaxIdleTimeSeconds`
+property-source rows only. Worker-count, socket-buffer, and write-watermark
+property sources and the broad P18-V01 source/API/input/error/control-flow and
+reverse-export audit remain open. A final-revision full-workspace P18-V02
+rerun, current-revision GitHub Ubuntu/P18-V04 evidence, Phase 19 local
+Docker/Broker automation, and pre-publication version/registry resolution also
+remain open. Owner-run deployment and production checks remain Phase 19 manual
+validation.
+
+P18-V01 Remoting worker-count signed API and property-source follow-up
+(`85dccf7f`, 2026-10-16): the invoked Java `ClientConfigPropertiesProbe` now
+sets `com.rocketmq.remoting.client.worker.size=-3`, records the resulting
+`NettyClientConfig.getClientWorkerThreads()` value, and captures setter/getter
+round trips at `Integer.MIN_VALUE`, `-1`, zero, one, and `Integer.MAX_VALUE`.
+Rust changes the public `ClientConfig.worker_threads` field and live
+`RemotingClient` getter/setter to `i32`, seeds the default from the same
+process environment key on first default construction using Java signed
+decimal parsing, and keeps nonpositive values representable until `start()`,
+where they are rejected before worker creation. The Rust worker count is
+converted to `usize` only after the positive check.
+
+Validation on code revision `85dccf7f`:
+- `cargo test -p rocketmq-classic-remoting --all-features --locked` passed:
+  99 unit, 8 codec, 1 fuzz regression, 7 security, 100 transport, and 8 doc
+  tests.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings` passed.
+- `mvn -f compat/java-reference/pom.xml verify` passed, including 37
+  scenario-manifest validations, runtime fixture drift checks, and Java/Rust
+  cross-decodes.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+
+This closes the `clientWorkerThreads` setting's signed API domain, property
+source, and start-time behavior slice only. Socket-buffer and write-watermark
+property sources and signed API domains, the broad P18-V01
+source/API/input/error/control-flow and reverse-export audit, a final-revision
+full-workspace P18-V02 rerun, current-revision GitHub Ubuntu/P18-V04 evidence,
+Phase 19 local Docker/Broker automation, and pre-publication version/registry
+resolution remain open. Owner-run deployment and production checks remain
+Phase 19 manual validation.
+
+P18-V01 Remoting socket-buffer and write-watermark signed API/property-source
+follow-up (`45ea5b54`, 2026-10-16): the pinned Java `NettySystemConfig` reads
+both socket-buffer and both write-watermark settings from system properties;
+`NettyClientConfig` seeds each field from those class-initialized values and
+its setter/getter paths retain the full signed Java `int` domain. Source and
+`RemotingLiveConfigProbe` verify that the direct Bootstrap adds socket-buffer
+options only for positive values at `start()`, while each proxy Bootstrap
+captures and includes the raw socket-buffer values on first CIDR use; custom
+watermarks are direct-only and are installed when both are positive. Invalid
+enabled watermark ordering fails while the direct Bootstrap is built. The Java
+`ClientConfigPropertiesProbe` fixture now records all four property seeds and
+signed setter/getter cases at `Integer.MIN_VALUE`, `-1`, zero, one, and
+`Integer.MAX_VALUE`.
+
+Rust changes the four public `ClientConfig` fields and live client accessors to
+`i32`, reads matching environment keys on first default construction with Java
+signed-decimal parsing, retains signed values, samples direct settings at
+`start()` and proxy socket values on first CIDR use, and checks enabled direct
+watermark ordering at `start()`. Nonpositive proxy buffer sizes fail before
+dialing, matching the pinned Java fixture's need for positive proxy socket
+buffers; error details remain Rust-native. Rust regressions cover system
+property seeding and malformed integer rejection, signed setter/getter
+round-trips, direct/proxy snapshots, nonpositive proxy failure, and start-time
+watermark validation.
+
+Validation for code revision `45ea5b54`:
+- `cargo test -p rocketmq-classic-remoting --all-features --locked` passed:
+  102 unit, 8 codec, 1 fuzz regression, 7 security, 100 transport, and 8 doc
+  tests.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings` passed.
+- `mvn -f compat/java-reference/pom.xml verify` passed, including 37
+  scenario-manifest validations, Java fixture drift checks, the signed direct/
+  proxy option probe, and Java/Rust cross-decodes.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+
+This closes the socket-buffer and write-watermark signed API/property-source
+rows only. Broad P18-V01, a final-revision full-workspace P18-V02 rerun,
+current-revision GitHub Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker
+automation, and pre-publication version/registry resolution remain open.
+Owner-run deployment and production checks remain Phase 19 manual validation.

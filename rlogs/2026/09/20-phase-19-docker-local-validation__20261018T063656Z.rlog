@@ -1,0 +1,21 @@
+# Phase 19 local validation continuation — 2026-10-18T06:36:56Z
+
+- Branch: `phase/19-phase-18-compatibility-release-gate-resume`; base before
+  this session: `dc39d534`. Rust/Cargo: 1.85.0.
+- Corrected both `ViewMessageRequestHeader` constructions in
+  `integration-tests/src/bin/live_client.rs` to pass `Some(physical_offset)`;
+  the protocol header intentionally represents Java's nullable `Long` as
+  `Option<i64>`. No public protocol/API behavior changed.
+- `cargo fmt --all -- --check`: PASS.
+- `cargo test --workspace --locked`: compiled the changed live-client target
+  and passed the preceding workspace suites, including protocol (141 tests)
+  and Remoting unit tests (137 tests). It did not finish: the Remoting `codec`
+  test process remained in macOS dyld startup for over two minutes. Running
+  that binary with `--list` also stalled before test discovery. Both processes
+  were interrupted; the workspace command is not recorded as passing.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`: did not finish. Clippy drivers remained in rustc search-path
+  directory enumeration (`readdir`); the command was interrupted, not recorded
+  as passing.
+- Existing uncommitted Phase 19 README/runner edits were preserved and not
+  staged. Java reference checkout was not modified.

@@ -1,0 +1,52 @@
+# Phase 18 compatibility release gate — 2026-10-22 03:16:13 UTC
+
+Base revision: `958a047a`. This entry records the request 321
+`queryConsumeQueue` protocol and RPC slice. Pinned Java source is
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Compatibility changes
+
+- Added `QueryConsumeQueueRequestHeader` with nullable topic/group and inherited
+  RPC fields, primitive zero defaults, Java-tolerant malformed-number decode,
+  and inherited RPC equality semantics.
+- Added `QueryConsumeQueueResponseBody` and `ConsumeQueueData`, preserving
+  Java property names/defaults, nullable fields and rows, nested
+  `SubscriptionData`, and mutable aliases.
+- Added `MQClientApi::query_consume_queue` for request 321, configured VIP
+  transformation, the caller timeout, nullable response bodies, and Broker
+  error mapping.
+- Added invoked Java/Rust cases for populated/default/null/missing/malformed
+  bodies, null request strings, Broker rejection, timeout, and VIP routing.
+  Added header decode-mode checks, API inventory assertions, and bidirectional
+  typed-header/body cross-decodes.
+- Updated the direct reverse-audit list from 10 to 9 open operations. The wider
+  P18-V01 audit and other Phase 18 work remain open.
+
+## Local verification
+
+- `cargo test -p rocketmq-classic-protocol --locked`: passed (155 unit tests,
+  protocol integration tests, and 156 doctests).
+- `cargo test -p rocketmq-classic-core --test admin_rpc --locked`: 98 passed.
+- `cargo test -p rocketmq-classic-core --lib --locked`: 199 passed.
+- Focused VIP port-offset, query response timeout, request decode-mode, header
+  inventory, and query RPC differential tests passed.
+- `cargo clippy -p rocketmq-classic-protocol -p rocketmq-classic-core --all-targets --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- `mvn -o -f compat/java-reference/pom.xml verify`: BUILD SUCCESS; Java
+  decoded 96 Rust typed-header fixtures and 19 Rust typed-body fixtures.
+- SHA-256 `fixtures/producer/core.json`:
+  `e15f99b0291656075e546be2f1dc507e1072f4aecc825f7d9e93b555a463e496`.
+- SHA-256 `fixtures/remoting/query-admin-header-decode-modes.json`:
+  `ce98f356e351ec5028e8f01f2ba36612306a4559278006599e8c44ff125b9766`.
+- SHA-256 `fixtures/remoting/body-query-consume-queue.bin`:
+  `6c96419f86b50ae6da3c72d227c1bae9be60734eb03c077404b896dbce7278fc`.
+- SHA-256 `fixtures/remoting/header-query-consume-queue-request.bin`:
+  `6db52b9438aa0513fc0cf74d6fc5885d3bc398739d3118d073d32a8f979198eb`.
+
+## Remaining work
+
+Request 321 is closed. The pinned `MQClientAPIImpl` direct-operation reverse
+audit still has 9 open rows, and the wider Phase 18 settings, inputs, errors,
+control flows, reverse-export audit, and platform evidence remain open. No
+Broker, Docker, or remote CI was used. Pre-existing Phase 19 worktree paths
+remain unstaged and outside this slice.

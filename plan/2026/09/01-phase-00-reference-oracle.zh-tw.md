@@ -83,11 +83,11 @@ scenario metadata 分別記錄 server_version=5.3.4 與 java_client_version=5.5.
 
 先寫對應失敗測試／Oracle fixture，再依序實作；以下 case 必須成為可執行檢查，而非人工勾選。以下檢查不依賴 Docker 或 live Broker，使用 Java fixture、可控時鐘及 scripted peer；共通命令與證據規則見執行索引。
 
-- [ ] **P0-V01** — 產生 fixtures 兩次；metadata hash 符合 raw file，正規化 semantic result 一致。
-- [ ] **P0-V02** — Java 可解碼自身產生的兩種 codec；畸形 fixture 失敗；comparator self-test 能找出有意義差異。
-- [ ] **P0-V04** — 修改 Maven client 版本會使驗證失敗；缺少前置條件的 scenario 不得回報 PASS。
+- [x] **P0-V01** — 產生 fixtures 兩次；metadata hash 符合 raw file，正規化 semantic result 一致。
+- [x] **P0-V02** — Java 可解碼自身產生的兩種 codec；畸形 fixture 失敗；comparator self-test 能找出有意義差異。
+- [x] **P0-V04** — 修改 Maven client 版本會使驗證失敗；缺少前置條件的 scenario 不得回報 PASS。
 
-- [ ] **P0-U01** — 不啟動 Broker 即可建構 route、heartbeat、send、pull、offset 與 lock/unlock fixture；scenario metadata 區分 client/server 版本及待執行 live 證據。
+- [x] **P0-U01** — 不啟動 Broker 即可建構 route、heartbeat、send、pull、offset 與 lock/unlock fixture；scenario metadata 區分 client/server 版本及待執行 live 證據。
 
 ### 5.1 實作完成後的本機命令
 

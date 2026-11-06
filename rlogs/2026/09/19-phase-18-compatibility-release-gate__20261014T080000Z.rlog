@@ -1,0 +1,70 @@
+# Phase 18 P18-V01 audit continuation
+
+Session started: 2026-10-14T08:00:00Z
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Branch: phase/19-phase-18-compatibility-release-gate
+Base revision: dd3b2b6e docs(compat): record producer lifecycle gates
+
+## Initial state
+
+- Re-read the Phase 15–18 plans and coding/Rust workflow. Plan files remain read-only.
+- Project worktree was clean at start. Phase 15–18 branches and commits are present.
+- The pinned Java checkout is at a later `master` revision and has an unrelated untracked file; all compatibility source reads use pinned commit `efa1be59d6fc747ad220f036c86030f05f0419f9`, and no Java checkout files were changed.
+- P18-V01 remains PARTIAL. This session continues the bounded Producer facade reverse scan before addressing broader overload/source/input reconciliation.
+
+## Producer facade reverse scan
+
+- Read the pinned fixture's reflected `DefaultMQProducer`, `MQProducer`, and `MQAdmin` inventories and compared candidates to the Producer facade, `ProducerConfig`, implementation-owner APIs, Phase 14–17 matrices, and existing Rust evidence.
+- Confirmed the candidate JavaBean/fluent method names map to live Producer settings, compression/accumulator/fault/backpressure handles, or explicit Rust ownership adapters. No missing Producer capability was confirmed in this name-scan slice.
+- Updated `docs/compatibility/PHASE_7_PRODUCER_MATRIX.md` with the explicit candidate-to-owner/evidence crosswalk and retained the remaining P18-V01 work as open.
+- Validation after the documentation edit: pending.
+
+## Validation
+
+- PASS: `cargo test -p rocketmq-classic-producer --locked` (132 library unit tests plus all Producer integration and documentation targets).
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, Java fixture drift checks and Rust-generated fixture cross-decodes).
+- PASS: `git diff --check`.
+- The Java reference checkout emitted existing JDK/Netty `Unsafe` and reflective-final-field warnings; Maven exited 0. The unrelated untracked Java file remains untouched.
+
+## Producer send overload follow-up
+
+- A test-source scan of the 37 public Producer send methods found seven methods with no direct test call: the direct/forced-accumulator convenience paths and three custom-timeout wrappers. Added direct scripted calls for each; assertions cover request mode, selected/default queues and batch decisions.
+- Expanded `public_queue_selector_and_batch_modes_use_the_scripted_route` to exercise all default/selected, sync/future, oneway/batch, and explicit/default-timeout variants in that route family. It asserts 16 Broker requests, seven batch frames, and three oneway requests.
+- Updated `docs/compatibility/PHASE_7_PRODUCER_MATRIX.md` with the Java overload-family to Rust method/test crosswalk. P18-V01 remains open for other source families and input/error/control-flow branches.
+- PASS: `cargo fmt --all`; `cargo test -p rocketmq-classic-producer --locked` (132 unit tests, 20 producer API tests, 10 admin tests, 3 request/reply tests, 13 scripted-send tests, 7 transaction tests, and doc tests); `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: the focused source scan finds direct test references for all 37 public send methods after the update.
+- PASS: `cargo clippy -p rocketmq-classic-producer --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- The earlier API scan also found seven future/direct/accumulator convenience methods without direct test calls; those are now directly exercised alongside the seven explicit-timeout wrappers identified by the test-target-only scan.
+
+## Inherited and trait API audit — consistent-hash callback
+
+- The Phase 11 matrix incorrectly described Rust `HashFunction` as having no Java public equivalent. Pinned Java 5.5.1 `AllocateMessageQueueConsistentHash` declares `(int, HashFunction)`, and `HashFunction.hash(String)` returns Java `long`; Rust `with_hash_function(i32, Arc<dyn HashFunction>)` and `HashFunction::hash(&str) -> i64` are the corresponding API.
+- `compat.RebalanceFixtures` invokes the Java custom-hash constructor, while `crates/rocketmq-classic-consumer/tests/rebalance.rs` differentially exercises it using Java-compatible `String.hashCode`. Updated `docs/compatibility/PHASE_11_OFFLINE_METHOD_MATRIX.md` to record the correct constructor mapping. No implementation gap was found in this slice.
+- PASS: inspected the pinned Java 5.5.1 constructor/interface source and the existing invoked Java fixture plus Rust differential path; no fixture change was needed. `git diff --check` passes for the matrix/log update.
+
+## Inherited and trait API audit — runtime and protocol adapters
+
+- Confirmed the public consumer listener interfaces map to Java `MessageListenerConcurrently` / `MessageListenerOrderly` and their listener/context behavior is owned by Phase 10/12/13; `TransactionExecutor` maps Java `TransactionMQProducer.setExecutorService(ExecutorService)` in the Phase 14 matrix.
+- `ConsumerRuntime` / `MessageRequest` map the pinned `MQConsumerInner`, `MessageRequest`, `PullMessageService`, and request-mode owner flows. Added method-level crosswalks and evidence locations to `docs/compatibility/PHASE_6_API_CONFIG_MAP.md`; existing Phase 6/10/11/17 evidence covers those owner methods.
+- `CommandHeader` maps the Java `CommandCustomHeader` plus reflective `RemotingCommand` ext-field conversion; added the trait boundary and fixture/test pointers to `docs/compatibility/PHASE_5_OFFLINE_METHOD_MATRIX.md`.
+- `PrivateKeyDecryptionStrategy` is already source-mapped to `TlsHelper.DecryptionStrategy`; the per-client strategy in place of Java global registration is recorded as an accepted Rust-native difference in `PHASE_3_REMOTING_INVENTORY.md`.
+- Validation: pending documentation diff check.
+
+## Validation addendum — runtime and protocol trait crosswalk
+
+- PASS: inspected the Rust request-dispatch implementation and its FIFO/delayed/group-replacement regression, the pinned Java `MQConsumerInner` / `MessageRequest` / `PullMessageService` source, the Java `CommandCustomHeader` declaration, and existing protocol fixture inventory. `git diff --check` passes for the documentation and log changes.
+
+## Release status cross-reference
+
+- Updated `docs/release-checklist.md` to record that the targeted trait slices have method/source crosswalks without claiming the full P18-V01 inherited or Java/Rust reverse-export audit is closed.
+- PASS: `git diff --check` after the release-checklist status update.
+
+## Current-tree server-free P18-V02 gates — 2026-10-14
+
+- Revision: clean tree at `450ed704`; implementation/test revision is `c8e47357` with documentation-only commits afterward.
+- PASS: `cargo test --workspace --locked` and `cargo test --workspace --all-features --locked`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, fixture drift and Java/Rust cross-decodes); `python3 tests/differential/compare.py --self-test`; `python3 tests/differential/compare.py --validate-manifest` (37 scenarios).
+- PASS: `bash tests/stress/run-offline-smoke.sh` (16 deterministic cases × 3 repetitions); `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` (104 frame seeds, 10 message seeds, 1,824 bounded mutations).
+- PASS: `cargo build -p rocketmq-classic --examples --release --locked`; `cargo bench -p rocketmq-classic --bench offline --locked --no-run`; `python3 scripts/check-workspace-metadata.py`; `cargo metadata --locked --format-version 1 --no-deps`; `cargo package --workspace --list --locked --allow-dirty` (seven packages).
+- The gate script used `set -e` and reached its final package-content command. Maven/JDK emitted existing `Unsafe` and reflective-final-field warnings but returned successfully. Git status after validation is clean. P18-V01 remains PARTIAL; this server-free rerun does not provide the required GitHub Ubuntu result or Phase 19 Broker/Docker evidence.

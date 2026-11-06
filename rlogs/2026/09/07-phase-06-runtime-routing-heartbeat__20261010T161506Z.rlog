@@ -1,0 +1,9 @@
+# Phase 6 execution session — 2026-10-10T16:15Z
+
+- Continued nullable manager-removal reconciliation on `07-phase-06-runtime-routing-heartbeat`; the requested Java source checkout is absent here, so the oracle uses pinned RocketMQ 5.5.1 artifacts.
+- The pinned identity-aware Java overload returns normally for `(id, null)` and leaves the mapping present; `(null, null)` throws `NullPointerException`. Java oracle/fixture commit: `b2951a58`.
+- Rust's `remove_client_factory_nullable` accepts optional ID and instance inputs. It maps null ID to `InvalidRoute` first and treats a null instance with valid ID as no removal. The existing test checks both Java outcomes and verifies the mapping survives. Implementation commit: `8c62a7d9`.
+- `fixtures/runtime/client-config.json` SHA-256: `a1e8747165443ca0dbac9bc2f998042507ade61d9173d37cb66ca7b13f8b2238`.
+- Validation passed: focused manager removal regression; `cargo test --workspace --all-targets --locked`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; pinned offline Maven verify (22 scenarios, fixture drift and Java cross-decodes); comparator self-test; manifest validation (22 scenarios); formatting and diff checks.
+- Updated the Phase 6 API map and requirement audit. This closes the nullable instance input for identity-aware removal only; broader Phase 6 source/API/input/reverse-export reconciliation remains PARTIAL and P6-V04 stays `PENDING_PHASE_19`.
+- Documentation/log commit: pending.

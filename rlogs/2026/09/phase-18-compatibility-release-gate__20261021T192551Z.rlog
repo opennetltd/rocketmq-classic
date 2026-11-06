@@ -1,0 +1,45 @@
+# Phase 18 current-revision verification and P18-V02 server-free refresh — 2026-10-21T19:25:51Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `bf126205` (`feat(common): dispatch subtype transient sysflags`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `71cf67f0bf813630fe084e2be78ea4275a1f04f49063c88a83606e909bb47dbe`.
+
+## Verification
+
+- PASS: pinned Maven `verify`; 37 scenarios, fixture drift, 9 Running Info,
+  27 direct-consume and 15 reset cases, runtime inbound/discovery/heartbeat/
+  route/hook fixtures, 83 typed headers, 16 typed bodies and Java/Rust
+  cross-decodes. Existing JDK Unsafe and reflective-final-field warnings were
+  emitted.
+- PASS: `cargo test --workspace --locked --quiet` and
+  `cargo test --workspace --all-features --locked --quiet`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: differential comparator self-test and 37-scenario manifest validation.
+- PASS: offline deterministic race/leak smoke, 16 cases × 3 repetitions.
+- PASS: release fuzz smoke, 137 frame seeds, 11 message seeds, 2,368 bounded
+  mutations, 201 frame decodes and 118 message decodes.
+- PASS: release workspace examples and `cargo bench --workspace --no-run
+  --locked`.
+- PASS: locked Cargo metadata (8 workspace members, 216 total packages,
+  208 registry packages), no-deps metadata (8 packages), workspace
+  metadata/license/dependency checks, and all seven publishable package
+  listings with `LICENSE` and `NOTICE`.
+- PASS: four Core Unique ID tests under both `TZ=UTC` and
+  `TZ=Asia/Taipei`.
+- PASS: offline benchmark on Apple M5 Max, macOS aarch64, Rust 1.85.0:
+  frame encode/decode 2,395.8 ns/iteration; zstd message decode 1,172.6 ns;
+  producer request construction 1,196.6 ns; 128-entry route lookup 15.0 ns;
+  loopback pending completion 67,861.2 ns. These are observations, not
+  thresholds.
+
+## Current status
+
+These current-revision gates cover the metadata and transient-sysFlag subtype
+slices; they do not close broad P18-V01 reconciliation. Other inherited
+`Message`/`MessageExt` virtual methods and Java mutable `getProperties()` map
+identity remain open. Current-revision GitHub Ubuntu and native Windows
+P18-V04 runtime evidence remains absent. Phase 19 Broker/Docker validation is
+separate. No push, remote CI, Broker or Docker run was performed. Pre-existing
+Phase 19 working-tree paths were left untouched and unstaged.

@@ -1,0 +1,28 @@
+# Phase 18 compatibility release gate — 2026-10-16T14:19:12Z
+
+- Code revision: `8f94b206` on `phase/19-phase-18-compatibility-release-gate`.
+  Pinned Java client source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- `MessageBatch` follow-up records constructor/generator null-list and
+  null-element behavior plus delay, retry-topic, topic and wait-store failures.
+  The fixture is generated and verified by the pinned Java 5.5.1 harness;
+  SHA-256: `3d8ae4a75e76e1c2636de3633dbf2f04c61c8058076e2c639d63fec17fc5c88d`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios,
+  fixture checks and Java/Rust cross-decodes); `cargo test --workspace
+  --locked`; `cargo test --workspace --all-features --locked`; `cargo check
+  --workspace --all-targets --all-features --locked`; strict all-target,
+  all-feature workspace Clippy; comparator self-test and 37-scenario manifest;
+  offline deterministic race/leak smoke (16 cases × 3); fuzz smoke (105 frame
+  seeds, 11 message seeds, 1,856 mutations, 146 frame decodes, 113 message
+  decodes); release examples; workspace benchmark compilation; metadata and
+  package-content checks; and Asia/Taipei Unique ID tests.
+- Scoped Producer all-feature tests, facade public-type test, strict Producer
+  Clippy, formatting, and diff checks pass. The workspace tests also exercise
+  the new Producer fixture assertions on this revision.
+- P18-V02 server-free gate passes on `8f94b206`. Broad bidirectional P18-V01
+  Java/Rust API, setting, overload/input/error/control-flow and reverse-export
+  reconciliation remains open. Current-revision GitHub Ubuntu/P18-V04 evidence
+  is still absent. Phase 19 Docker/Broker runner and scenario execution,
+  `docs/owner-validation.md`, and pre-publication dependency/version resolution
+  remain outstanding; these are not covered by this server-free gate.
+- No plan changes, Docker/Broker run, push, publication, release tag, or
+  deployment.

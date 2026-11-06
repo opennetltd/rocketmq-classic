@@ -1,0 +1,42 @@
+# Phase 18 factory protected-hook scope review
+
+- Recorded: 2026-10-23 11:58:26 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Starting revision: `968d7e61`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: Disposition of `MQClientAPIFactory` protected subclass hooks
+
+## Finding
+
+Pinned Java declares protected `init()` and `createAndStart(String)`.
+The constructor invokes `init`; `start()` calls `createAndStart` once per
+pool slot. The pinned client source/tests contain no subclass of the factory;
+the only `createAndStart` callsite is the base `start` loop. The base
+initialization and slot creation map to Rust factory `build` and `start`.
+Remoting-client construction and refresh scheduling are separately injectable
+through Rust's public creator and scheduler adapters.
+
+These are protected override points rather than Java-public client methods or
+settings. Rust has no Java-style subclass dispatch. The parity contract covers
+the direct public factory surface, not third-party Java subclass source
+compatibility. This resolves the earlier open scope review without claiming
+that Rust can host a Java subclass.
+
+## Evidence and changes
+
+- Read pinned `MQClientAPIFactory.java` and searched pinned client source/tests
+  for subclasses and `createAndStart` callsites.
+- Clarified the scope in `PHASE_6_RUNTIME_INVENTORY.md`,
+  `PHASE_6_API_CONFIG_MAP.md`, and `PHASE_6_REQUIREMENT_AUDIT.md`.
+
+## Verification
+
+- `git diff --check` — passed.
+- No tests run; this is a source-scope review and documentation-only change.
+
+## Acceptance boundary
+
+This resolves only the protected-hook scope item. Broad P18-V01 Java
+source/API/settings/input/error/control-flow/reverse-export reconciliation
+remains PARTIAL. No Phase 19 files were edited or staged; no push, remote CI,
+Broker, or Docker validation was performed.

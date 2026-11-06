@@ -1,0 +1,11 @@
+Session: 2026-10-10T00:18:38Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Nullable offset-table input compatibility: the pinned 5.5.1 Java oracle added five direct cases for null map, null key, null Long value, nullable MessageQueue topic/broker fields, and a null key reached after a valid entry. Fixture/oracle commit `73e6778e`; `fixtures/runtime/offsets.json` SHA-256 `059bb9872da7ffd85f1bd84e12c09787e0ed6cae6d5db6b113c02027b2902ac1`. Java throws for null map and namespaced null key; null key/value pass through with null/empty namespace, and nullable fields on a nonnull queue survive namespace conversion.
+
+The red native regression showed the existing `BTreeMap<MessageQueue, i64>` signature could not represent those Java inputs. `ClientRuntime::parse_offset_table_from_broker` now consumes `Option<BTreeMap<Option<MessageQueue>, Option<i64>>>`, returns `Result<_, RuntimeError>`, reports Java's null-map/key failures as `InvalidOffsetTable`, and preserves null values and queue fields. Rust ownership does not retain Java caller aliases or partial queue-key mutation if a later null key errors. Implementation/test commit `f75dbe53`; API map, runtime inventory, and requirement audit commit `767b9abf`.
+
+Validation: focused `runtime_metadata::explicit_offset_namespace_conversion_matches_invoked_java` passes for ten ordinary and five nullable fixture cases. `cargo test --workspace --all-targets --locked` exits 0 with localhost permission; the first sandboxed workspace run denied three test socket binds, and the approved rerun passed. `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` passes. `mvn -o -q -f compat/java-reference/pom.xml verify` exits 0, including all pinned runtime oracles and Rust-generated fixture cross-decodes. `python3 tests/differential/compare.py --self-test`, `--validate-manifest` (22 scenarios), `cargo fmt --all --check`, and `git diff --check` pass.
+
+Phase 6 remains partial. Complete Java source/API/input/reverse-export reconciliation and non-macOS/IPv6-only platform evidence remain open; P6-V04 remains `PENDING_PHASE_19`. Continue by selecting the next unresolved source-backed API/input branch from the current audit; do not mark Phase 6 complete.

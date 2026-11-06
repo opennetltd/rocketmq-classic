@@ -1,0 +1,11 @@
+Session: 2026-10-10T02:02:02Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Pre-start code 40 state-gating correction (`362d6d32`): pinned Java's invoked `ClientRemotingProcessor` fixture observes `ServiceThread.hasNotified` change false→true before its worker starts and returns null. Rust previously checked `RuntimeState::Running` before handling `NOTIFY_CONSUMER_IDS_CHANGED`; the processor is bound in Created state, so that ordering returned a response unlike Java. The handler now signals the runtime-wide rebalance service before the generic non-running feature-slot guard. `RESET_CONSUMER_CLIENT_OFFSET` and other inactive feature slots retain `SYSTEM_ERROR` in Created/Failed/Stopped.
+
+The Rust differential test now creates the runtime without starting it, sends code 40 in Created state, advances the source minimum interval, starts the worker, and verifies the sticky signal wakes both registered consumers. A subsequent code 40 without `consumerGroup` wakes both again. The guard test verifies silent code 40 in Created, Failed, and Stopped, while an inactive feature slot still receives `SYSTEM_ERROR`. Existing loopback coverage confirms code 40 remains wire-silent.
+
+Verification passed: focused inbound unit module (9 tests), inbound loopback integration test (2 tests, local socket access), full `cargo test --workspace --all-targets --locked` (exit 0 with local socket access), strict workspace all-target/all-feature Clippy, formatting, and `git diff --check`. Pinned offline Maven `verify` with the invoked Java code 40 fixture and 22 scenarios passed on the immediately preceding fixture commit (`e3923960`); this state-order-only change does not alter Java artifacts or fixtures. The full workspace rerun log is `/private/tmp/p6-workspace-test-statefollow.log`.
+
+Updated `PHASE_6_INBOUND_MATRIX.md`, `PHASE_6_API_CONFIG_MAP.md`, and `PHASE_6_REQUIREMENT_AUDIT.md` to describe the sticky pre-start signal and retain the inactive feature-slot error boundary. This closes the code 40 Phase 6 runtime flow only. Full Phase 6 source/API/input and reverse-export reconciliation remains open; real non-macOS and IPv6-only platform evidence remains open; P6-V04 remains `PENDING_PHASE_19`.

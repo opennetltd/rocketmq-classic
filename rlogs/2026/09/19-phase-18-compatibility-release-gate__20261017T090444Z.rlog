@@ -1,0 +1,63 @@
+# Phase 18 custom-header execution log
+
+- Session timestamp: 2026-10-17 09:04:44 UTC.
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Java oracle: `/Users/bruce.tsai/Projects/3rd/rocketmq`, pinned source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; checkout inspected read-only.
+- Scope: close the invoked `RemotingCommand` custom-header and ext-field helper
+  slice on the Phase 18 branch. The Phase 18 plan was not modified.
+
+## Changes
+
+- `RemotingCommand` now owns an optional typed custom header and a typed decoded
+  header cache. Rust borrows expose attached values; `write_custom_header(None)`
+  clears the attachment. Explicit materialization and both wire codecs merge
+  non-null header fields with existing ext-fields, preserving Java overwrite
+  behavior while leaving the Rust command map unchanged during immutable encode.
+- Added `add_ext_field` and `add_ext_field_if_not_exist`. The latter returns a
+  typed `ProtocolError` if no map exists; pinned Java dereferences null and
+  throws `NullPointerException` on that input.
+- Java fixture invokes attach/read identity, post-attach mutation, null clear,
+  cached/direct decode, ext-field helper and null-map behavior. Rust differential
+  checks the fixture, both codec outputs and cached-reference reuse.
+- Remaining representation difference: Rust transfers an owned typed header
+  and requires the `CommandHeader` trait rather than retaining arbitrary Java
+  object aliases and using reflection. Cached and attached references remain
+  mutable through Rust borrows. This slice does not close the broader P18-V01
+  audit.
+
+## Commands and results
+
+- Initial `mvn -o -q -f compat/java-reference/pom.xml verify` failed at fixture
+  drift after adding the new Java cases. Regenerated the fixture with
+  `mvn -o -q -f compat/java-reference/pom.xml compile exec:java
+  -Dexec.args='runtime-config-fixtures fixtures/runtime/client-config.json'`;
+  exit 0. Fixture SHA-256:
+  `48b1ac80746dbb12d22b4da2c6a100b0a19f19e78b65035e5d88243c82d6e582`.
+- First complete Remoting test run exposed that the Java factory oracle calls
+  `makeCustomHeaderToNet` before observing ext-fields. Updated the Rust factory
+  regression to make the same call; focused factory regression then passed.
+- `cargo test -p rocketmq-classic-remoting --all-features --locked`: exit 0;
+  112 unit, 8 codec, 1 fuzz regression, 7 security, 107 transport and 15
+  doctests passed.
+- `cargo test -p rocketmq-classic-remoting --all-features --locked
+  command_custom_header_helpers_match_invoked_java_fields`: exit 0.
+- `cargo test -p rocketmq-classic-remoting --all-features --locked
+  command_factories_match_pinned_java_defaults_and_id_sequence`: exit 0.
+- `cargo check --workspace --all-features --locked`: exit 0.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings`: exit 0.
+- `cargo fmt --all -- --check` and `git diff --check`: exit 0.
+- Final `mvn -o -q -f compat/java-reference/pom.xml verify`: exit 0; 37
+  scenarios, Java fixture drift checks, and Rust-generated header/body
+  cross-decodes passed.
+
+## Commit and remaining gates
+
+- Code/test/fixture commit: `d0ecaf1e feat(remoting): preserve typed custom headers`.
+- Documentation and this log are recorded separately.
+- Still open: Remoting default language/opaque behavior, process timer and
+  callback-list APIs, long-poll metric emission, multi-entry `toString()` map
+  ordering, broad bidirectional P18-V01, and the final full-workspace P18-V02
+  run after all remaining Phase 18 changes.

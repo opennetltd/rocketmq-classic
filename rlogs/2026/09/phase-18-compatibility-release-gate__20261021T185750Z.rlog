@@ -1,0 +1,43 @@
+# Phase 18 MessageExt store-host override follow-up — 2026-10-21T18:57:50Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `ac565eea` (`feat(common): dispatch subtype store hosts`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `3633f3ac0098815df76790a969a15e7a9e2edda45f30723bd67a2753468facab`.
+
+## Source audit and change
+
+- Java Push send-back uses virtual `MessageExt.getStoreHost()` to select a
+  broker address when no broker name is available. Rust previously read only
+  the stored base host.
+- Added `MessageExtSubtype` hooks for `getStoreHost` and `setStoreHost` and
+  routed `MessageExt::store_host` and `set_store_host` through them.
+- The invoked Java direct-consume fixture sets a host through the custom
+  setter, records the custom getter as present, and compares its setter count.
+  A Rust Push send-back regression sets the base host to `127.0.0.1:10911` and
+  the custom getter to `127.0.0.1:10912`; the request uses the custom endpoint.
+- Updated the Phase 6, Phase 10 and Phase 18 records and release checklist.
+
+## Verification
+
+- PASS: `cargo test --locked -p rocketmq-classic-consumer
+  public_send_back_overloads_use_message_and_explicit_broker_names --lib`
+  (1 test).
+- PASS: focused
+  `cargo test --locked -p rocketmq-classic-consumer --test runtime_direct_consume`
+  (3 tests).
+- PASS: pinned Java runtime fixture regeneration through Maven; 9 Running
+  Info, 27 direct-consume and 15 reset cases verified. Existing JDK Unsafe
+  warnings were emitted.
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- Full workspace tests, Maven `verify`, strict Clippy, and supplemental P18-V02
+  differential/stress/fuzz/example/benchmark/metadata/time-zone gates have not
+  been rerun on this revision; refresh them after the remaining local changes.
+
+## Remaining status
+
+Broad P18-V01 source/API/settings/input/error/control-flow/reverse-export
+reconciliation remains open, as do current-revision GitHub Ubuntu and native
+Windows P18-V04 runtime evidence. Phase 19 Broker/Docker validation remains
+separate. No push, remote CI, Broker or Docker run was performed. Pre-existing
+Phase 19 worktree paths were left untouched and unstaged.

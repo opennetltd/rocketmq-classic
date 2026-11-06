@@ -1,0 +1,73 @@
+# Phase 18 producer facade inventory — 2026-10-14T04:22:31Z
+
+- Pinned Java client 5.5.1 reflection inventory now records `DefaultMQProducer` (11 public constructors, 107 declared/183 callable public methods), `MQProducer` (34 declared/42 callable methods), and `MQAdmin` (8 methods). The Rust integration test pins these counts, representative inherited signatures, and the public `sendDirect`/`sendByAccumulator` signatures.
+- Source review confirms `sendDirect` bypasses auto-batching; `sendByAccumulator` tries to accumulate an eligible individual message even when normal wrapper dispatch would take the non-auto-batch path. Rust's current normal send and explicit batch surfaces do not expose those choices as direct public entrypoints. This is recorded as an unresolved P18-V01 API/behavior gap; no parity claim is made.
+- Updated the Phase 7 producer matrix and Java oracle fixture. `fixtures/producer/core.json` SHA-256 recorded by the fixture drift gate.
+- Fixture SHA-256: `3815a09b647c39d68ae6bb3538e3d026eb48dd9dc12135c16d50c2a1c9f04ca2`.
+- PASS: `cargo test -p rocketmq-classic-producer --test producer pinned_java_default_producer_facade_and_inherited_interfaces_are_recorded --locked` (1 passed).
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, fixture drift, Java/Rust cross-decodes; exit 0).
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- P18-V01 remains PARTIAL; current-revision GitHub Ubuntu CI is still unavailable, and Phase 19 Docker/Broker integration remains the next automated gate. Manual platform checks remain separate.
+
+## Producer helper path follow-up — 2026-10-14T04:26:26Z
+
+- Added Rust `Producer` direct send methods that bypass auto-batching and forced-accumulator methods that enqueue eligible messages when `auto_batch` is false. Explicit-queue and future-mode counterparts map Java's optional queue and callback choices to the Rust owner API.
+- Added `direct_and_forced_accumulator_helpers_keep_java_path_choices`, covering sync/future and default/explicit-queue flows; direct attempts are unbatched with auto-batch enabled, and forced accumulator attempts are batched with it disabled.
+- Updated the Phase 7 matrix and release checklist. The broader P18-V01 source/API/input/branch and reverse-export audit remains PARTIAL.
+- PASS: `cargo test -p rocketmq-classic-producer --locked` (120 unit tests; all producer integration targets passed).
+- PASS: `cargo clippy -p rocketmq-classic-producer --all-targets --all-features --locked -- -D warnings`.
+- PASS: focused helper-path regression; `cargo fmt --all -- --check`; `git diff --check`.
+- Earlier in this session, default `mvn -q -f compat/java-reference/pom.xml verify` passed at the same fixture revision (37 scenarios, drift and cross-decode checks); producer source/test/doc changes since then did not modify oracle fixture output.
+
+## Current revision P18 server-free gate rerun — 2026-10-14T04:34:35Z
+
+Revision: `6c62ebf2` (`feat(producer): expose direct and forced accumulator sends`).
+
+- PASS: `cargo test --workspace --locked` (serial run).
+- PASS: `cargo test --workspace --all-features --locked` (serial run).
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (fixture drift, Java/Rust cross-decodes, 37 scenarios).
+- PASS: comparator self-test; 37-scenario manifest validation.
+- PASS: `bash tests/stress/run-offline-smoke.sh` (16 deterministic cases × 3 repetitions).
+- PASS: `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` (1,824 bounded mutations).
+- PASS: release facade examples; offline benchmark compilation; workspace metadata/package-license/dependency-direction check; seven package contents via `cargo package --workspace --list --locked --allow-dirty`.
+- P18-V02 and P18-V03 server-free evidence is current at this revision. P18-V01 remains PARTIAL for broad source/API/setting/overload/input/branch and reverse-export reconciliation. P18-V04 still lacks current GitHub Ubuntu CI evidence. Phase 19 local Docker/Broker integration is not yet provisioned or run; registry version/dependency resolution remains unconfirmed.
+
+## Producer constructor inventory follow-up — 2026-10-14T04:39:13Z
+
+- The Rust fixture regression now checks all 11 pinned `DefaultMQProducer` constructor signatures individually.
+- The Phase 7 matrix maps constructor arguments to `ProducerConfig`, `ClientConfig` namespace/trace fields, the optional RPC hook, and the initial topic list. It explicitly records that Rust composes config and owner construction instead of mirroring Java overloads.
+- PASS: `cargo fmt --all -- --check`.
+- PASS: `cargo test -p rocketmq-classic-producer --test producer pinned_java_default_producer_facade_and_inherited_interfaces_are_recorded --locked` (1 passed).
+- Signature presence and source-derived field disposition are recorded; value-by-value constructor differentials remain P18-V01 work. The release checklist and broader P18-V01 status remain open.
+
+## Producer constructor value differential — 2026-10-14T04:50:27Z
+
+- Re-read `DefaultMQProducer` and `ClientConfig` from pinned Java commit `efa1be59d6fc747ad220f036c86030f05f0419f9` with `git show`; the external checkout is currently at a different HEAD and contains an unrelated untracked file, which was left untouched.
+- Added `producerConstructorCases` to the invoked Java core fixture. It constructs all 11 overloads and records producer group, legacy namespace, trace values, initial topics and RPC-hook identity at both facade and implementation. Four nullable-input cases check null producer group, namespace, topic list and trace topic.
+- Added a Rust differential mapping for all 11 normal constructor cases plus nullable namespace/topic/trace fields. Java's retained mutable topic-list identity maps to Rust-owned vector values. Java can store a null producer group before start; Rust requires a `String`, so this invalid Java value is recorded as a type-level input restriction without claiming equivalent start behavior.
+- Added an owner-level Rust regression for retaining the supplied `RpcHook`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml -Dproducer.core.fixture.verify=false verify` (37 scenarios and all fixture/cross-decode gates).
+- PASS: `cargo test -p rocketmq-classic-producer --locked` (121 unit tests and all producer integration/doc targets; this run preceded the additional nullable-case assertions).
+- PASS: `cargo test -p rocketmq-classic-producer --locked constructor` (Rust RPC-hook constructor tests and the final normal/nullable constructor differential).
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- The constructor field slice is now covered; Java-null group is an explicit Rust type-level restriction. Broad P18-V01 source/API/input/branch and reverse-export reconciliation remains open.
+- Fixture SHA-256 after regeneration: `7e66d2392de9e8028fd77d0ae0b9fb92e2d012856c80780425091efbbf270365`.
+- PASS: default `mvn -q -f compat/java-reference/pom.xml verify` with producer fixture drift checking enabled (37 scenarios).
+- PASS: strict `cargo clippy -p rocketmq-classic-producer --all-targets --all-features --locked -- -D warnings`. An initial run identified a test tuple type-complexity lint; naming the constructor-case type resolved it.
+- PASS after nullable-case assertions: `cargo test -p rocketmq-classic-producer --locked constructor` (3 matching tests across unit/integration targets).
+- PASS: final `cargo fmt --all -- --check`; `git diff --check`.
+- Correction: the constructor-filtered Cargo run matched 4 tests (2 unit, 1 Producer integration, 1 TransactionProducer integration).
+
+## Producer runtime accumulator settings parity — 2026-10-14T05:23:06Z
+
+- Branch: `phase/19-phase-18-compatibility-release-gate`; implementation started from `454d57cf` with the previously unfinished accumulator changes in the worktree. Pinned Java reads used source commit `efa1be59d6fc747ad220f036c86030f05f0419f9`; the external Java checkout was not modified.
+- The invoked Java fixture now records pre-initialization zero getters, default and configured initialization, runtime valid updates, invalid runtime updates retaining effective values, invalid pre-init delay being accepted by the setter then failing during init, and reinitialization after an invalid runtime value. Fixture SHA-256: `4b166c789a8698ac5600667e2594d7025f7c1b90dd67b2949719269cb6d8160c`.
+- Rust `Producer` now exposes runtime delay, per-batch byte and aggregate-cap getters/setters. Pre-init setters retain raw values without validating, post-init setters apply Java ranges and keep the prior effective value on failure, and accumulator initialization preserves existing values when called again. Positive Java `long` aggregate caps above the platform `usize` maximum saturate to `usize::MAX`, which has the same practical admission behavior on narrower targets.
+- Accumulator timer tasks subscribe to setting changes and re-evaluate pending byte thresholds and hold deadlines. Scripted regressions verify lowering the threshold flushes a pending batch, raising the delay reschedules it, and lowering the aggregate cap bypasses a later enqueue. The Phase 7 matrix and release checklist record this coverage.
+- PASS: `mvn -q -f compat/java-reference/pom.xml -Dproducer.core.fixture.verify=false verify` for fixture regeneration; default `mvn -q -f compat/java-reference/pom.xml verify` for drift verification and 37 scenarios.
+- PASS: `cargo test -p rocketmq-classic-producer --locked` (123 unit tests plus every Producer integration/doc target); strict Producer Clippy. The first strict Clippy run found two test-only lock guards spanning shutdown awaits; both scopes were narrowed and the rerun passed.
+- PASS: `cargo test --workspace --locked`; `cargo test --workspace --all-features --locked`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: differential comparator self-test; 37-scenario manifest validation; offline race/leak smoke (16 cases × 3); fuzz smoke (1,824 bounded mutations); release facade example build; offline benchmark compilation; workspace metadata and seven package content checks.
+- These checks cover the worktree based on `454d57cf` before its feature commit. P18-V01's broader Java/Rust reverse-export and source/input/branch audit, current GitHub Ubuntu CI result, and Phase 19 Docker/Broker execution remain open.

@@ -1,0 +1,13 @@
+Execution session: 2026-10-10T15:17:21Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Initial state: `6bb3727a` after capturing null consumer-group forwarding and request-header behavior in the pinned Java fixture. The requested Java source checkout remains absent in the current environment; the pinned 5.5.1 artifact direct invocation was used.
+
+Selected slice: preserve `findConsumerIdList(topic, null)` behavior. The actual Java runtime forwards null group to `MQClientAPIImpl`; actual API invocation shows code 38 omits `consumerGroup` from ext fields and returns the decoded consumer IDs. Oracle commit `6bb3727a`; native runtime/API/test commit `4f4d9b16`; fixture `fixtures/runtime/lookup.json` SHA-256 `888820da6c417fc04ac09835afc0f74c04795d36142f6bd9c5c88daa485db68b`.
+
+Validation: focused NameServer/Broker loopback test `null_consumer_group_matches_java_rpc_and_omits_header_field` passed. Full `cargo test --workspace --all-targets --locked` and strict all-target/all-feature Clippy passed. Pinned offline Maven verify passed (22 scenarios, lookup fixture drift, runtime probes, and Rust-to-Java cross-decodes). Comparator self-test and manifest validation passed (22 scenarios); format and diff checks passed.
+
+Documentation update: `PHASE_6_API_CONFIG_MAP.md` records the nullable group input and its omitted wire field. `PHASE_6_REQUIREMENT_AUDIT.md` records actual Java runtime/API evidence and all gates. This closes only the nullable consumer-group branch; full Phase 6 reconciliation remains open and P6-V04 stays `PENDING_PHASE_19`.
+
+Documentation/log commit: pending.

@@ -1,0 +1,33 @@
+# Phase 18 MQClientAPIImpl remoting getter crosswalk
+
+- Recorded: 2026-10-23 03:28:59 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Implementation commit: `69d92b23`
+
+## Finding and change
+
+The pinned `MQClientAPIImpl` publicly exposes `getNameServerAddressList()` and
+`getRemotingClient()`. `MQClientApi` previously had no corresponding getters.
+It now returns the underlying nullable NameServer-list snapshot and a cloneable
+`RemotingClient` handle that shares the same transport state. The
+`api_surface_tests` regression updates the NameServer list through the returned
+handle and observes the change through the API getter. The reverse API map now
+records both methods.
+
+## Verification
+
+- `cargo test --offline -p rocketmq-classic-core api_surface_tests` — passed
+  (1 API-surface regression).
+- `cargo clippy --offline -p rocketmq-classic-core --all-targets --all-features -- -D warnings` — passed.
+- `cargo fmt --all --check` and `git diff --check` — passed.
+- Pinned Java source review: `MQClientAPIImpl.getNameServerAddressList` and
+  `getRemotingClient`, lines 353–358.
+
+## Scope and remaining evidence
+
+This maps the two direct remoting accessors only; the broad P18-V01 Java
+source/API/settings/input/error/control-flow and reverse-export reconciliation
+remains PARTIAL. Current-revision remote Ubuntu CI, native Windows runtime, and
+Phase 19 live Broker/Docker evidence remain open. No Phase 19 worktree file,
+external Java checkout, remote CI, or live Broker was changed or used.

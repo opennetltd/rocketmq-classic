@@ -1,0 +1,57 @@
+- Follow-up documentation commit `a22875d7` refreshes the P18-V01 release-checklist summary with the 527-case Route DTO corpus and 128 raw-control probes. `git diff --check` passed; no plan changed.
+# Phase 18 Route DTO raw-control fixture extension — 2026-10-13T18:46:02Z
+
+- Revision: `15fa5d03` on `phase/19-phase-18-compatibility-release-gate`.
+- Extended the pinned Java 5.5.1 route DTO fixture with all 32 raw U+0000–U+001F code points at four input positions: `orderTopicConf` value, unknown field name, `filterServerTable` key, and filter value. Added a Rust assertion requiring all 128 IDs. Route DTO corpus: 527 cases; `route.json` SHA-256: `1ac509576845e9f9d78fc4c677702b6c21cf1195d711cb0437dacb48e8e14da1`.
+- PASS: route DTO Java differential (527 cases), including the full 32 × 4 ID-presence assertion; `cargo fmt --all -- --check`; `git diff --check`.
+- Fixture generation, Maven verify (37 scenarios), `cargo test --workspace --all-features --locked`, strict all-target/all-feature Clippy, and the other Phase 18 workflow gates passed during this fixture extension before the final Rust corpus-completeness assertion was added; the focused differential and formatting/diff gates were rerun after that assertion.
+- Updated the Phase 6 API/config map, requirement audit, and route audit. No plan changed. No Broker or Phase 19 Docker scenarios were run.
+- This closes only this Route DTO raw-control input slice. P18-V01 and the broader Phase 6 source/API/input/reverse-export audit remain `PARTIAL`; P18-V04, outstanding platform evidence, release dependency-version preparation, and Phase 19 local Broker/Docker scenarios remain open.
+- Path correction: the execution details above were initially written under an incorrect date-based path, then moved into this plan-stem log. The incorrect duplicate was removed; this file is the canonical record for this execution session.
+
+# Phase 18 package dependency version preparation — 2026-10-13T18:51:36Z
+
+- Revision: `500be497` on `phase/19-phase-18-compatibility-release-gate`.
+- Added centralized internal workspace dependencies with registry-compatible `^0.1.0` requirements plus local paths; all seven packages remain `publish = false`. Updated the release checklist to separate this preparation from pending registry availability and final release-version confirmation.
+- PASS: locked offline Cargo metadata confirmed all seven workspace package versions and internal dependency requirements; `cargo package --workspace --list --locked --allow-dirty` listed the package contents; `cargo check --workspace --all-targets --all-features --locked` passed; `git diff --check` passed.
+- An initial metadata assertion one-liner had a Python quoting syntax error; the corrected assertion passed. No manifest or lockfile state was changed by that failed check.
+- Actual crates.io dependency resolution remains unverified and publishing remains disabled pending Phase 19/release approval.
+
+# Phase 18 Push reset-offset continuation — 2026-10-13T19:23:08Z
+
+- Compared the reset lifecycle with pinned Java 5.5.1 source at `efa1be59d6fc747ad220f036c86030f05f0419f9`: `MQClientInstance.resetOffset`, `waitResetOffsetReady`, and `RebalancePushImpl.removeUnnecessaryMessageQueue` / `tryRemoveOrderMessageQueue`.
+- Updated Rust reset handling to select only live process queues represented in the input table; drop and clear matching queues even for null offsets; wait Java's 10-second non-orderly drain or orderly consume-lock window; write only non-null offsets; then perform the Java 500-ms orderly removal attempt. A timed-out orderly removal still removes the local queue but leaves the offset-store entry; successful removal persists, removes the stored offset and unlocks. Reset values are not frozen, and generation fencing rejects late work. The process-queue unlock delay now begins at queue creation.
+- Added paused-time and lifecycle regressions for slow callback fencing, 10-second orderly and non-orderly windows, the additional 500-ms attempt, available-lock unlock, null offsets, unassigned rows, and unlock-delay timing.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (201 unit tests and all 44 integration tests), strict consumer Clippy, and focused reset-offset regressions. After documentation edits, `cargo fmt --all -- --check` and `git diff --check` also pass.
+- Updated the Phase 17 admin matrix, Phase 6 API/config and inbound maps, Phase 6 requirement audit, and release checklist to record the behavior and remove stale claims that the Phase 17 reset/status handlers are inactive. No plan was changed.
+- P18-V01 remains partial for the wider bidirectional Java/Rust source/API/input/reverse-export reconciliation. P18-V04 still lacks a current GitHub Ubuntu run. Phase 19's local Docker/Broker matrix, actual registry dependency resolution and release-version confirmation also remain open. No Broker or Phase 19 Docker scenario was run; source and documentation changes remain uncommitted at this checkpoint.
+
+- Follow-up at 2026-10-13T19:23:59Z: committed the consumer implementation and regression tests as `dc2090f0` (`fix(consumer): match Java reset offset lifecycle`). Compatibility documentation and this execution-log update are pending their documentation commit.
+
+# Phase 18 current-revision server-free gate rerun — 2026-10-13T19:34:42Z
+
+- Current revision: `eb36e5f5` on `phase/19-phase-18-compatibility-release-gate`; Java oracle source remains pinned to `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- PASS on this revision: `cargo test --workspace --locked`; `cargo test --workspace --all-features --locked`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `mvn -f compat/java-reference/pom.xml verify` (37 scenarios and Java/Rust cross-decodes); `python3 tests/differential/compare.py --self-test`; `python3 tests/differential/compare.py --validate-manifest` (37 scenarios); `scripts/check-workspace-metadata.py`; `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` (1824 bounded mutations); `bash tests/stress/run-offline-smoke.sh` (16 cases × 3 repetitions); `cargo build -p rocketmq-classic --examples --release --locked`; `cargo bench -p rocketmq-classic --bench offline --locked --no-run`; `git diff --check`.
+- Corrected the Phase 16 matrix's stale statement that its implementation commit was outstanding; commit `06a2bfee` is on `phase/17-phase-16-namespace-security-operations`. No plan file changed.
+- This closes the current-revision server-free gate rerun. P18-V01 remains partial for the broad Phase 6 Java source/API/input/reverse-export audit and outstanding Windows IP Helper, non-macOS BSD, and real IPv6-only-host runtime evidence. A current GitHub Ubuntu workflow result remains absent. No Phase 19 Broker/Docker tests or owner-environment validation were run; the documentation/log update and Phase 16 matrix correction are not yet committed.
+
+# Phase 18 source-family scope reconciliation — 2026-10-13T19:42:32Z
+
+- Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- Reconciled `MQClientAPIImpl.checkRocksdbCqWriteProgress` and `exportRocksDBConfigToJson`, plus `CheckRocksdbCqWriteResult`, against pinned call sites. Their public admin facade is `rocketmq-tools` (`MQAdminExt`/`DefaultMQAdminExt`), which the Phase 17 client-only plan excludes; recorded an explicit `TOOLS_OUT_OF_SCOPE` disposition in the Phase 17 matrix and Phase 6 requirement audit. This is one bounded scope mapping and does not close P18-V01.
+- No implementation or test changes. `git diff --check` and pinned-source search are the validation for this documentation-only audit update.
+
+# Phase 18 compatibility overview status correction — 2026-10-13T19:43:14Z
+
+- Corrected the stale `MQAdmin/query public API` row in `JAVA_5_5_1_COMPATIBILITY.md`: Phase 17's in-scope client operations have local unit evidence recorded in `PHASE_17_ADMIN_MATRIX.md`; the Broker-backed P17-V02 remains assigned to Phase 19. The previous `TODO` incorrectly implied the client API was unimplemented.
+- No implementation or test changes. `git diff --check` is the validation for this documentation-only correction.
+
+# Phase 18 compatibility overview Phase 10 status correction — 2026-10-13T19:44:05Z
+
+- Updated the global Java compatibility summary for Push raw implementation and Pull scheduling: the Phase 10/11 method matrices now show the formerly cited 71-method Push audit complete and assignment locally verified. Changed those rows to `UNIT_VERIFIED` while retaining P10-V03's Broker retry/DLQ handoff under Phase 19.
+- No implementation or test changes. `git diff --check` is the validation for this documentation-only correction.
+
+# Phase 18 preliminary Rust public-name reverse scan — 2026-10-13T19:47:03Z
+
+- Ran a source-only heuristic scan of `pub fn` and public type/constant declarations under the producer, consumer, and facade crates, then searched for exact Rust identifier tokens in compatibility Markdown. It found 187 producer declaration names (129 absent as exact tokens), 336 consumer declaration names (145 absent), and no declarations directly in the re-export-only facade crate.
+- These counts are candidate evidence gaps, not confirmed missing APIs: the scan includes declarations in modules and names documented by behavior-family rather than exact token. P18-V01 still needs a re-export-aware, type/method-level Java source and unit-evidence crosswalk. No code or test changes were made; this scan alone does not change any compatibility status.

@@ -1,0 +1,9 @@
+Session: 2026-10-10T00:23:20Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Null offset-table namespace branch continuation: expanded the pinned Java fixture with two cases passing a null map with empty and nonempty namespace. Both throw `NullPointerException`, confirming the source dereferences the map before testing namespace. Oracle/fixture commit `ce3f2af2`; `fixtures/runtime/offsets.json` now has ten ordinary and seven nullable cases at SHA-256 `28d80e23c0f64a0e52a4a11020c24d79d58639e9955972a74c2ee04a2828f0b8`. The native nullable fixture loop already covered both cases; no Rust implementation change was needed. API map, inventory, and audit commit `1e475bc9`.
+
+The first `exec:java` attempt used stale compiled reference classes (still reported ten total standard cases and did not include the two new nullable cases). Detected this from its output and the fixture content, then ran `mvn -o -q -f compat/java-reference/pom.xml compile exec:java ...`; the freshly compiled oracle reported ten standard and seven nullable cases. Targeted Java fixture `--verify`, focused `runtime_metadata` differential, and full `mvn -o -q -f compat/java-reference/pom.xml verify` all exit 0. The full verify reports `Runtime offset conversion verified: 10; nullable cases: 7`. Comparator self-test and manifest22, `cargo fmt --all --check`, and `git diff --check` pass.
+
+Phase 6 remains partial: whole-source API/input/reverse-export reconciliation and platform evidence remain open; P6-V04 stays `PENDING_PHASE_19`. Continue with the next unresolved source-backed branch from the requirement audit.

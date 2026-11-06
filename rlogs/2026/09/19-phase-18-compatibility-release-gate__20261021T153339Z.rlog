@@ -1,0 +1,67 @@
+# Phase 18 rebalance factory setter and release-gate refresh — 2026-10-21T15:33:39Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Starting revision: `73d28745` (`fix(consumer): match pinned rebalance routing semantics`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## P18-V01 rebalance API slice
+
+- Checked pinned `RebalanceImpl.getmQClientFactory()` and
+  `setmQClientFactory(MQClientInstance)` plus Push/Pull startup assignments via
+  `git show` at the pinned source revision.
+- Added nullable `get_client_runtime`/`set_client_runtime` behavior to Push and
+  Pull owners. The replaceable reference is used by rebalance operations;
+  owner registration and lifecycle remain tied to `ClientRuntimeManager`.
+  Pull registration reads an explicit owner override through its weak owner
+  link and falls back to its registration runtime only while the slot is
+  unset, avoiding a strong runtime-registration cycle and preserving direct
+  registration tests.
+- Added Push and Pull setter tests for runtime identity replacement and
+  explicit null. Updated
+  `docs/compatibility/PHASE_18_REBALANCE_PROCESS_QUEUE_API.md` with the mapping.
+
+## Current-revision server-free P18-V02 refresh
+
+- PASS: `cargo test --workspace --locked`.
+- PASS: `cargo test --workspace --all-features --locked`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios,
+  fixture drift checks, invoked Java evidence and Rust/Java cross-decodes).
+  Maven emitted existing JDK Unsafe and reflective-final-field warnings and
+  exited 0.
+- PASS: `python3 tests/differential/compare.py --self-test` and
+  `python3 tests/differential/compare.py --validate-manifest` (37 scenarios).
+  `tests/differential/run.sh --check-all` correctly failed closed because 30
+  inventory rows require Phase 19 runners; none were counted as passed.
+- PASS: `bash tests/stress/run-offline-smoke.sh` (16 race/leak cases × 3).
+- PASS: `cargo run --release -p rocketmq-classic-remoting --example fuzz_smoke
+  --locked` (137 frame seeds, 11 message seeds, 2,368 bounded mutations, 201
+  frame decodes, 118 message decodes).
+- PASS: `cargo build -p rocketmq-classic --examples --release --locked`.
+- PASS: `cargo bench -p rocketmq-classic --bench offline --locked`; benchmark
+  observations: frame encode/decode 2,185.6 ns/iteration, Zstd decode 1,574.0
+  ns, producer request construction 1,810.1 ns, route lookup 21.8 ns, and
+  loopback pending completion 70,932.2 ns. Observations are not thresholds.
+- PASS: locked Cargo metadata, `scripts/check-workspace-metadata.py`, and seven
+  `cargo package --list --locked --allow-dirty` package-content checks. The
+  initial package listing without `--allow-dirty` refused the uncommitted Rust
+  implementation files; rerunning with the explicit flag passed.
+- PASS: all four `unique_id::tests` under both `TZ=UTC` and `TZ=Asia/Taipei`,
+  `cargo fmt --all --check`, and `git diff --check`.
+- PASS: `cargo test -p rocketmq-classic-consumer --lib` (243 tests); strict
+  consumer Clippy also passed.
+
+## Remaining status
+
+- P18-V02 server-free checks are refreshed on the current worktree.
+- Broad P18-V01 source/settings/DTO/error/input/control-flow and reverse-export
+  reconciliation remains open; this entry closes only the rebalance factory
+  setter mapping and the preceding rebalance routing slice.
+- P18-V03 package/provenance and pre-publication review remains open.
+- P18-V04 current-revision GitHub Ubuntu and native Windows runtime evidence
+  remains open. No remote CI was triggered, no push/tag/publication occurred,
+  and Phase 19 scenario runners were not executed.
+- Pre-existing Phase 19 paths remain unstaged and untouched:
+  `integration-tests/README.md`, `tests/differential/run.sh`,
+  `integration-tests/run-local.sh`, and
+  `rlogs/2026/09/20-phase-19-docker-local-validation__20261017T224455Z.rlog`.

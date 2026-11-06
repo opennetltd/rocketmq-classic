@@ -1,0 +1,295 @@
+# Phase 3 execution log — TCP/TLS remoting transport
+
+- Plan: `plan/2026/09/04/04-phase-03-remoting-transport.md` (paired Traditional Chinese plan)
+- Branch: `04-phase-03-remoting-transport`
+- Base: `9341155 phase 2: add bounded remoting codec`
+- Status: implementation and offline validation recorded; Phase 3 Java 5.5.1 parity is explicitly PARTIAL and not complete.
+
+## Scope and decisions
+
+- Implemented Tokio TCP/TLS transport with deadline-based invoke/oneway, per-address single-flight reuse, bounded queues, opaque/generation correlation, inbound raw-code processor dispatch, TLS CA/hostname/client identity handling, and idempotent shutdown.
+- Kept bounded inbound overload behavior explicit: return `SYSTEM_BUSY` for non-oneway requests, do not answer oneway requests. This is only a simplified behavior and not a claim of full Java processor-executor parity.
+- Compared against pinned Java client 5.5.1 sources (`NettyRemotingClient`, `NettyRemotingAbstract`, `ResponseFuture`, `InvokeCallback`, `NettyClientConfig`, TLS helper/config); reference checkout remained untouched.
+- Java callback APIs, semaphore admission, proxy, NameServer selection/scanning, callback executor configuration, hooks/pipeline, executor controls, GO_AWAY/reconnect/channel events, full Netty/TLS controls and full Java errors/lifecycle remain missing. Phase 3 full-parity acceptance is therefore NOT MET. No live Broker/Docker behavior is inferred.
+
+## Automated cases
+
+- `P3-V01` partial: opaque wrapping, at-most-one terminal result under response/timeout/cancel/shutdown race, pending cleanup, invoke cancellation and shutdown completion.
+- `P3-V02` partial: connection reuse under concurrent calls, stale-generation close protection, and outbound saturated writer deadline.
+- `P3-V03` partial: inbound processor, unsupported request, oneway suppression and parallel response matching.
+- `P3-U01` partial: route frame exchange, already-expired and in-flight deadlines, trusted/untrusted TLS CA and hostname verification, shutdown/task joining and address validation.
+- Test limitation: barrier race test may have no explicit winner if shutdown wins `fail_all_pending`; the oneshot still completes exactly once and pending is empty. Actual queue-capacity saturation of inbound worker admission is not directly forced by a deterministic test. These limitations remain visible rather than being reported as full criterion closure.
+- `P3-V04` remains `PENDING_PHASE_19` (live server 5.3.4).
+
+## Validation run
+
+- `cargo fmt --all --check` — PASS (before final review edits; rerun required).
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — PASS (before final review edits; rerun required).
+- `cargo test --workspace --locked` — PASS (30 unit/integration tests across workspace, plus doc tests).
+- `cargo check --workspace --locked` — PASS.
+- `cargo test -p rocketmq-classic-remoting --test transport --locked` — PASS (7 tests; before last validation-focused edits; rerun required).
+- `python3 scripts/check-workspace-metadata.py` — PASS.
+- `mvn -f compat/java-reference/pom.xml verify` — PASS: Java reference self-test, 17 scenario manifest entries, two Rust-generated frame decodes. Offline only.
+- `python3 tests/differential/compare.py --self-test` — PASS.
+- `git diff --check` — PASS before last edits; rerun required.
+
+## Final verification/commit
+
+- English and Traditional Chinese Phase 3 plans re-read. Full compatibility contract is not satisfied because the above Java observable capabilities are missing; do not mark Phase 3 parity complete.
+- Working tree contains Phase 3 implementation and documentation. Commit is pending until the stated reruns and final diff review complete.
+- No Docker or live Broker test was run. Java reference repository was not modified.
+
+## Final rerun results and plan gate
+
+- `cargo fmt --all --check` — PASS.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — PASS.
+- `cargo test --workspace --locked` — PASS (30 unit/integration tests across workspace, plus doc tests).
+- `cargo check --workspace --locked` — PASS.
+- `cargo test -p rocketmq-classic-remoting --test transport --locked` — PASS (7 scripted TCP/TLS tests).
+- `python3 scripts/check-workspace-metadata.py` — PASS.
+- `mvn -f compat/java-reference/pom.xml verify` — PASS; offline Java self-test, 17 manifest scenarios, 2 Rust frames decoded.
+- `python3 tests/differential/compare.py --self-test` — PASS.
+- `git diff --check` — PASS.
+- The P3-V02 unit test was strengthened to close a real generation, establish a replacement, then inject the old generation close. Saturated writer test fills the actual 128-slot queue.
+- Final plan review confirms major automatable parity requirements remain unmet: callback/blocking APIs and callback timeout semantics, Java semaphore admission, SOCKS proxy, NameServer selection/scanning, callback executor, hooks/pipeline, default/per-processor executors and reject/GO_AWAY flows, channel events/reconnect/idle behavior, and complete Netty/TLS configuration/error semantics. The phase contract explicitly prohibits missing Java capabilities; docs call this PARTIAL but documentation does not satisfy that contract. Therefore Phase 3 is NOT ACCEPTED, no phase-completion commit was created, and Phase 4 branch must not be created.
+- Live P3-V04 stays `PENDING_PHASE_19`; no Broker/Docker tests ran. Java reference worktree was not modified.
+- Working tree remains uncommitted on `04-phase-03-remoting-transport`; continue implementing the outstanding automatable Java source flows before committing this phase.
+
+## Continued parity mapping (2026-09-25)
+
+- Added NameServer configured/available list APIs, non-empty list replacement with duplicate removal, selected-address tracking, round-robin initial connection choice, invoke using the selected channel, and a client-owned 30-second availability scan when `scan_available_nameserver` is enabled. Empty NameServer updates are ignored per Java; chosen-address recovery and cleanup are not fully equivalent.
+- Added one GO_AWAY reconnect/retry for sync and async invoke with original deadline; a second GO_AWAY returns `TransportError::GoAway`; oneway has no response/retry path.
+- Added scripted NameServer invoke/list/availability tests. Tests disable scanning where needed to isolate scripted exchanges; background scan timer lacks controlled-time parity coverage.
+- Validation after the NameServer lock fix/test isolation: format, Clippy, workspace tests (49 plus docs), check, metadata checker, Maven verify (17 scenarios/two Rust frames), differential self-test and diff check passed.
+- Phase 3 remains NOT MET. Remaining areas include exact callback lifecycle/error taxonomy, Java channel idle/event semantics, processor executor lifecycle, pipeline context, TLS property/config/reload, Netty watermarks/allocator/worker group and full overload flows. No live Broker/Docker test; P3-V04 pending Phase 19. Java checkout untouched.
+
+## Post-review rerun correction (2026-09-25T01:20Z)
+
+- Reran all gates after stale-generation and actual 128-slot queue tests: format, workspace Clippy, workspace tests (41 plus docs), workspace check, metadata, Maven, differential self-test and diff check — all PASS.
+- Stale close test proves replacement remains mapped/open after prior generation close. No phase completion commit or Phase 4 branch.
+
+## Continuation update (2026-09-25T03:17Z)
+
+- Added `is_channel_writable`, async `is_address_reachable`, and `close_channels`; writability is Rust bounded queue capacity rather than Netty watermarks; unknown channels writable. Applied TCP send/receive buffers before connect and iterated resolved socket addresses. SOCKS5 supports routing; write watermarks/pooled allocator remain exposed but not implemented.
+- Corrected config edges: zero idle scan disables, callback worker count zero falls back to four, zero max idle accepted, empty NameServer updates ignored, proxy DNS accepted, expired async invoke completes through callback without connect.
+- Added channel/config/socket tests. Full validation passed: fmt, Clippy, 52 Rust tests plus docs, check, metadata, Java oracle, differential self-test and diff check. Offline scripted peers only.
+- Phase 3 incomplete/uncommitted; callback taxonomy, executors, TLS config reload, real Netty controls and NameServer/channel event behavior remain. P3-V04 pending Phase 19.
+
+## Continuation update (2026-09-25T03:23Z)
+
+- Implemented default processor fallback (exact-code first) and Java inbound one-way processor/hook execution with no reply. Added corresponding scripted tests; updated compatibility docs.
+- Callback executor saturation uses nonblocking admission with inline fallback; executor-disabled task/thread mapping remains different.
+- Full validation passed: fmt, Clippy, 53 tests plus docs, check, metadata, Java oracle (17 scenarios/two fixtures), differential self-test and diff check. No live Broker test or phase completion.
+
+## Continuation update (2026-09-25T03:33Z)
+
+- Added source-compatible `InvokeCallbackResult` metadata without breaking existing callback method; includes request/response/error, local send status, timeout and elapsed time; opaque updated. Async response waiting allows Java's one-second timeout scan grace.
+- Added scripted callback metadata/grace and expired-deadline tests. Exact Java failure taxonomy and timing races remain partial.
+- Full validation passed: fmt, all-target/all-feature Clippy, 56 tests plus docs, workspace check, metadata, Java oracle, differential self-test and diff check. No live Broker validation.
+
+## Continuation update (2026-09-25T03:50Z)
+
+- Added context-aware request pipeline with remote address/generation, typed abort code/remark and SYSTEM_ERROR failure mapping; legacy request-only closures retained.
+- Added scripted context/abort tests. Full validation passed: fmt, Clippy, 58 tests plus docs, check, metadata, Maven oracle and differential self-test/diff check.
+- Exact Netty context, hook ordering, executors, event lifecycle, TLS/Netty controls and overload/error mapping remain. Phase 3 unaccepted.
+
+## Continuation update (2026-09-25T03:56Z)
+
+- Added optional per-registration `RequestExecutor` for exact/default processor. Rejection maps to SYSTEM_BUSY for request/reply and one-way remains silent. Added scripted test.
+- Channel lifecycle events use bounded single-worker queue (capacity 10001), drop when full, join on shutdown; exact Java lifecycle/drop race remains different.
+- Full validation passed: fmt, all-target/all-feature Clippy, 59 tests plus docs, check, metadata, Maven oracle and differential self-test/diff check. Phase 3 remains partial.
+
+## Continuation update (2026-09-25T04:03Z)
+
+- Added backward-compatible fallible RPC hooks: typed abort retains response code/remark; ordinary hook error/panic maps to SYSTEM_ERROR; after-hook error replaces response. Pipeline panic isolated. Inbound one-way still silent.
+- Added scripted hook abort/failure and absent-response after-hook tests; offline only. Full validation passed: fmt, Clippy, 61 tests plus docs, check, metadata, Java oracle (17 scenarios/two fixtures), differential self-test and diff check.
+- Phase 3 incomplete; no commit/Phase 4; P3-V04 pending Phase 19.
+
+## Continuation update (2026-09-25T04:10Z)
+
+- Java `buildProcessRequestHandler` ordinary before-hook exception behavior verified: pipeline runs, processor is skipped, SYSTEM_ERROR passed to after hooks and written. Before abort exits early.
+- Rust updated to match; added `p3_before_hook_failure_runs_pipeline_and_after_hook_but_skips_processor`. README, ADR and compatibility matrix updated.
+- Full validation passed: fmt, Clippy, workspace tests (62 plus docs), check, metadata, Java oracle, differential self-test and diff check. Scripted peer is not Broker evidence.
+
+## Continuation update (2026-09-25T04:17Z)
+
+- Verified Java outbound RPC hook timing: `invokeImpl` calls `doBeforeRpcHooks` only after obtaining an active channel; oneway does likewise after channel success. Moved Rust before-hooks in sync/future and oneway paths after successful connection establishment.
+- Added `p3_connect_failure_does_not_run_before_rpc_hooks`, verifying failed connection does not invoke hook. Updated README and ADR; test uses local refused TCP endpoint, not Broker.
+- Targeted test passed. Full workspace validation follows below.
+- Phase 3 remains PARTIAL/unaccepted; no commit/Phase 4; P3-V04 pending Phase 19.
+
+- Final rerun after outbound hook timing and GO_AWAY retry-hook parity changes: all gates passed again; transport integration suite has 29 cases, workspace unit/integration total is 63 plus doc tests.
+
+## Continuation update (2026-09-25T04:35Z)
+
+- Compared Java `RemotingClient.setCallbackExecutor`/`NettyRemotingClient.getCallbackExecutor` and `NettyRemotingAbstract.executeInvokeCallback` behavior. Added public caller-owned `CallbackExecutor`, `set_callback_executor`, and Java-style inline callback fallback when executor rejects; disable-callback-executor remains direct execution. Tests cover callbacks routed off caller thread and rejection fallback.
+- Hardened NameServer invoke selection to discard a chosen address whose cached connection is already closed before reusing it.
+- Updated compatibility matrix, README and ADR with the newly mapped API and test IDs; parity remains PARTIAL due outstanding NameServer recovery, Java-owned processor/event executor lifecycle, TLS property/config/reload, Netty-only controls, and full error/overload parity.
+- Validation: `cargo fmt --all --check`, all-target/all-feature workspace Clippy with `-D warnings`, `cargo test --workspace --locked` (65 unit/integration tests plus doc tests), workspace check, metadata check, Maven Java oracle (`17` offline scenarios and two Rust fixture decodes), differential self-test, and `git diff --check` all PASS. A callback-executor panic-safety adjustment was included before the final full rerun. No live Broker/Docker test; Java source checkout untouched.
+- No commit or Phase 4 branch: Phase 3's strict source/API/configuration inventory and compatibility contract remain incomplete; P3-V04 remains reserved for Phase 19.
+
+## Continuation update (2026-09-25T04:52Z)
+
+- Continued the Java 5.5.1 remoting comparison. Added configured high/low outbound byte-watermark hysteresis and a focused queue-drain test; the setting measures Rust queued bytes and is explicitly not Netty event-loop writability. Applied socket send/receive options to both direct TCP and SOCKS5 sockets via `socket2`; enabled pooled allocator is rejected rather than silently ignored. Java watermarks accept high-only configuration (low defaults to zero), which Rust validation now allows.
+- NameServer invoke now tries another configured server after connection establishment failures while preserving one deadline; once a connection succeeds, a remote invoke failure is returned without replaying the command. Added a scripted failover test. This is offline loopback, not Broker evidence.
+- Updated compatibility matrix, README and ADR to clarify implemented controls and remaining mismatches. Phase 3 parity remains unaccepted: Java callback/send error taxonomy and executor lifecycle, event overload/lifecycle, exact NameServer chosen-address/update semantics, TLS property/config-file/reload controls, pooled allocator and worker-group controls, and broader overload/error behavior remain. No plan edits, commit, Phase 4 branch, live Broker or Docker validation.
+- Validation PASS: `cargo fmt --all --check`; all-target/all-feature workspace Clippy with `-D warnings`; `cargo test --workspace --locked --offline` (67 unit/integration tests plus doc tests); workspace check; metadata checker; Java oracle Maven verify (17 offline scenarios, 2 Rust-generated frame decodes); differential self-test; `git diff --check`.
+
+- Follow-up parity correction: Java socket buffer settings are signed `int`; Rust config validation now rejects values above `i32::MAX` (not just `u32::MAX`). Reran format check, workspace Clippy, workspace tests (67 unit/integration plus docs) and diff check after this correction — PASS.
+
+## Continuation update (2026-09-25T05:40Z)
+
+- Verified Java `closeChannels` interrupts PULL_MESSAGE and LITE_PULL_MESSAGE response futures; added pending request-address tracking so Rust closes only matching channel pull requests with `TransportError::Interrupted`. Added `p3_close_channels_interrupts_pending_pull_requests_only`.
+- Added send-write error classification (`TransportError::Send`) and callback `send_request_ok` semantics for connection/send/TLS failure categories. Hardened processor executor rejection against an executor that runs its FnOnce then reports rejection/panics; shared ownership ensures processor work/rejection response is terminal only once.
+- Refined NameServer state: actual channel close clears chosen/available state; successful invoke does not re-mark a channel that closed concurrently. Tests hold peer sockets open while asserting post-response availability, then explicitly close to verify cleanup/recovery. A stale generation close does not evict a replacement.
+- During verification fixed a held mutex guard in stale-generation close handling that deadlocked a test runtime; explicitly drop chosen-address guard before connection-table locking. Also corrected a test closure's `FnOnce` type.
+- Bidirectional source review reconfirmed Java shuffles updated NameServer lists; Rust currently preserves/deduplicates order (difference documented). Java TLS properties/config/reload/test mode/decryption and server-side TLS settings are not mapped; Rust deliberately retains secure chain/hostname validation rather than Java's insecure test defaults. Netty worker group/pooled allocator/event-loop watermark semantics do not have equivalent Tokio APIs.
+- Updated compatibility matrix, README and ADR with current NameServer close behavior, TLS security difference and explicit inventory incompleteness. Full Java public API/overload and config/default/type/range/test-ID ledger is still open; Phase 3 acceptance remains NOT MET, no commit/Phase 4 branch. P3-V04 remains PENDING_PHASE_19; no Broker/Docker run.
+- Validation PASS after final code/docs: `cargo fmt --all --check`; `cargo test -p rocketmq-classic-remoting --locked --offline` (48 tests + docs); `cargo test --workspace --locked --offline` (69 unit/integration tests + docs); `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`; metadata checker; Maven Java oracle (17 offline scenarios, two Rust-frame decodes); differential self-test; `git diff --check`.
+- Plan re-read English and Traditional Chinese. Core transport cases pass locally, but strict full Java source/API/configuration parity and mapped inventory remain incomplete, so phase handoff is not accepted. No Java reference worktree modified.
+
+## Continuation update (2026-09-25T06:14Z)
+
+- User clarified that Phase 3 may have multiple commits; only transition to Phase 4 is blocked until parity acceptance. Starting a sequence of focused Phase 3 commits; the existing uncommitted implementation is captured as a reviewed baseline, not a parity-completion commit.
+- Revalidated the current tree before committing: `cargo fmt --all --check`; `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`; `cargo test --workspace --locked --offline` (69 unit/integration tests plus doc tests); workspace metadata checker; Maven Java oracle (17 offline scenarios, two Rust-generated fixture decodes); differential self-test; `git diff --check` — PASS.
+- Re-read the Phase 3 English and Traditional Chinese plans. Both require full source/API/configuration parity and forbid transition until acceptance. P3-V04 remains Phase 19 only.
+- Confirmed directly from Java 5.5.1 that NameServer address updates shuffle changed lists, while Rust preserves/deduplicates order. Other open source-mapped groups include callback semantics, NameServer/channel lifecycle, executor/hook behavior, TLS controls, and Netty-only control differences. This evidence does not close the exhaustive bidirectional API/config inventory.
+- No live Broker/Docker validation; Java reference checkout remains unmodified. Phase 3 is still NOT ACCEPTED. The next commits must address one inventory group at a time and keep incompatible Netty semantics explicit.
+- Group 1 inventory deliverable: added `docs/compatibility/PHASE_3_REMOTING_INVENTORY.md`, mapping public Java methods and overloads, callback/ResponseFuture surface, NettyClientConfig defaults/types/properties, TLS controls, Netty-specific behavior, Rust APIs and test IDs. Corrected the inventory to distinguish API mapping from actual parity and called out inherited source branches not yet line-reviewed. Committed as `dbc58c4` (`docs: inventory phase 3 Java remoting surface`).
+- Group 2 NameServer update change: Java source `NettyRemotingClient.updateNameServerAddressList` shuffles the supplied list when set membership changes and retains duplicates. Rust now shuffles changed input vectors and retains duplicates; matching multisets remain unchanged, and empty updates are still ignored as Java does. Added `p3_nameserver_update_shuffles_changed_lists_and_preserves_duplicates`; it checks duplicate preservation and no-change multiset behavior without asserting nondeterministic random order. This change remains PARTIAL because Java mutates caller input and exact channel-table selection/recovery/cleanup behavior remains different.
+- Group 2 test refinement: because Java uses `Collections.shuffle`, the test deliberately does not assert random order (which could legally remain unchanged). It asserts duplicate retention and that a reordered-but-equal multiset is treated as unchanged; successful update-path runtime behavior is covered by code review of `SliceRandom::shuffle`.
+- Group 2 full gates PASS: `cargo fmt --all --check`; `cargo test --workspace --locked --offline` (70 unit/integration tests plus doc tests); `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`; metadata checker; Maven oracle (17 scenarios, 2 Rust frame decodes); differential self-test; `git diff --check`. First integration run exposed a test assertion incorrectly assuming shuffle preserved order; corrected it to check the multiset and no-change contract. Committed as `22cf44e` (`fix: align nameserver list update semantics`). No Broker test.
+- Group 3 callback ordering correction: direct review of the complete Java `ResponseFuture.executeInvokeCallback` body shows it invokes `operationSucceed`/`operationFail` before `operationComplete`; the earlier wrapper-based reading had the order reversed. Rust implementation and scripted success/timeout assertions now follow the actual Java order.
+- Group 3 full gates PASS: `cargo fmt --all --check`; `cargo test --workspace --locked --offline` (70 unit/integration tests plus doc tests); `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`; `git diff --check`. An initial concurrent test run exposed an incorrect assertion left in an expired-callback test (updated) and a nondeterministic NameServer test assuming fixed shuffle order (made order-independent); both focused tests and the full workspace suite then passed. These remain local scripted tests, no live Broker test.
+- Group 3 async connect-failure callback path: Java `NettyRemotingClient.invokeAsync` invokes only `operationFail` when channel creation/connection fails; no `ResponseFuture` is created, so `operationComplete` does not run. Rust dispatch now skips completion for `Connect` and TLS setup errors while preserving success/failure-before-complete after establishment. Added `p3_async_connect_failure_calls_fail_without_complete`; focused offline test PASS.
+- Group 3 full gates PASS: `cargo fmt --all --check`; `cargo test --workspace --locked --offline` (71 unit/integration tests plus doc tests); `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`; `git diff --check`. No live Broker test.
+
+## Continuation update (2026-09-25T07:13Z)
+
+- Mapped Java `clearRPCHook` and duplicate registration behavior: added `clear_rpc_hooks`, idempotent pointer-identity suppression for duplicate `Arc` hook registration, and scripted coverage. Java uses `List.contains`/`equals`, so custom equality semantics remain different.
+- Mapped Java `RequestPipeline.pipe` composition order: added `pipe_request_pipeline`, which runs the newly supplied source stage before the previously configured pipeline; failures short-circuit. Added scripted loopback coverage.
+- Updated the bidirectional inventory, compatibility matrix, README and ADR with API/test mappings and remaining semantic differences.
+- Validation PASS: `cargo fmt --all --check`; workspace tests offline (73 unit/integration tests plus doc tests); all-target/all-feature Clippy with warnings denied; workspace metadata checker; Java oracle Maven verify (17 manifest scenarios and two Rust fixture decodes); differential self-test; `git diff --check`.
+- Phase 3 remains unaccepted: full two-way public API/config inventory and line-by-line branch review still have open items; no Phase 4 transition. No live Broker/Docker validation; P3-V04 remains Phase 19. Java reference checkout remains untouched.
+
+## Continuation update (2026-09-25T07:16Z)
+
+- Added `get_callback_executor` and `get_channel_event_listener` to cover Java's corresponding public getters. Extended existing callback/channel-event tests to verify same-object retrieval, clear-to-None and restore behavior.
+- Updated the inventory and project docs to distinguish the mapped getter APIs from remaining Java executor/channel object lifecycle differences.
+- Validation PASS after implementation and documentation updates: format check; workspace offline tests (73 unit/integration tests plus doc tests); all-target/all-feature Clippy with warnings denied; workspace metadata checker; Java oracle Maven verify (17 scenarios, 2 Rust frame decodes); differential self-test; diff check.
+- This maps two public methods but does not close full inventory or parity. Phase 3 remains active and Phase 4 remains blocked; no live Broker/Docker validation; P3-V04 remains pending Phase 19.
+
+## Continuation update (2026-09-25T07:25Z)
+
+- Reviewed Java client public method declarations and the Rust client surface. Confirmed `disableCallbackExecutor` suppresses even a custom executor: corrected `set_callback_executor` to discard assignments in disabled mode, adjusted its getter contract, and added a regression assertion. Inventory notes Java `getAndCreateChannel` internal behavior without promoting private APIs to public requirements.
+- Committed code and docs from the prior getter mapping as `8dc6ec1` and `344289c`; this continuation remains uncommitted pending focused review and logging.
+- Focused callback/configuration tests PASS; full gates PASS: `cargo fmt --all --check`; `cargo test --workspace --locked --offline` (73 unit/integration tests plus doc tests); workspace all-target/all-feature Clippy with warnings denied; metadata checker; Maven Java oracle (17 offline scenarios, two Rust-generated frame decodes); differential self-test; `git diff --check`. No live Broker/Docker validation.
+- Phase 3 remains NOT ACCEPTED: source/API/config inventory and full branch parity review have outstanding entries. Phase 4 remains blocked; P3-V04 remains `PENDING_PHASE_19`.
+
+## Continuation update (2026-09-25T07:32Z)
+
+- Extended the source inventory beyond `RemotingClient` interface declarations: concrete Java channel-close overloads, inherited `NettyRemotingAbstract` inspection/framework methods, processor/event behavior, and Netty client constructor/config lifecycle are now explicitly mapped or marked unavailable. Mutable `getRPCHook()`/`getProcessorTable()` access and Netty channel/context APIs are recorded as intentional API differences, not claimed parity.
+- Cross-checked all public `NettyClientConfig` getter/setter pairs and documented explicit-config versus JVM system-property behavior. No Java reference files changed; no new implementation change in this inventory pass.
+- Review remains incomplete at branch-level behavior and parity; Phase 3 is not accepted, Phase 4 remains blocked, and P3-V04 remains pending Phase 19.
+
+## Continuation update (2026-09-25; async admission ordering)
+
+- Compared Java `NettyRemotingClient.invokeAsync`/`invokeOneway` and `NettyRemotingAbstract.invoke0` to Rust. Java obtains the channel first, then waits for async/oneway semaphore admission; Rust previously waited for admission before establishing the connection.
+- Changed Rust async callback invocation and oneway invocation to acquire/reuse the connection before admission, preserving the operation deadline. Added `p3_async_connection_is_acquired_before_admission_wait`: with the sole permit held by a pending first call, a second call opens its independent peer connection before waiting, then both complete after the first releases admission.
+- Focused test PASS; remoting crate tests PASS (10 unit, 4 codec, 39 transport); `cargo fmt --all --check` and remoting all-target/all-feature Clippy with warnings denied PASS; `git diff --check` PASS. No live Broker/Docker test. Full workspace validation remains to be run before commit.
+- Updated the inventory to track async ordering and test ID. Phase 3 remains NOT ACCEPTED; Phase 4 stays blocked; P3-V04 remains `PENDING_PHASE_19`.
+- Full offline workspace validation PASS after the change: `cargo test --workspace --locked --offline` (74 unit/integration tests plus doc tests), `cargo fmt --all --check`, workspace all-target/all-feature Clippy with warnings denied, metadata checker, differential self-test and `git diff --check`. Maven was not rerun; this transport-only change does not affect its Java fixture path. No live Broker/Docker validation.
+
+## Continuation update (2026-09-25; async callback branch parity)
+
+- Compared the public Java `invokeAsync` chain in `NettyRemotingClient.invokeAsync` and `NettyRemotingAbstract.invokeAsyncImpl` with the Rust callback path. Java initial channel creation/setup failure invokes `operationFail` only; after a channel exists, public callback order is `operationComplete` before `operationSucceed`/`operationFail`, because `whenComplete` precedes `thenAccept`/`exceptionally`.
+- Added channel-establishment tracking so a GO_AWAY retry connect failure after initial connection invokes complete before fail, while initial connect failure remains fail-only. Added scripted regression `p3_async_go_away_retry_connect_failure_completes_before_failure`; adjusted existing callback ordering assertions to public Java call-chain order. Updated compatibility inventory and matrix.
+- Full workspace validation rerun PASS: `cargo test --workspace --locked --offline` (75 unit/integration tests plus doc tests), `cargo fmt --all --check`, workspace all-target/all-feature Clippy with warnings denied, workspace metadata checker, differential self-test, and `git diff --check`. Maven oracle and live Broker/Docker were not run in this continuation.
+- Phase 3 remains unaccepted: this closes one callback branch only; remaining source/API/configuration review and parity gaps remain. Phase 4 stays blocked; P3-V04 remains `PENDING_PHASE_19`.
+
+## Continuation update (2026-09-25; sync-only timeout socket-close heuristic)
+
+- Source review of Java `NettyRemotingClient.invokeSync` and future-based `invoke(String, ...)` found the timeout-close heuristic belongs only to `invokeSync`; async invoke timeouts are instead handled by response-table scanning and do not close the socket. Rust had shared the sync close behavior with its future-based invoke path.
+- Split the timeout-close policy in Rust: `invoke_sync` applies the configured Java heuristic (`left > 100ms || left > timeoutMillis / 4`), while regular future and callback invoke timeout leaves the connection open. Extended `p3_u01_inflight_invoke_times_out_when_peer_does_not_reply` to verify a later request succeeds on the same socket after the timed-out request's late response; added `p3_sync_timeout_closes_socket_when_java_heuristic_requires_it` for the sync close behavior.
+- Focused timeout tests and the full remoting transport suite (41 cases) PASS; `cargo check -p rocketmq-classic-remoting --locked --offline` PASS. Workspace-wide tests, formatting check, Clippy, metadata checker, differential self-test and diff check remain to be run after this change. No live Broker/Docker validation; Java checkout untouched.
+- Updated compatibility inventory and matrix with the scoped timeout policy. Phase 3 remains unaccepted; Phase 4 stays blocked; P3-V04 remains `PENDING_PHASE_19`.
+- Follow-up source check confirmed Java evaluates the close heuristic using the timeout remaining after channel acquisition (and compares it with one quarter of the original timeout); Rust now snapshots those same values before admission/response waiting. Full validation PASS: workspace offline tests (76 unit/integration plus doc tests), fmt check, all-target/all-feature Clippy with warnings denied, workspace metadata checker, differential self-test, and `git diff --check`. No Maven rerun or live Broker/Docker test.
+
+## Continuation update (2026-09-25; oneway return and NameServer scan branches)
+
+- Compared Java `NettyRemotingClient.invokeOneway` (registers a channel-future listener and returns) with `NettyRemotingAbstract.invokeOnewayImpl` (then acquires semaphore and writes asynchronously). Rust `invoke_oneway` now schedules connection acquisition, hook execution, admission and write on an owned client task and returns after scheduling; post-return errors cannot be reported to the caller, while no Broker receipt/storage guarantee is made.
+- Added `p3_oneway_returns_after_scheduling_before_peer_receives_frame`, which proves the call returns while the scripted peer has not yet read the frame and later receives the oneway request. During the edit, the existing V02 peer was observed to race shutdown and lose its expected third accept; reordered that test to join its peer before shutdown. The first full transport run exposed this unrelated test race; focused retest and all 43 transport tests then passed.
+- Compared Java `scanAvailableNameSrv` initial/immediate and connect-timeout rescheduling with Rust scanning. Rust now starts immediately (Tokio interval's initial tick), uses skip-on-missed-tick cadence, launches configured address probes concurrently, retains only currently configured addresses, and updates availability only while address remains configured/client is open. Added `p3_nameserver_scan_probes_addresses_concurrently_and_tracks_results`.
+- Remaining NameServer differences are explicit: Java per-address scan-executor tasks and ChannelWrapper last-response/active checks are not equivalent to Rust JoinSet probes and timeout scheduler; wrapper replacement/cleanup races remain. Oneway differs at the boundary too: Java initiates/obtains the channel future before registering its listener and returning, while Rust schedules connection acquisition and subsequent work on an owned task; post-return async errors and Java semaphore exception taxonomy also remain differences. A brief attempt to move Rust connection acquisition before scheduling was reverted because it restores the API's wait-for-connect boundary, unlike Java's asynchronous channel-future API; docs retain the exact distinction.
+- Focused oneway and scan tests PASS; remoting transport suite PASS (43 tests). The V02 test also asserted its accepted-connection counter before the peer task ran its increment; moved that assertion after `peer.await` to remove the scheduling race. Workspace gates PASS: `cargo test --workspace --locked --offline` (78 unit/integration tests plus doc tests), `cargo fmt --all --check`, workspace all-target/all-feature Clippy with warnings denied, workspace metadata checker, differential self-test, and `git diff --check`. A final shutdown review also prunes completed owned-task handles during task registration; complete workspace tests were rerun successfully after this cleanup. Maven and live Broker/Docker validation were not run. Phase 3 remains unaccepted; Phase 4 stays blocked; P3-V04 remains PENDING_PHASE_19.
+
+## Continuation update (2026-09-25; NameServer removed-address cleanup)
+
+- Compared Java `updateNameServerAddressList` and `closeChannel` with Rust list replacement. Java closes only a channel for the removed address if it is the chosen NameServer; unrelated cached channels remain open. Rust previously closed every removed NameServer connection.
+- Changed Rust to close and clear only the removed chosen address's connection. Added `p3_nameserver_update_keeps_non_chosen_removed_connection_open`, using two scripted loopback listeners and public NameServer/channel operations to verify the other cached connection remains alive after configuration removal.
+- Compatibility inventory originally recorded that Rust immediately pruned removed availability keys, while Java removes stale keys during scan. Continued Java-source comparison changed Rust to preserve exposed availability until the scan's configured-address retain step; added `p3_nameserver_update_prunes_availability_on_next_scan` to verify the old key remains visible after list replacement and disappears at scan cadence.
+- Test/log review also confirmed Java `getAvailableNameSrvList()` returns a snapshot of the availability map without filtering against the configured list, so Rust getter now returns its set as-is. Scan completion no longer rejects probes solely because the configured address list changed, matching the Java task's asynchronous put/remove behavior; a later scan prunes removed entries.
+- Updated compatibility matrix and API inventory to reflect the new behavior and retained differences (parallel JoinSet vs Java scan executor; wrapper activity/replacement remain unmatched). Focused regression passed: `cargo test -p rocketmq-classic-remoting --test transport p3_nameserver_update_prunes_availability_on_next_scan --locked --offline`.
+- More Java branch review found no safe additional semantic changes without altering Rust's public API; oneway post-return failure observability, callback Throwable/error taxonomy, Netty context/channel entry points, Java TLS global-property reload/test-mode/decryption, and Java executor ownership remain non-equivalent or framework-specific and are explicitly retained as parity gaps. No Broker/Docker test; Phase 3 remains unaccepted and Phase 4 blocked. Full workspace validation and a complete P3 acceptance review remain outstanding.
+
+
+## Continuation update (2026-09-25; scan semantics review)
+
+- Further source review established that Java schedules `scanAvailableNameSrv` per address on `scanExecutor`; the protected `scanChannelTablesOfNameServer` method is present but has no call site in this pinned source. Updated the inventory to avoid describing the stale-response scan as the active Java path.
+- Rust availability cleanup now matches Java scan-start pruning and getter exposure, but scan submissions, overlap/races and channel-wrapper activity/replacement still differ. Updated compatibility matrix, inventory, and ADR; tests and workspace gates remain as recorded above. No live Broker, Maven or Docker validation; Phase 3 acceptance remains pending.
+
+## Final acceptance review (2026-09-25)
+
+- Re-read both complete Phase 3 plans from beginning to end and checked the current tests, Java 5.5.1 source branches, compatibility inventory, ADR and validation results. Core P3-V01/V02/V03/U01 automated scenarios have test coverage and workspace gates passed, but the plan execution contract requires all observable Java client settings/features/control flows and says any observable discrepancy blocks acceptance. The matrix still documents blockers: the exhaustive bidirectional public API/configuration ledger is not proven closed; Java Netty framework/channel/context APIs have no equivalent; callback/error/cause taxonomy and executor lifecycle differ; oneway initiation/error visibility differs; processor/hook/executor edge behavior is not fully branch-equivalent; TLS system-property/config reload/test-mode/decryption behavior is not mapped; and Netty-specific controls have no semantic equivalent. These are not waived.
+- Acceptance result: Phase 3 NOT ACCEPTED. No Phase 4 work/transition. P3-V04 remains reserved for Phase 19; no live Broker, Docker or Maven validation was run. No phase completion claim.
+- Count correction: passing workspace output contained 80 unit/integration tests (11 common + 9 protocol + 1 protocol fixture + 10 remoting unit + 4 codec + 45 transport), plus doc-test suites. The preceding continuation note total of 79 was an arithmetic error.
+- Changes are in commits `196e3bf`, `c1b085c`, `fc42a60`, `f3bce03`, and `7eb4ada`; this log update will be committed separately.
+
+## Continuation update (2026-09-26; oneway initiation and outbound hook order)
+
+- Compared Java `invokeOneway`, `invokeAsync`, `invokeImpl` against the Rust client. Rust `invoke_oneway` was an async method: dropping its unpolled future performed no work, unlike Java's immediate `getAndCreateChannelAsync` initiation. Converted it to a synchronous starter returning a ready result future; it immediately submits the transport task to the client-owned task registry, and dropping the result future does not cancel transmission. It still does not await admission/write, and Tokio may not poll/connect before method return, so strict initiation timing and Java's synchronous connect/admission/send errors remain different.
+- Moved async callback outbound `before_request` hooks to after connection acquisition and before semaphore admission, matching Java's `invokeAsync` -> `invokeImpl` order. Moved the sync/future hook before admission likewise; GO_AWAY retry still skips duplicate before hooks. Added `p3_outbound_rpc_hook_runs_before_async_admission_wait`; amended the oneway test to drop the returned future and verify the peer receives the frame later.
+- Updated ADR and compatibility inventory/matrix; corrected statements to avoid claiming Tokio starts polling/connection before return. Inventory explicitly marks sync/future/oneway hook ordering as code-reviewed but only callback path currently has a dedicated admission-order regression test. Reconfirmed Java inbound processor/hook branches, callback order and GO_AWAY implementation from pinned source. Rust TLS encrypted-key parser has no password/decryption support; no insecure or global reload API added.
+- Validation PASS: `cargo test -p rocketmq-classic-remoting --locked --offline` (10 unit + 4 codec + 46 transport, doc tests); `cargo test --workspace --locked --offline` (11 common + 9 protocol + 1 protocol fixture + 10 remoting unit + 4 codec + 46 transport, doc tests); `cargo fmt --all --check`; `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`; `python3 scripts/check-workspace-metadata.py`; `python3 tests/differential/compare.py --self-test`; `git diff --check`.
+- English and Traditional Chinese Phase 3 plans reread in full. P3-V01/V02/V03/U01 remain locally covered; Java full-parity acceptance remains blocked by observable Netty/API/executor/error/TLS/oneway/scan differences and unclosed exhaustive ledger. Phase 3 NOT ACCEPTED; Phase 4 prohibited; P3-V04 stays for Phase 19. No Maven/live Broker/Docker run; Java checkout untouched.
+- Added `p3_outbound_rpc_hook_runs_before_sync_admission_wait` after review found that only the callback-path hook ordering had a regression test; the shared future/sync path is now directly covered.
+- Implementation committed independently as `ccd106c` (`fix: align remoting invoke initiation ordering`); documentation and append-only log committed as `5a38b5b` (`docs: record remoting invoke parity review`). Regression-test/documentation follow-up remains uncommitted.
+- Full gates PASS after the new regression: `cargo test --workspace --locked --offline` (11 common + 9 protocol + 1 protocol fixture + 10 remoting unit + 4 codec + 47 transport; doc tests passed); `cargo fmt --all --check`; workspace all-target/all-feature Clippy with `-D warnings`; metadata checker; differential self-test; `git diff --check`. No Maven, live Broker or Docker.
+- Phase 3 remains NOT ACCEPTED; do not mark complete.
+
+## Continuation update (2026-09-26; inactive NameServer interval parity)
+
+- Reviewed the Java public surface and config declarations again, including `NettyClientConfig`, `NettySystemConfig`, concrete `NettyRemotingClient` and `NettyRemotingAbstract`. Confirmed Java `channelNotActiveInterval` is consumed only by protected `scanChannelTablesOfNameServer()`, which has no call site; the scheduled `scanAvailableNameSrv()` only checks connection creation/availability.
+- Rust had been adding an unrequested automatic NameServer response-age close in its periodic timeout scheduler. Removed this policy and the now-unused per-connection response timestamp; added `p3_nameserver_channel_interval_has_no_implicit_scan_behavior`, where a NameServer-configured loopback peer delays its reply beyond a short interval and the request still succeeds. This aligns observed Java runtime control flow while explicitly retaining the unmapped protected subclass hook.
+- Updated inventory, ADR and compatibility status to distinguish active availability scanning from the inactive protected stale-response scan. Phase acceptance remains blocked by other public API, Netty framework, TLS, callback/error taxonomy, executor lifecycle, oneway visibility and configuration differences; the ledger is not yet proven exhaustively closed.
+- Validation PASS: focused new test; `cargo test --workspace --locked --offline` (11 common + 9 protocol + 1 protocol fixture + 10 remoting unit + 4 codec + 48 transport; doc tests pass); `cargo fmt --all --check`; workspace all-target/all-feature Clippy with `-D warnings`; workspace metadata checker; differential self-test; `git diff --check`. No Maven, live Broker or Docker.
+- Both complete Phase 3 plans were re-read during this continuation. Acceptance remains NOT ACCEPTED; Phase 4 remains blocked; P3-V04 remains for Phase 19.
+- Code/test changes committed as `f8f41a2` (`fix: match inactive nameserver scan semantics`); inventory/ADR/matrix/log changes committed as `05b7104` (`docs: record inactive nameserver scan parity`).
+- Added `p3_outbound_rpc_hook_runs_before_oneway_admission_wait`: hold the one-way semaphore with a large blocked first write, then assert the second one-way hook runs before that permit is released; isolated test passed. Updated inventory, matrix, README and ADR to include test and clarify scoped API/config inventory closure versus semantic parity.
+
+## Continuation update (2026-09-25; parity review and final gates)
+
+- Rechecked the uncommitted diff and pinned Java 5.5.1 remoting branches for async callback ordering, processor rejection/hook/pipeline behavior, shutdown ownership, NameServer updates/scans and TLS controls. Verified Java `ResponseFuture.executeInvokeCallback` itself invokes success/failure before complete, while the public client async wrapper invokes complete before success/failure; Rust public callback dispatch matches the latter path. Corrected ADR wording to state this precisely.
+- NameServer list membership/generation rechecks guard in-flight selection and scan completions; the inventory now distinguishes these protections from Java scan-executor scheduling differences. Corrected ADR language that had incorrectly said stale scan completions still race with cleanup. `get_and_create_name_server_channel_async` now takes a consistent configured-list snapshot while validating the chosen cached connection, preventing a removed chosen address from being returned during concurrent list update.
+- TLS source review confirmed Java `tls.test.mode.enable` and client `tls.client.authServer=false` select trust-all modes, and Java reads TLS properties while building its SSL context. Rust deliberately retains rustls chain/hostname verification and explicit per-client PEM configuration; insecure trust-all, JVM-global config reload and Java decryption strategy are not added. `disableNettyWorkerGroup` controls Netty processor EventExecutorGroup routing; `maxReconnectIntervalTimeSeconds` is only declared/accessed in pinned client source and has no behavior call site. These remain documented non-equivalences.
+- Full offline validation PASS after code and documentation review: `cargo fmt --all --check`; `cargo test --workspace --locked --offline` (11 common, 9 protocol, 1 fixture, 11 remoting unit, 4 codec, 50 transport tests, plus doc tests); `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`; `python3 scripts/check-workspace-metadata.py`; `python3 tests/differential/compare.py --self-test`; `git diff --check`. No Maven, Docker or live Broker test in this continuation; P3-V04 remains Phase 19.
+- Re-read the complete English and Traditional Chinese Phase 3 plans. The strict execution contract still fails on Java callback/ResponseFuture, Netty channel/context and mutable inspection APIs, executor lifecycle/thread semantics, TLS property/reload/decryption/test-mode controls and other `PARTIAL`/`NOT MAPPED` inventory rows. Phase 3 is NOT ACCEPTED; Phase 4 remains blocked. No plan edits.
+- The final documentation/log diff was reviewed against the implementation and test names. Code/test changes committed as `e2399a7` (`fix: guard nameserver state against stale operations`); documentation and this execution-log update are ready for a separate commit. Java reference checkout remains untouched.
+
+## TLS parity follow-up (2026-09-25)
+
+- User direction: align Java-observable behavior where representable; for language/Netty differences align logical behavior rather than fabricate framework APIs; align Java trust-all behavior when confirmed in the pinned client source.
+- Re-read pinned Java `TlsHelper.buildSslContext(true)` and `TlsSystemConfig`: `tls.test.mode.enable` defaults true and unconditionally selects `InsecureTrustManagerFactory`; with test mode false, `tls.client.authServer=false` also selects trust-all; only test mode false plus authServer true uses configured trust roots/default trust and hostname verification. Thus Java's defaults are trust-all for its client TLS context.
+- Implemented explicit Rust `TlsConfig::{test_mode,auth_server}` with matching defaults and behavior. Trust-all verifier bypasses chain and hostname checks while still validating TLS handshake signatures. Verified mode retains custom/native roots and hostname checks. Java-mode tests cover test-mode trust-all and authServer-false trust-all; existing CA/hostname tests cover verified mode and negative cases. `from_ca_file` explicitly selects verified mode as a secure helper expectation.
+- Updated compatibility ledger, ADR and README; no TLS properties/config-file reload or password-protected-key decryption added in this change.
+- Validation PASS: targeted TLS loopback tests (3); `cargo fmt --all`; `cargo test --workspace --locked --offline` (11 common, 9 protocol, 1 fixture, 11 remoting unit, 4 codec, 51 transport, doc tests); `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`; metadata checker; differential comparator self-test; `git diff --check`. No Maven, live Broker or Docker.
+- Phase 3 remains NOT ACCEPTED: this closes only the TLS trust-mode behavior gap. Other partial/unmapped Java logical behavior and Phase 19 P3-V04 remain outstanding; Phase 4 stays blocked.
+
+## Callback admission metadata parity (2026-09-26 continuation)
+
+- Java `ResponseFuture.sendRequestOK` initializes to `true`; in `NettyRemotingAbstract.invoke0`, async admission timeout happens before a `ResponseFuture` exists, and the public wrapper constructs a synthetic `ResponseFuture` whose default send status remains true. Rust had reported `false` for all failures before write, conflating initial connection failure with established-channel admission timeout.
+- Rust callback metadata now reports send status true when a channel was established and the terminal outcome is a timeout; initial connect/TLS failures and actual send failures remain false. Extended `p3_async_admission_timeout_completes_through_callback` to assert timeout, timed-out flag, and Java-compatible send status.
+- Final check exposed an important source detail: `invoke0` may time out in semaphore admission, but after a channel exists and a `ResponseFuture` is created the default is also true; actual write failures explicitly set it false. The corrected Rust condition is intentionally limited to timeout after channel establishment (rather than just admission timeout), preserving that Java field default.
+- Targeted regression `cargo test -p rocketmq-classic-remoting --test transport p3_async_admission_timeout_completes_through_callback --locked --offline` — PASS. Full workspace gates and final source/plan review remain outstanding. Updated API inventory, compatibility summary and README. Phase 3 remains NOT ACCEPTED; Phase 4 stays blocked; P3-V04 remains pending Phase 19.
+- Full gates after this change: `cargo fmt --all --check`; `cargo test --workspace --locked --offline` (87 unit/integration tests: 11 common, 9 protocol, 1 fixture, 11 remoting unit, 4 codec, 51 transport; doc tests passed); `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`; workspace metadata checker; differential comparator self-test; `git diff --check` — PASS.
+- Re-read both full Phase 3 plans. P3-V01/V02/V03/U01 remain automated offline cases, but the plan requires all observable Java client flows without discrepancies; documented `PARTIAL`/unmapped differences in callbacks/errors, Java/Netty lifecycle and APIs, executor behavior, TLS property/config controls and related branches remain blockers. P3-V04 stays reserved for Phase 19. Phase 3 NOT ACCEPTED; Phase 4 remains blocked. No live Broker, Docker, or Maven run in this continuation.

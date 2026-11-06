@@ -1,0 +1,50 @@
+# Project parity rereview remediation — 2026-10-27
+
+- Plan: `plan/2026/10/03-project-parity-rereview.md` with Traditional Chinese companion; Java oracle Apache RocketMQ client 5.5.1.
+- Starting revision: `9b006383fd8c81490c673244d69853b3d8ee89eb`.
+- Branch: `fix/parity-rereview-2026-10-27`.
+- User constraint: the plan may be committed; keep all files under `plan/2026/10/03-project-parity-rereview-evidence/` out of commits. The previous `02-project-parity-review-evidence/` is also preserved and excluded.
+- The `coding` skill phased workflow is in use. The plan and this append-only log are eligible for commit; evidence files are not.
+
+## Phase 1 — F01 Lite poll delivery with nullable group
+
+- `LitePullConsumer::poll` now skips consume-hook context construction when no hooks are installed, so a nullable live group cannot fail after the ready batch has been removed.
+- When hooks are installed, a null live group is retained as `None` in `ConsumeMessageContext`, matching Java. Group/namespace preparation occurs only for the hook path.
+- Extended the external scripted Lite flow to set the group to null after startup, deliver a valid queued message, restore the group, commit the queue, and assert persisted offset 1. Updated the hook unit case to verify a null group reaches both callbacks' shared context path.
+- Focused checks passed: `cargo test -p rocketmq-classic-consumer --locked --test lite_pop scripted_lite_helpers_cover_assignment_offsets_commits_and_name_server_updates` and `cargo test -p rocketmq-classic-consumer --locked lite_poll_consume_hooks_run_around_delivery_with_queue_metadata`.
+- `cargo fmt --all -- --check` and `git diff --check` will be recorded after final phase checks. Phase 1 commit is the changeset containing this entry.
+- Formatting follow-up: the initial format check identified one expected rustfmt layout change in the new hook-context construction; `cargo fmt --all` applied it, and the subsequent format check and `git diff --check` passed.
+
+## Phase 2 — F02 compact inner decoding and F04 public decompression
+
+- Replaced Consumer's duplicate compact-record parser and its 16 MiB per-record / 64 MiB aggregate limits with Common's `decode_inner_batch`; compact decode failures still trigger the existing all-or-original fallback.
+- Added `PullAPIWrapper` regressions for 24 × 3 MiB compact messages, one 17 MiB compact message, mixed ordinary/inner records, offsets, tags, unique/client IDs, client subtype, inherited WAIT true/false, and malformed fallback.
+- Public `compression::decompress` now delegates to the bounded implementation with the full `usize` output domain. Internal message decode continues to use its explicit bounded helper.
+- Added 65 MiB round-trips for Zlib/LZ4/Zstd, malformed input checks for all codecs, and a Producer compressor test proving its public round-trip and returned-type snapshot behavior.
+- Focused checks passed: `cargo test -p rocketmq-classic-consumer --locked pull_processing_` (4 passed); `cargo test -p rocketmq-classic-common --locked public_decompression` (1 passed); `cargo test -p rocketmq-classic-common --locked every_public_decompressor` (1 passed); `cargo test -p rocketmq-classic-producer --locked producer_compressor_round_trips_large_body` (1 passed).
+- `cargo fmt --all -- --check` and `git diff --check` passed. Java differential replay will be run after the remaining F03/F05 state changes and its evidence will remain untracked.
+- Phase 1 changeset: `92940332` (`Preserve Lite poll batches with nullable groups`).
+- Phase 2 changeset: `79cd6caf` (`Fix compact pull decoding and decompression bounds`).
+
+## Phase 3 — F03 POP orderly wait-ACK accounting
+
+- Removed the orderly no-op decrement; messages remain counted until their POP ACK lifecycle resolves.
+- Extracted the existing wait-ACK threshold comparison into `pop_queue_wait_ack_flow_controlled`, used directly by the POP pull loop. The orderly regression begins at 96, accounts one newly popped message, verifies count 97 remains after no-op, and verifies threshold 96 blocks another admission while 96 itself is allowed.
+- Existing expiry and listener paths still release their counts: focused tests passed for `expired_pop_batch_skips_listener_and_releases_found_message_count` and `pop_consume_dispatches_ack_redelivery_and_replacement_receipt`; the latter exercises concurrent ACK and redelivery lifecycle.
+- The orderly regression passed: `cargo test -p rocketmq-classic-consumer --locked pop_orderly_path_skips_listener_hooks_and_listener_result_side_effects`.
+- `cargo fmt --all -- --check` and `git diff --check` passed. Pinned Java's orderly no-op probe already records listener calls 0 and wait-ACK count 1; the full replay will be refreshed with the final acceptance run.
+
+## Phase 4 — F05 Lite facade namespace mutation
+
+- `LitePullConsumer::start` now wraps and stores its live nullable group before lifecycle-state checks, matching the Java facade boundary. Namespace wrapping remains idempotent; null, empty, and unscoped groups retain their values, while startup validation errors leave the wrapped getter value visible. Repeated start after a later setter also wraps the new live value before returning the lifecycle error.
+- Added unit coverage for namespaced, already-wrapped, unscoped, null, empty, failed-start, repeated-start, and later-setter cases. The scripted successful-start integration asserts the getter and exercises setter-then-repeated-start on the real facade.
+- Focused checks passed: `cargo test -p rocketmq-classic-consumer --locked lite_start_wraps_live_group_before_validation_and_repeat_checks`, `cargo test -p rocketmq-classic-consumer --locked --test lite_pop lite_rpc_hook_stream_identity_and_namespace_config_reach_runtime`, and `cargo test -p rocketmq-classic-consumer --locked --test lite_pop scripted_lite_helpers_cover_assignment_offsets_commits_and_name_server_updates`.
+- Required repository gates passed on the complete change tree: `cargo fmt --all -- --check`; `cargo test --workspace --locked` (exit 0); `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `mvn -o -f compat/java-reference/pom.xml verify` (BUILD SUCCESS); `scripts/check-workspace-metadata.py`.
+- The patched offline probe now expects fixed outputs for F01/F02/F04/F05 and checks the corrected POP assertion. Its final revision-linked output and the affected 5.3.4 local scenarios are still pending after the F05 commit; the probe/evidence directory remains explicitly excluded from staging.
+
+## Final revision-linked parity and 5.3.4 replay
+
+- Committed F05 as `08255f32` (`Wrap Lite consumer group at facade startup`). The pinned Java/Rust offline probe passed at revision `08255f329dfdc8c63aa4a52af685a65dc63d3b45`; compact inner counts and inherited WAIT matched (2 small / 24 large, WAIT false), Producer decompressed 68,157,440 bytes, nullable Lite poll delivered one message and persisted offset 1, namespace getter matched through failure/later-setter cases, and Java orderly POP remained at count 1. Full output and hashes are in the untracked `plan/2026/10/03-project-parity-rereview-evidence/results-fixed-20261027.json`.
+- Replayed affected scenarios against pinned RocketMQ 5.3.4 with Java client 5.5.1, clean source revision `08255f32`, and isolated Compose projects. `P5-V02-consumer` PASS (Pull/Lite/offset/list/send-back/lock); `P9-V03` PASS (statuses/suggested broker/boundaries/restart offset); `P13-V02` PASS (POP delivery/expiry/ACK/visibility/replacement/mapping/malformed receipt). Raw logs and metadata are outside the checkout under `/tmp/rocketmq-rereview-live-08255f32/`.
+- All three runners exited 0 after their cleanup; `docker ps -a` showed no matching leftover scenario containers. Final tracked verification remains the passing workspace suite, strict Clippy, offline Maven verify, metadata, formatting, and diff check recorded above.
+- Both dated review-evidence directories remain untracked and were never staged. Only the execution log is being appended here; no evidence payload is part of the commits.

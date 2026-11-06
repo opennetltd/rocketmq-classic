@@ -1,0 +1,51 @@
+# Phase 18 P18-V01 continuation — decoder public-surface audit
+
+Session started: 2026-10-14T08:49:54Z
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Branch: phase/19-phase-18-compatibility-release-gate
+Java source baseline: efa1be59d6fc747ad220f036c86030f05f0419f9
+
+## Decoder API reconciliation
+
+- The reverse public-surface scan found `DecodeLimits` and
+  `decompress_limited` exposed caller-adjustable bounds with no matching pinned
+  Java public API. The Phase 8 safety requirement remains in place through
+  fixed internal bounds: 16 MiB per record, 64 MiB per decompressed body, and
+  64 MiB aggregate decoded data.
+- Public `decode_one` and `decode_many` now take only their record(s) and
+  `DecodeOptions`; `DecodeLimits` is private to the common decoder. The bounded
+  decompression helper is crate-internal, and public `decompress` uses the
+  fixed 64 MiB output cap. Pull-result and POP paths no longer accept limit
+  arguments. Inner-batch decoding keeps equivalent private bounds.
+- Moved low-cap decode/decompression regressions into common-crate unit tests.
+  Updated cross-crate callers, the fuzz harness, benchmark, Phase 8 API matrix,
+  and release checklist. This closes the decoder API discrepancy only;
+  P18-V01's full source/input/overload/reverse-export audit remains open.
+
+## Validation
+
+- PASS: `cargo test -p rocketmq-classic-common --locked`.
+- PASS: `cargo test --workspace --locked`.
+- PASS: `cargo test --workspace --all-features --locked`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all -- --check` and `git diff --check`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify`; 37 differential
+  scenarios, Java fixture drift checks and Rust/Java cross-decodes completed.
+  Maven emitted existing JDK/Netty Unsafe and reflective-final-field warnings,
+  but exited successfully.
+- No live Broker or Docker was used. No current-revision GitHub Ubuntu result
+  was obtained.
+
+## Commits
+
+- `a8f38c19 fix(common): keep decoder safety caps internal`
+- `b88954e4 docs(compat): mark decoder safety caps internal`
+
+## Remaining non-manual work
+
+- P18-V01 complete Java source/API/input/control-flow reconciliation and the
+  Rust-to-Java reverse-export audit remain open.
+- P18-V04 still lacks a GitHub Ubuntu CI result for the current revision.
+- Release preparation still needs confirmation of the `0.1.0` version set and
+  registry dependency resolution before publication.
+- Phase 19 Broker/Docker scenarios remain the automated integration gate.

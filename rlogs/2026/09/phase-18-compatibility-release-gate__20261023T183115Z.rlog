@@ -1,0 +1,59 @@
+# Phase 18 compatibility release gate — 2026-10-23 18:31:15 UTC
+
+Base revision: `148b2528` on `phase/18-phase-18-compatibility-closure`.
+This entry records a server-free P18-V02 refresh and closes the deterministic
+2,000-concurrent-send test gap identified in P18-04.
+
+## P18-04 stress coverage addition
+
+Added `producer_handles_two_thousand_concurrent_async_sends_without_losing_requests`
+to the scripted producer loopback tests. It starts 2,000 async sends at once,
+waits up to 45 seconds for completion, and verifies the scripted Broker saw
+exactly 2,000 requests with every body once, a unique message ID per request,
+and no retries. Added the case to `tests/stress/run-offline-smoke.sh` and
+updated the stress README. The expanded runner contains 18 deterministic cases
+and repeats each three times.
+
+## Current-tree verification
+
+All commands below passed:
+
+- `cargo fmt --all -- --check`
+- `git diff --check`
+- `cargo test --workspace --locked --quiet`
+- `cargo test --workspace --all-features --locked --quiet`
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+- `cargo test -p rocketmq-classic-producer --test scripted_send --locked --quiet` (19 passed)
+- `cargo clippy -p rocketmq-classic-producer --all-targets --locked -- -D warnings`
+- `bash tests/stress/run-offline-smoke.sh` (18 cases x 3 repetitions)
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` (163 frame seeds, 11 message seeds, 2,784 mutations; 245 frame and 192 message decodes)
+- `python3 tests/differential/compare.py --self-test`
+- `python3 tests/differential/compare.py --validate-manifest` (37 scenarios)
+- `python3 scripts/check-workspace-metadata.py`
+- `cargo build -p rocketmq-classic --examples --release --locked`
+- `cargo bench -p rocketmq-classic --bench offline --locked`
+- `cargo check --workspace --all-targets --all-features --target x86_64-pc-windows-gnu --locked`
+- `TZ=Asia/Taipei cargo test -p rocketmq-classic-core --lib unique_id::tests::public_unique_id_helpers_match_the_pinned_java_fixture --locked`
+- `mvn -o -q verify` (from `compat/java-reference`)
+
+The current full workspace default and all-feature suites, doctests, and strict
+Clippy passed after commit `148b2528`. Maven verification passed 37 scenarios,
+11 Java message fixtures, and Java decoding of 106 Rust typed headers and 19
+Rust typed bodies. Metadata checks covered workspace dependency direction and
+package license files. The Windows GNU result is a compile check, not native
+Windows runtime evidence.
+
+The release-example build and benchmark were run immediately before the
+stress-test-only commit `148b2528`; no product source or benchmark input changed
+in that commit. Benchmark values are appended to
+`PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`; they are observations, not thresholds.
+
+## Scope still open
+
+The added stress case closes only the thousands-of-concurrent-sends item.
+Broad P18-V01 Java source/API/settings/input/error/control-flow and Rust
+reverse-export reconciliation remains open. Native Windows runtime and
+current-revision remote Ubuntu CI were not run. Phase 19 Broker/Docker and
+cross-language live scenarios remain separate. No plan was edited, no remote
+CI or push was run, and the four pre-existing Phase 19 worktree paths remain
+untouched and unstaged.

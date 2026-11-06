@@ -1,0 +1,48 @@
+# P18-V01 `EscapeNoneAscii` writer feature continuation
+
+Timestamp: 2026-10-16 22:36 UTC
+Plan: `plan/2026/09/19-phase-18-compatibility-release-gate.md` (unchanged)
+Branch: `phase/19-phase-18-compatibility-release-gate`
+Starting revision: `ec43583d`
+Implementation commit: `2dcbb98e`
+
+## Changes
+
+- Pinned Java oracle: RocketMQ client 5.5.1 at
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; Fastjson2 2.0.63.
+- Mapped `EscapeNoneAscii` for inherited body, route, and heartbeat serializer
+  adapters. Source inspection of Fastjson2's UTF-8 writer and the invoked
+  fixtures pin the current oracle runtime behavior: Latin-1 `é` remains raw,
+  higher BMP characters are escaped with uppercase hex, and supplementary
+  characters are emitted as UTF-16 surrogate escapes.
+- Added invoked CheckClient and TopicRouteData Unicode cases, including
+  newlines and escaped quotes; Rust checks both the shared route serializer and
+  the special body serializer path.
+- Updated the Phase 6 API/config crosswalk. Six of 48 writer features now have
+  behavior mappings; 42 remain unmapped.
+
+## Validation
+
+- `cargo test -p rocketmq-classic-protocol --all-features --locked` passed:
+  122 unit tests, all integration targets, and 42 doctests.
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features
+  --locked -- -D warnings` passed.
+- `TZ=UTC mvn -o -q -f compat/java-reference/pom.xml verify` passed all 37
+  scenarios and runtime fixture drift checks.
+- `cargo fmt --all -- --check`, `git diff --check`, and staged diff checks
+  passed.
+- Fixture SHA-256 values: `lookup.json`
+  `ad6ab8868be11ad924d10ff34a9542e59018fb883a355dc6ac2fe0fca7182977`,
+  `route.json`
+  `e7199dea0c92a60fecbc569a048981511c74ba6281e873e2a7d1ea84135d7e56`.
+
+## Remaining work
+
+- The other 42 Fastjson2 writer features and broad P18-V01 Java/Rust
+  source/API/settings/input/error/flow/reverse-export reconciliation remain
+  open.
+- Final-revision full-workspace P18-V02, current-revision platform CI evidence,
+  package/pre-publication review, and Phase 19 local Docker/Broker automation
+  remain open. These locally runnable items are not owner manual checks.
+- No plan edit, Docker/Broker execution, push, tag, publication, or release
+  action occurred.

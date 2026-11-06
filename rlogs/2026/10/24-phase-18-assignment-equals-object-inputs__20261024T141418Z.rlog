@@ -1,0 +1,23 @@
+# Phase 18 MessageQueueAssignment equals(Object) input parity
+
+- Recorded: 2026-10-24 14:14:18 UTC
+- Workspace: /Users/bruce.tsai/Projects/trio/rocketmq-classic
+- Branch: phase/18-phase-18-compatibility-closure
+- Code revision: 455110fcd884b3c432fa82d6cbbb054ed9655a94
+- Documentation head before this record: 8bf15182
+- Pinned Java source: RocketMQ 5.5.1, efa1be59d6fc747ad220f036c86030f05f0419f9
+
+## Change
+
+The public Java method is equals(Object). Rust java_equals previously accepted only Option<&MessageQueueAssignment>, so the invoked Java fixture's unrelated-object input was absent from the Rust comparison. The method now accepts Option<&dyn Any>, returns false for an unrelated concrete type before dereferencing messageQueue, and preserves the same-instance and null-queue branches. The Protocol fixture test directly compares the wrong-type result with assignmentMethodCases.equalsWrongType.
+
+## Verification
+
+- Focused assignment_methods_match_invoked_java_public_api on code revision 455110fcd884b3c432fa82d6cbbb054ed9655a94 — PASS.
+- Locked default and all-feature workspace tests/doctests — PASS after the Any adapter was added. The focused test was rerun after its final assertion was tightened to consume the Java fixture value.
+- Strict all-target/all-feature workspace Clippy, cargo fmt --all -- --check, and git diff --check — PASS on code revision 455110fcd884b3c432fa82d6cbbb054ed9655a94.
+- Windows GNU all-feature workspace cargo check, strict Clippy, and workspace cargo test --no-run — PASS after the Any adapter change; compile/link evidence only.
+
+## Scope
+
+This closes the wrong-type equals(Object) input branch. The Java assignment equals/hashCode contract remains inconsistent and its HashSet collision fixture depends on the JVM's process-local enum identity hash; no portable cross-process bucket result exists. Broad P18-V01 reconciliation, native Windows runtime, and current-revision remote Ubuntu CI remain open. No push or remote CI was run; protected Phase 19 paths were not changed.

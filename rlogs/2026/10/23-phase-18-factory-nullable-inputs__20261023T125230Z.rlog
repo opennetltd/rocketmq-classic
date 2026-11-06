@@ -1,0 +1,46 @@
+# Phase 18 factory nullable constructor input compatibility
+
+- Recorded: 2026-10-23 12:52:30 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Starting revision: `03bdf81e`
+- Implemented revision: `0d6d9b79`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: `MQClientAPIFactory` nullable access config and name prefix inputs
+
+## Finding and change
+
+The pinned Java constructor assigns its arguments and calls `init()`. A null
+`NameserverAccessConfig` therefore writes the VIP property as `false` before
+dereferencing the config and throwing `NullPointerException`. A null
+`namePrefix` is accepted; Java's later string concatenation produces the
+instance name `nullN_0`.
+
+Core now exposes `MQClientApiFactory::new_nullable` as a Java-constructor
+adapter. It writes VIP=false before returning
+`MQClientApiFactoryError::NullNameServerAccessConfig`, converts a null prefix
+to Java's literal `null`, and represents a null scheduler with the existing
+Java-null scheduler mode. The invoked Java fixture and Rust regressions compare
+the property side effect and generated instance name. Fixture SHA-256:
+`bb57f3fd41520d74ac1505e4b4456edf4e794ae33901eec3d1391a8f4c0bd0da`.
+
+## Verification
+
+- Focused null-prefix Core test: passed.
+- `cargo test -p rocketmq-classic-core --test factory_system_properties --locked` — passed.
+- `cargo test --offline --workspace --locked` — passed, including doctests.
+- `cargo test --offline --workspace --all-features --locked` — passed, including doctests.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — passed.
+- `mvn -q -o -f compat/java-reference/pom.xml verify` — passed; 37 differential scenarios and invoked fixtures, including `RuntimeApiFactoryFixtures`.
+- Differential comparator self-test and 37-scenario manifest validation — passed.
+- Workspace metadata, dependency-direction, license-file, and seven product package-list checks — passed.
+- Deterministic race/leak smoke — 17 cases × 3; fuzz smoke — 163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes, and 192 message decodes.
+- Release examples, fixed-input offline benchmark, Core Windows GNU all-target/all-feature cross-check, workspace Rustdoc JSON, formatting, and diff checks — passed.
+
+## Acceptance boundary
+
+This closes only the nullable factory access-config and name-prefix input
+branches. Broad P18-V01 source/API/settings/input/error/control-flow/reverse-
+export reconciliation remains PARTIAL. Current-revision remote Ubuntu CI and
+native Windows runtime evidence remain pending. Phase 19 Broker/Docker
+validation was not run. No push or remote CI was performed. The four
+user-owned Phase 19 worktree paths remained untouched and unstaged.

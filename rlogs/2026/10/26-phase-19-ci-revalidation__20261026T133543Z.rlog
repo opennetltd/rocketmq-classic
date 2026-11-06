@@ -1,0 +1,54 @@
+# Execution log: Phase 19 CI revalidation and P5 producer offset follow-up
+
+- Session date: 2026-10-26 UTC
+- CI source revision: `485fb99a43b739e5d936bd472efdee8b0ba40313`
+- CI run: `40331947315`
+- CI URL: https://github.com/triotous/rocketmq-classic/actions/runs/40331947315
+- Follow-up code commit: `92cae47daa3dbc014dc188bef0795df85f8b1a55`
+- Scope: validate the stack-capture correction, record CI timeout outcomes,
+  and investigate the live P5 producer queue-offset failure. No plan files
+  were edited.
+
+## Remote CI results
+
+- Windows stack-runtime job `121603352846` passed in 5m04s.
+- General test job `121603352393` passed format, strict Clippy, default and
+  all-feature workspace tests, targeted timezone coverage, differential
+  checks, fuzz and race/leak smoke, and Maven verify. GitHub canceled it at
+  90 minutes during `cargo build -p rocketmq-classic --examples --release
+  --locked`; benchmark and metadata checks were skipped.
+- Docker matrix job `121603352775` passed both workspace suites and all
+  server-free gates. Live scenarios `P3-V04` and `P5-V02-route` passed, then
+  `P5-V02-producer` failed its expected queue-offset continuity assertion.
+  The matrix failed after 1h53m, before reaching its 360-minute limit.
+- The completed job log omitted the Java and Rust producer TSV values, so the
+  failing offsets cannot be determined from remote evidence.
+- Raw job logs and run details are archived in
+  `docs/compatibility/evidence/phase-19/CI-DOCKER-RETRY-004/20261026T133543Z/`.
+
+## P5 producer investigation
+
+- The old P5 probe passed in a local isolated run at `20261026T153132Z` on the
+  CI source revision. The result was Java base/max 0/3 and Rust base/max 3/6.
+- A likely cause is that the Broker's queryable maximum queue offset can lag
+  Java's successful sends when the Rust probe starts. The remote TSV values
+  were unavailable, so this remains an inference.
+- Commit `92cae47d` passes Java's returned maximum offset into the Rust probe.
+  Rust now polls `getMaxOffset` for up to 15 seconds before sending and reports
+  the last observed offset on timeout. The Bash failure path prints both TSV
+  outputs to preserve diagnostics if a mismatch recurs.
+- The clean focused P5 scenario passed on `92cae47d` at `20261026T153933Z`
+  (`source_code_dirty=false`, 68 seconds). Java stored offsets 0, 1, 2; Rust
+  stored 3, 4, 5; both one-way reply variants and end-transaction returned
+  without responses. Docker cleanup completed.
+- The manifest points to the clean focused evidence directory.
+
+## Next CI window
+
+- The general test timeout is raised from 90 to 120 minutes because release
+  examples compilation remained active at the 90-minute limit.
+- The Docker matrix remains at 360 minutes. A fresh push-triggered workflow is
+  required to validate the offset polling, complete release examples, and
+  continue the full live scenario inventory.
+- MAN-01 through MAN-04 remain owner-input blocked. No plan files were changed;
+  no tag or package was created or published.

@@ -1,0 +1,9 @@
+Session: 2026-10-10T01:25:31Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Pinned runtime public-method name inventory continuation: `javap -classpath "$HOME/.m2/repository/org/apache/rocketmq/rocketmq-client/5.5.1/rocketmq-client-5.5.1.jar" -public org.apache.rocketmq.client.impl.factory.MQClientInstance` reports 53 declaration lines and 49 distinct declaration names; the corresponding `MQClientManager` command reports seven method declarations and five distinct names. The compatibility-map scan finds no absent Java declaration names. Updated `PHASE_6_API_CONFIG_MAP.md` with artifact provenance/count and explicit `replace_if_equal`/`remove_if_equal` names, and added this bounded result to `PHASE_6_REQUIREMENT_AUDIT.md`. No production behavior changed.
+
+Verification: repeatable Python `javap`/map-name check passed for both classes; `git diff --check` passed. Documentation commit `9cb55d5d`.
+
+This name-level cross-check does not close all Java source branches, DTO input/alias reconciliation, non-macOS or real IPv6-only host evidence, or P6-V04, which remains assigned to Phase 19.

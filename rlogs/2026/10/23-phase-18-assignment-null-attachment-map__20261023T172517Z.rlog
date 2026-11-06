@@ -1,0 +1,33 @@
+Phase 18 assignment attachment nullable-key parity
+Date: 2026-10-23
+Branch: phase/18-phase-18-compatibility-closure
+Pinned Java: RocketMQ client 5.5.1, source commit efa1be59d6fc747ad220f036c86030f05f0419f9
+
+Java probe: `MessageQueueAssignment.setAttachments` accepts a map with a null
+key; `getAttachments` returns the same map. Fastjson serializes the null key
+as the property name `"null"`, omits null-valued entries, and emits duplicate
+`"null"` properties when a literal `"null"` key coexists with the null key.
+
+Rust change: `AssignmentAttachments` represents nullable keys with
+`Option<String>` and retains the shared setter/getter map handle. JSON input
+property `"null"` remains a string key; output maps the null key to `"null"`.
+Snapshots retain null values while the assignment DTO encoder omits them.
+Java oracle was added to `fixtures/runtime/lookup.json` as
+`assignmentNullAttachmentApiCase`.
+Test follow-up commit 1b8c0d7d compares the raw DTO JSON and asserts both
+duplicate `"null"` property names survive Rust serialization.
+
+Implementation commit: 5dffd30b (fix: preserve null assignment attachment keys)
+Lookup fixture SHA-256: 42af689aed0d150ee19fef5d8138627bb09db9085139b5221d579e57a0053283
+
+Verification:
+- `cargo test -p rocketmq-classic-protocol -p rocketmq-classic-core --locked --offline` passed.
+- `cargo test --workspace --locked --offline -- --test-threads=1` passed.
+- `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings` passed.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` passed with fixture drift checks.
+- `cargo fmt --all` and targeted `git diff --check` passed.
+
+The first parallel workspace run encountered `AlreadyOpen` in the unrelated
+local offset fixture test; that test passed on its own and the full serial
+workspace run passed. No Phase 19 user-owned files were staged or changed by
+this work. No push or remote CI was run. P18-V01 remains open.

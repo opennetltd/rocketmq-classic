@@ -1,0 +1,37 @@
+# Phase 18 consumer-offset header API — 2026-10-18 18:07 UTC
+
+- Branch: `phase/18-phase-18-compatibility-closure`.
+- Pinned Java 5.5.1 inventories record public methods and constructors for
+  `QueryConsumerOffsetRequestHeader`, `UpdateConsumerOffsetRequestHeader`, and
+  `QueryConsumerOffsetResponseHeader`; each has no public fields. Rust fields
+  are now crate-private with Java-equivalent accessors. Query/update request
+  `Display` matches Java `toString()` output.
+- `UpdateConsumerOffsetRequestHeader` now retains inherited `lo` in encode and
+  decode. Invoked Java fixtures cover API inventories, request text, field
+  visibility and the inherited value. Fixture SHA-256:
+  `2a62dd6f4171bd043a21c9f9fbf3f79299a07723d165540a1589d5d7312abab1`.
+- Code commit: `b71406fa fix(protocol): align consumer offset header APIs`.
+
+## Validation
+
+- PASS: `cargo check --workspace --all-targets --all-features --locked --offline`.
+- PASS: focused Protocol header API test; Core RPC reply, consumer API and
+  invoked Java RPC fixture tests; Consumer offsets integration tests.
+- PASS: strict all-target/all-feature Clippy for Protocol, Core and Consumer.
+- PASS: offline Maven `verify`; 37 scenarios, fixture drift checks, 66 typed
+  header and 15 typed body cross-decodes.
+- PASS: `cargo fmt --all -- --check` and `git diff --check`.
+
+## Remaining work
+
+- Broad P18-V01 Java/Rust bidirectional source/API/settings/input/error/flow
+  and reverse-export reconciliation remains open.
+- Re-run the full server-free P18-V02 gate after the final code revision.
+- Current-revision GitHub Ubuntu address-profile evidence and native Windows
+  stack-runtime evidence are still absent for P18-V04.
+- Phase 19 still needs 30 of 37 local Broker/Docker scenario runners and
+  required profiles. These are automation work; owner-environment checks are
+  separately blocked on owner inputs.
+- P18-V03 OpenPGP tag-signature verification remains unverified because GPG is
+  unavailable. Release version and registry resolution are deferred until
+  after Phase 19.

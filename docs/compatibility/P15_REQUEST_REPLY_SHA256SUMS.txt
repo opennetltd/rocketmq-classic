@@ -1,0 +1,2 @@
+914b8886d2ce6800c8c647bf4accdcd538f9d33e4116bcf6e88d9e8ba24828af  fixtures/producer/request-reply.json
+7c574fc3c4a691e7d9ec874065e685c106ae8c742c4c965351cf57641d28e160  compat/java-reference/src/main/java/compat/RequestReplyFixtures.java

@@ -1,0 +1,33 @@
+# Phase 18 ChangeInvisibleTimeRequestHeader nullable decode — 2026-10-18
+
+- Continued the P18-V01 header audit on
+  `phase/19-phase-18-compatibility-release-gate-resume`. Read the pinned
+  RocketMQ Java source at `efa1be59d6fc747ad220f036c86030f05f0419f9`; this
+  request header uses reflective decoding under both hints, has nullable
+  string/wrapper fields, primitive `suspend=false`, and a no-op `checkFields`.
+- Added a pinned invoked Java fixture for missing fields, malformed and
+  overflowing numbers, valid Arabic-Indic digits, both decode hints, and
+  re-encoded fields. Rust now represents nullable header fields with `Option`,
+  preserves unset fields on encode, and maps success-path missing `offset`,
+  `topic`, or `queueId` to typed header errors. Non-success replies retain
+  Java's `NoExist` branch without reading those request fields.
+- Code/fixture commit: `8f64dde3 fix(protocol): preserve nullable
+  change-invisibility headers`. Documentation is committed separately.
+- Validation passed:
+  `docker run --rm -v /Users/bruce.tsai/Projects/trio/rocketmq-classic:/workspace -w /workspace -e CARGO_TARGET_DIR=/tmp/rocketmq-classic-target rust:1.85-bookworm cargo test -p rocketmq-classic-protocol -p rocketmq-classic-remoting -p rocketmq-classic-core -p rocketmq-classic-consumer --all-features --locked`;
+  strict all-target/all-feature Clippy for the same crates; pinned Java
+  `mvn -f compat/java-reference/pom.xml verify` (37 scenarios, 66 typed-header
+  and 15 typed-body cross-decodes); `cargo fmt --all -- --check`; and
+  `git diff --check`.
+- The first macOS all-feature run passed through Protocol headers and most
+  affected tests, but the Remoting codec test process stayed launched-suspended
+  at `_dyld_start`. The same test binary and a temporary runner were also
+  launched-suspended there. The full affected-crate test command completed in
+  the Rust 1.85.0 Linux container instead. No Broker or Docker Compose profile
+  was run.
+- Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export
+  reconciliation remains open. The full-workspace P18-V02 gate must be
+  refreshed after implementation work; P18-V03 package/provenance, current
+  Ubuntu/native Windows P18-V04 evidence, Phase 19's remaining automatic local
+  scenarios/profiles, and pre-publication version/registry checks remain open.
+  Existing uncommitted Phase 19 runner changes remain separate.

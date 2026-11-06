@@ -1,0 +1,26 @@
+# Phase 3 remoting transport — execution log (20260927T000114Z)
+
+## Scope and decision
+- Continued Java 5.5.1 error-path parity review. Verified pinned `NettyRemotingClient.invokeImpl`: terminal GO_AWAY maps to `RemotingSendRequestException(remoteAddr, Throwable(...))`, with distinct causes for first/second GO_AWAY.
+- Replaced the Rust-only `TransportError::GoAway` with Java-aligned `TransportError::SendRequest { remote_addr, cause }` for terminal GO_AWAY. Kept Rust generation identifier in the message where Java formats channel id, since Tokio transport has no Netty channel id; this is a partial metadata mapping, not exact cause-string parity.
+- Followed `NettyRemotingAbstract.requestFail` and `ResponseFuture.executeInvokeCallback`: channel/request failure sets `sendRequestOK=false`, leaves cause null, and wraps it as `RemotingSendRequestException(remoteAddress, null)`. Rust peer EOF now maps to `SendRequest { remote_addr, cause: None }`; the public async callback still reports the default-true send flag created by the Java outer wrapper.
+- `TransportError::SendRequest.cause` is optional to preserve Java's cause/no-cause distinction. Retained `Closed` for callback result with no response/error, an internal impossible/fallback path, rather than inventing address/cause metadata.
+
+## Actions and validation
+- Added/updated tests for no-retry GO_AWAY, second GO_AWAY callback error and peer-close classification.
+- Updated the Phase 3 inventory, compatibility overview and remoting ADR to reflect the Java exception categories and constructor-only channel listener semantics.
+- `cargo test -p rocketmq-classic-remoting p3_go_away --locked --offline` — passed (3 tests).
+- `cargo test -p rocketmq-classic-remoting p3_async_second_go_away_callback_retains_original_request --locked --offline` — passed.
+- `cargo test -p rocketmq-classic-remoting p3_async_peer_close_preserves_public_wrapper_default_send_status --locked --offline` — passed after updating the expected error category.
+- `cargo fmt --all`, `cargo fmt --all --check` — passed.
+- `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings` — passed.
+- `cargo test --workspace --locked --offline` — passed (11 common + 10 protocol + 32 remoting unit + 4 codec + 63 transport tests).
+- `python3 scripts/check-workspace-metadata.py` — passed.
+- `python3 tests/differential/compare.py --self-test` — passed.
+- `git diff --check` — passed.
+
+## Status
+- Phase 3 remains unaccepted. This addresses confirmed error-classification paths only. Full exception/cause coverage, API/config inventory semantic parity and P3-V04 Phase 19 live validation remain outstanding. Phase 4 not started.
+- Initial implementation committed as `1bcdcc5`; the peer-close follow-up is staged for a separate commit.
+
+- Commit status correction: the peer-close follow-up described above was committed as `5019c79` (`fix(remoting): classify peer close as Java send failure`); the earlier “staged” note reflected status before that commit.

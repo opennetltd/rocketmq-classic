@@ -1,0 +1,32 @@
+# Phase 18 scheduler immediate-shutdown returned-task semantics
+
+- Recorded: 2026-10-23 20:09:33 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Starting revision: `0f98c6e5`
+- Implemented revision: `124afee8`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: `MQClientInstance.getScheduledExecutorService()` and `PullMessageService.getScheduledExecutorService()` immediate shutdown
+
+## Finding and change
+
+The invoked Java fixture confirms that `ScheduledExecutorService.shutdownNow()` returns queued future objects without marking them cancelled or done, and queued callbacks do not run. The pre-start client executor returns 32 entries: two submitted one-day futures and 30 constructor-scheduled statistics jobs from five `StatsItemSet`s. The pull executor returns the two submitted futures.
+
+Rust `RuntimeScheduler::shutdown_now()` now returns `Vec<RuntimeScheduledTaskHandle>`. Handles for submitted calls preserve task identity, remain pending after shutdown, and can be cancelled by the caller. Queued client periodic registrations and delayed pull request/task entries also receive returned handles. Running worker cancellation remains separate.
+
+Rust statistics use lazy sampling and do not enqueue the 30 constructor-time Java maintenance jobs. The Rust client executor's returned list therefore still omits those 30 entries. This queue-content difference and the wider P18-V01 reconciliation remain open.
+
+## Verification
+
+- Focused client and pull immediate-shutdown regressions: 2 passed; cover returned membership, pending status, explicit cancellation, internal periodic registrations, delayed pull request/task entries, and callbacks not running.
+- `cargo test --workspace`: passed, including doctests.
+- `cargo test --workspace --all-features`: passed, including doctests.
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`: passed.
+- Windows GNU all-target/all-feature workspace check and strict Clippy: passed.
+- `mvn -o -q -f compat/java-reference/pom.xml verify`: passed; 37 scenarios, 11 message fixtures, 106 typed headers, 19 typed bodies, and Java/Rust cross-decodes.
+- Direct scheduled-executor fixture `--verify`: passed for both Java owners.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- An initial `cargo test --workspace --all-targets` selected the release-only microbenchmark, whose guard requires `cargo bench`; the normal workspace suites above are the applicable test runs.
+
+## Acceptance boundary
+
+This closes Java-style queued-future return and pending-state semantics for jobs represented in the Rust client and pull scheduler queues. The 30 Java statistics maintenance entries remain a known P18-V01 delta, and broad source/API/settings/input/error/control-flow/reverse-export reconciliation remains PARTIAL. Current-revision remote CI, native Windows runtime evidence, and Phase 19 live Broker/Docker validation remain separate. No plan was edited, no push or remote CI was run, and the four user-owned Phase 19 worktree paths remain untouched and unstaged.

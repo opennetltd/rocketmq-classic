@@ -1,0 +1,24 @@
+Phase 18 `resetMasterFlushOffset` API and header closure slice
+
+Date: 2026-10-21 UTC
+Branch: `phase/18-phase-18-compatibility-closure`
+
+Scope:
+- Compared the pinned Java 5.5.1 `MQClientAPIImpl.resetMasterFlushOffset(String,long)` and `ResetMasterFlushOffsetHeader` source.
+- Added `MQClientApi::reset_master_flush_offset` for request 908, preserving the supplied address, fixed 3000 ms timeout, success behavior, and Broker response errors.
+- Added public Rust `ResetMasterFlushOffsetHeader` with nullable boxed-`Long` accessors and Java reflection decode behavior.
+- Added invoked Java success/error fixtures, nullable-header decode cases, Java→Rust and Rust→Java typed-frame evidence, Protocol header inventory, and Core RPC regression coverage.
+- Updated Java compatibility evidence, the Phase 6 API map and requirement audit, and the release checklist.
+
+Evidence:
+- Producer core fixture SHA-256: `b5104de29ba8a8870269174ad866ae1277daae60aca3439f4af67aa62d11ee8e`.
+- Protocol header inventory: passed (9 tests); nullable-long decode comparison and `header_validation_matrix`: passed.
+- Core differential `reset_master_flush_offset_matches_java_header_timeout_and_outcomes`: passed.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- `mvn -f compat/java-reference/pom.xml verify`: passed; 37 manifest scenarios, 74 typed headers, and 15 typed bodies verified.
+
+Remaining:
+- Broad P18-V01 bidirectional API/settings/input/error/control-flow/reverse-export audit remains open.
+- Current Ubuntu/native Windows P18-V04 evidence and Phase 19 live Broker scenarios remain open.
+- Preserved Phase 19 paths were not included in this slice: `integration-tests/README.md`, `tests/differential/run.sh`, `integration-tests/run-local.sh`, and `rlogs/2026/09/20-phase-19-docker-local-validation__20261017T224455Z.rlog`.

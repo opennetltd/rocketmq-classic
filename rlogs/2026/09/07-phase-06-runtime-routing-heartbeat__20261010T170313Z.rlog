@@ -1,0 +1,5 @@
+# Phase 6 execution session — 2026-10-10T17:03Z
+
+- Completed the native scheduler side of the empty-NameServer start case. The Java `configuredToEmpty` start probe records four fixed-rate task registrations; core `schedules()` now compares its count to that fixture, in addition to the runtime-level zero-discovery/constructor-address differential.
+- Added the scheduler test commit `b49179e3` to the API map, requirement audit, and runtime inventory. The current `start.json` fixture remains verified by pinned offline Maven.
+- Validation: focused core scheduler unit, core all-target strict Clippy, formatting, and diff checks pass. Whole Phase 6 reconciliation remains open and P6-V04 remains `PENDING_PHASE_19`.

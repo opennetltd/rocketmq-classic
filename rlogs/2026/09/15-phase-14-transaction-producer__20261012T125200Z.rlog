@@ -1,0 +1,77 @@
+Phase 14 Transaction Producer — 2026-10-12 12:52 UTC
+
+Objective: complete plan `plan/2026/09/15-phase-14-transaction-producer.md` on its own phase branch. Java reference source: `efa1be59d6fc747ad220f036c86030f05f0419f9`; Maven artifact: `rocketmq-client:5.5.1`.
+
+Starting state and branch:
+
+- Phase 13 HEAD `bd2d9815` was clean. Created `phase/15-phase-14-transaction-producer`; no Phase 14 implementation changes existed at branch creation.
+- Java checkout `/Users/bruce.tsai/Projects/3rd/rocketmq` remains at 5.1.4 HEAD `2238256de1d227a4384ba969dfa31473187b4d08`; it contains the pre-existing untracked `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java`. Do not modify that checkout or file.
+- Read the English and Traditional Chinese Phase 14 plans and execution index. The Phase 13 local gate is complete; its P13-V02 live obligation remains separately assigned to Phase 19.
+
+Pinned Java source audit:
+
+- Inspected `TransactionMQProducer`, `DefaultMQProducerImpl.initTransactionEnv`, `sendMessageInTransaction`, `endTransaction`, `checkTransactionState`, `ClientRemotingProcessor.checkTransactionState`, listener interfaces, transaction enum/result and end/check request headers using `git show <pinned-commit>:<path>`.
+- The pinned Java API has eight public constructors, a current `TransactionListener`, deprecated `TransactionCheckListener`, `checkThreadPoolMinSize=1`, `checkThreadPoolMaxSize=1`, `checkRequestHoldMax=2000`, and optional `ExecutorService`.
+- Plan/source conflict found: Java `start()` succeeds without a transaction listener; a transaction send with no listener throws `TransactionListener is null`. With a listener, Java namespaces the caller message topic and mutates `TRAN_MSG=true` and `PGROUP` before the half-send attempt. The Phase 14 plan instead requires callbacks at start and forbids caller-message mutation. Added the source/matrix evidence and requested owner direction; do not silently resolve this observable difference.
+
+Oracle fixture work:
+
+- Added `TransactionFixtures` and command `transaction-fixture`; Maven `verify` now has a drift-check execution for `fixtures/producer/transaction.json`.
+- Fixture invocation first failed because `exec:java` alone reused stale compiled `Main` and did not include the new command. Corrected the invocation to compile first; `mvn -o -q -f compat/java-reference/pom.xml compile exec:java -Dexec.args='transaction-fixture fixtures/producer/transaction.json'` — PASS. The oracle ran against the pinned 5.5.1 dependency without contacting a Broker; Java emitted existing Netty `Unsafe` warnings.
+- Oracle observations: start without listener succeeds; send without listener fails before message mutation; with a listener and pre-start transport failure the caller message has topic `tx-fixture%orders`, `TRAN_MSG=true`, and `PGROUP=transaction-message-mutation`, while the local callback is not called.
+- Added the initial `docs/compatibility/PHASE_14_TRANSACTION_MATRIX.md`; all implementation rows remain pending and P14-V03 is explicitly a Phase 19 obligation.
+
+Phase 14 implementation, Rust tests, full Maven verify, Clippy, workspace tests, commits and final plan audit are not yet complete.
+
+Additional Java and protocol evidence:
+
+- Extended `TransactionFixtures` to serialize actual Java 5.5.1 END_TRANSACTION and CHECK_TRANSACTION_STATE custom headers through `RemotingCommand.makeCustomHeaderToNet`. The generated fixture confirms inherited RPC `bname` is emitted; END fields include `bname=broker-a` for initial and check-driven outcomes. It also records commit/rollback/unknown flags (8/12/0), `fromTransactionCheck`, unique-key fallback, delay property names, send-status policy and `MessageDecoder.decodeMessageId` offsets.
+- `mvn -o -q -f compat/java-reference/pom.xml compile exec:java -Dexec.args='transaction-fixture fixtures/producer/transaction.json'` — PASS; drift verification — PASS. Fixture SHA-256: `ab3e2d0655e7886765217906be889273bddb85cb8111a0f5b7946bd06a8c718e`.
+- Added inherited `ns`, `nsd`, `bname`, and `oway` fields to Rust transaction request headers, including Java's default `fromTransactionCheck=false`. Added a fixture-backed protocol test. Its first run failed because the Java fixture had not yet been regenerated after adding inherited fields; regenerated it and reran `cargo test -p rocketmq-classic-protocol --test headers transaction_headers_match_pinned_java_fields_including_rpc_parent --locked` — PASS.
+- The plan/source conflict about listener validation at start and caller-message mutation remains pending owner direction; no dependent producer behavior has been implemented.
+- No clarification reply had arrived after the async question. The active goal explicitly says Java 5.5.1 public behavior/settings are the compatibility baseline; I recorded and applied that owner baseline as direction for the two source/plan conflicts rather than leaving them unresolved. The matrix now states the reconciliation: start may succeed without a listener; send checks listener before mutating topic, then namespaces and writes half-message properties before transport.
+
+Phase 14 continuation — 2026-10-12 UTC
+
+- Regenerated the broker-check message in the Java 5.5.1 oracle with `MessageDecoder.encode/decode`; it uses the request offsets/store host and produces `msgId=7F00000100002A9F0000000000003039`. The check fixture now carries that stored message body, a matching request `msgId`, unique-key and no-unique-key END_TRANSACTION cases for all three decisions, and inherited RPC fields.
+- Confirmed pinned `DefaultMQProducerImpl.checkTransactionState` selects `message.getMsgId()` when `UNIQ_KEY` is absent. The Rust no-unique-key test now compares the entire END_TRANSACTION header against the Java-decoded message-ID fixture.
+- `mvn -o -q -f compat/java-reference/pom.xml compile exec:java -Dexec.args='transaction-fixture fixtures/producer/transaction.json'` — PASS. An overlapping Maven verify reported fixture drift once while regeneration was in progress; rerunning `mvn -o -q -f compat/java-reference/pom.xml verify` sequentially after generation — PASS, including transaction fixture drift check and Java decoding of Rust-generated fixtures.
+- Fixed no-response assertions for unmatched CHECK_TRANSACTION_STATE in the core unit and loopback tests, as required by Java's null-return handler. Updated the protocol header validation inventory for inherited `ns`, `nsd`, `bname`, and `oway` fields on transaction/check request headers; classified `nsd` and `oway` as booleans.
+- `cargo test -p rocketmq-classic-producer --lib transaction::tests --locked` — PASS, 10 tests. `cargo test -p rocketmq-classic-protocol --test headers --locked` — PASS, 11 tests.
+- `python3 tests/differential/compare.py --self-test` — PASS. The first invocation used the wrong cwd-relative path and was corrected.
+- `cargo fmt --check` — PASS. First strict Clippy run found two `needless_return` lints in test-only cfg blocks; removed the returns. `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — PASS.
+- Updated `docs/compatibility/PHASE_14_TRANSACTION_MATRIX.md` with UNIT_VERIFIED local rows and preserved P14-V03 as Phase 19 pending. Added `crates/rocketmq-classic-producer/examples/transaction_producer.rs` as the public API example.
+- Full workspace command `cargo test --workspace --locked` is running; final result to be appended after completion. No Phase 14 commits yet.
+- Added start-time pool-boundary cases (negative min, zero max/hold, min above max) and custom executor rejection mapping to Unknown. `cargo test -p rocketmq-classic-producer --locked` — PASS (55 unit tests, 13 integration tests); strict workspace Clippy — PASS after these additions.
+- The first final `cargo test --workspace --locked` run completed successfully before those additional test cases. The rerun on the final test tree stopped in unrelated `rocketmq-classic-consumer/tests/lite_pop.rs::lite_trace_dispatcher_uses_java_topic_defaults_and_lifecycle` with `ControlTaskFailed`; the same test passed on immediate isolated rerun (`cargo test -p rocketmq-classic-consumer --test lite_pop lite_trace_dispatcher_uses_java_topic_defaults_and_lifecycle --locked`). Running the complete workspace gate again to confirm suite stability.
+
+Final Phase 14 validation — 2026-10-12 UTC
+
+- Diagnosed intermittent full-workspace failure in `lite_trace_dispatcher_uses_java_topic_defaults_and_lifecycle`: the test shared the default process-wide client runtime identity with concurrent Lite consumer integration tests. Giving this test a dedicated instance name made the entire Lite POP binary pass (19/19) and the required default workspace suite pass.
+- `cargo test --workspace --locked -j 1` — PASS; diagnostic single-job run.
+- `cargo test --workspace --locked` — PASS on the final workspace after the Lite test isolation change, including all Phase 14 tests and doc-tests.
+- `cargo test -p rocketmq-classic-producer --locked` — PASS (55 unit tests; 13 integration tests). `cargo test -p rocketmq-classic-protocol --test headers --locked` — PASS (11 tests). Core inbound behavior passed in workspace suite.
+- `cargo fmt --check` — PASS. `git diff --check` — PASS. `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS, including transaction fixture drift verification and Java decode checks. `python3 tests/differential/compare.py --self-test` — PASS.
+- Fixture SHA-256: `eff8c0460a50380add0a360b8099ffa74017831ddaa983226f11840784e98031`.
+- Environment: rustc/cargo 1.85.0; Maven 3.10.0; Maven reports OpenJDK 27.0.2. Java oracle artifact remains `rocketmq-client:5.5.1`, source commit `efa1be59d6fc747ad220f036c86030f05f0419f9`; no Broker was contacted.
+- Final plan audit: P14-V01, P14-V02 and P14-U01 are locally UNIT_VERIFIED in the matrix. P14-V03 remains Pending Phase 19 by plan. English and Traditional Chinese plans remain unchanged. Implementation/test commits and final log commit pending.
+
+Commit and final handoff — 2026-10-12 UTC
+
+- Committed Lite trace lifecycle test isolation separately: `06565a77` (`test(consumer): isolate lite trace lifecycle runtime`).
+- Committed Phase 14 transaction producer implementation, tests, Java 5.5.1 fixture, example, and compatibility matrix: `dd4a7843` (`feat(producer): implement transactional producer flow`).
+- Both English and Traditional Chinese Phase 14 plan files remain unchanged.
+- Final status: P14-V01, P14-V02, and P14-U01 locally UNIT_VERIFIED; P14-V03 remains Pending Phase 19. No live Broker was contacted. All recorded workspace, producer, protocol, format, Clippy, Maven fixture, differential self-test, and diff checks passed.
+- Implementation and test commits are complete. This append-only execution log is committed separately.
+
+Phase 14 compatibility audit follow-up — 2026-10-12 UTC
+
+- Re-audited the public `TransactionMQProducer` API against the pinned Java 5.5.1 source. Added a Rust `new_with_rpc_hook` path through `Producer` into `ClientRuntimeManager::get_or_create_with_hook`, re-exported `RpcHook`, documented the constructor/config mapping, and matched Java deprecation metadata for legacy listener and pool setters. Added public-crate and runtime-registration tests.
+- Compared custom `ExecutorService.submit` behavior with the Rust dispatcher. The previous dispatcher awaited each submitted callback, serializing otherwise parallel custom executors. It now submits checks independently, tracks completion work for bounded shutdown, and caps accepted custom-executor work. Added a blocking two-check concurrency regression test.
+- Final strict workspace tests caught no product failures. During test authoring, typed `Arc::ptr_eq` assertions initially needed coercion to trait-object `Arc`s; corrected and reran the suites successfully.
+- `cargo test --workspace --locked` — PASS on final implementation; `cargo test -p rocketmq-classic-producer --locked` — PASS (57 unit, 3 producer, 5 scripted-send, 6 transaction tests); `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — PASS; `cargo fmt --all -- --check` and `git diff --check` — PASS; `cargo test -p rocketmq-classic-protocol --test headers --locked` — PASS (11 tests); `python3 tests/differential/compare.py --self-test` — PASS.
+- A final `mvn -o -q -f compat/java-reference/pom.xml verify` first exposed nondeterministic field ordering from Java `Map.of` in `TransactionFixtures`. Parsed fixture values were identical; exact-string drift came from randomized map iteration. Replaced it with `TreeMap`, regenerated twice with identical SHA-256 `cfa19e98ad567b42a4e462c11906e6e49589e59557817d7359e990d9b4c314e5`, then reran Maven verify — PASS.
+- Follow-up commits: `6e1bda0c` stabilizes the Java fixture; `3f7335a8` adds Java-compatible transaction RPC hook construction and setter annotations; `f303b6c4` preserves custom executor concurrency with bounded completion handling.
+- Final Phase 14 matrix: P14-V01, P14-V02, and P14-U01 locally UNIT_VERIFIED. P14-V03 remains Pending Phase 19, as the plan requires. No Broker was contacted. English and Traditional Chinese plan files are unchanged.
+- Java checkout `/Users/bruce.tsai/Projects/3rd/rocketmq` remains untouched at 5.1.4 HEAD `2238256de1d227a4384ba969dfa31473187b4d08`, including its pre-existing untracked `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java`.

@@ -1,0 +1,23 @@
+# Phase 3 execution log — oneway connect-start alignment — 2026-09-26T070351Z
+
+## Goal and source finding
+
+- User requested aligning the previously identified Rust oneway connection-start difference with Java 5.5.1.
+- Inspected `NettyRemotingClient.invokeOneway`, `getAndCreateChannelAsync`, `createChannelAsync`, `createChannel`, and `doConnect`. Java obtains/creates the channel future and invokes Netty `connect` before `invokeOneway` returns; it does not wait for connection completion, semaphore admission, or write.
+
+## Implementation
+
+- `invoke_oneway` now starts a client-owned connection acquisition task before returning, and a separate client-owned operation task waits on its result before hooks/admission/write. Returning a ready future and dropping it does not cancel these tasks; post-return connection/admission/write errors remain unobservable.
+- Added `p3_oneway_starts_connection_acquisition_at_call_time`; the scripted peer observes connection acceptance without polling the returned ready future. Existing delayed-peer test continues to assert return does not wait for frame receipt.
+- Updated the API comment and compatibility inventory to state the exact remaining limitation: Tokio task spawn is synchronous but does not guarantee the connection task is polled or socket connect is issued before return, whereas Java calls Netty `connect` synchronously. Exact dial-start equivalence therefore remains unproven.
+
+## Validation
+
+- Targeted: `cargo test -p rocketmq-classic-remoting --test transport p3_oneway_starts_connection_acquisition_at_call_time --locked --offline` — passed.
+- `cargo fmt --all --check` — passed.
+- Full transport test target: `cargo test -p rocketmq-classic-remoting --test transport --locked --offline` — passed before adding the new test (54 tests); newly added targeted test passed. Full workspace gates will be rerun before completion.
+
+## Status
+
+- Phase 3 remains NOT ACCEPTED and Phase 4 remains blocked. This change does not claim synchronous connect initiation equivalence: ordinary Tokio `spawn` schedules but does not synchronously poll. It also preserves Java-like non-waiting operation boundary after invocation; listener callback connect failures, semaphore failures, and asynchronous write failures are not reported after return.
+- P3-V04 remains deferred to Phase 19. No live Broker/Docker/Maven validation performed.

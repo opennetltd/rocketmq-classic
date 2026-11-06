@@ -1,0 +1,34 @@
+# Phase 18 TopicConfig nullable attribute keys — 2026-10-23 UTC
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Pinned Java target: RocketMQ client 5.5.1, source commit
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Changes
+
+- `TopicConfigAttributeMap` now represents nullable Java keys with
+  `Option<String>`, while preserving insertion order for entries in the same
+  Java HashMap bucket.
+- TopicConfig JSON serialization emits a Java null key as `"null"`, preserves
+  a distinct literal `"null"` key (including duplicate JSON properties), and
+  omits null-valued entries. `toString()` retains null keys and values.
+- JSON decode treats a property named `"null"` as an ordinary string key.
+- Added invoked Java fixture coverage for map identity, mutations through
+  setter/getter references, null-vs-string key entries, encode/string output,
+  and decoded key behavior. Updated the TopicConfig API regression.
+- Implementation commit: `4c582837` (`fix(protocol): preserve topic config
+  null attribute keys`). Documentation and this log are committed separately.
+- No plan files or the external Java checkout were modified.
+
+## Verification
+
+- `mvn -o -q -f compat/java-reference/pom.xml -Dproducer.core.fixture.verify=false compile exec:java@verify-java-producer-core-fixtures` — passed; regenerated the pinned Java fixture.
+- `cargo test -p rocketmq-classic-protocol --locked --offline -- --test-threads=1` — passed: 161 unit tests, all package integration targets, and 165 doctests.
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features --locked --offline -- -D warnings` — passed.
+- `cargo fmt --all` and `git diff --check` — passed.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — passed: 37 scenarios, 36 runtime route/VIP cases, 106 typed-header cross-decodes, and 19 typed-body cross-decodes.
+- `fixtures/producer/core.json` SHA-256: `d166aa9c873ed7f2ccf26a25dc5d43850e10b7eabcc15a62535c9d265fd9b237`.
+
+Status: this closes the direct TopicConfig nullable attribute-key gap only.
+Broad P18-V01 reconciliation remains PARTIAL; Phase 6 remains PARTIAL and
+P6-V04 remains `PENDING_PHASE_19`.

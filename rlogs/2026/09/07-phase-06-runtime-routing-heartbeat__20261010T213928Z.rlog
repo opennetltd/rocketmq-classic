@@ -1,0 +1,6 @@
+# Phase 6 local gate revalidation — 2026-10-10T21:39:28Z
+
+- Re-ran `cargo test --workspace --all-targets --locked` with the previously authorized localhost scripted-peer scope: all targets passed, including the new default-topic Java/Rust differential and the eight-test discovery suite.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` passed. `python3 tests/differential/compare.py --self-test` passed and `--validate-manifest` validated all 22 scenarios.
+- The first sandboxed Maven verify was denied when `verify-runtime-config-fixtures` opened a loopback socket. Re-ran the exact pinned offline command with reviewed escalation: `mvn -o -q -Dmaven.repo.local=/private/tmp/p6-maven-repository -f compat/java-reference/pom.xml verify`; Java self-test, all 22 scenarios, all runtime fixture suites, and both Rust-generated cross-decodes completed without a Maven error.
+- `cargo fmt --all -- --check` and `git diff --check` pass. Updated both Phase 6 plan languages with the current evidence and exact offline Maven command. P6-V01/V02/V03/U01 remain passed; P6-V04 remains a Phase 19 handoff. Actual Linux/Windows/BSD runtime address enumeration and residual broader source/input audit branches remain outside this local pass.

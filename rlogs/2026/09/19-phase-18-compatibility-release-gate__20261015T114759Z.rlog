@@ -1,0 +1,30 @@
+# Netty frame-limit encoder-direction correction — 2026-10-15T11:47:59Z
+
+- Rechecked the pinned Java 5.5.1 `NettyEncoder.encode` source after the first
+  frame-limit mapping. Java's `frameMaxLength` is read only by
+  `NettyDecoder`; the encoder writes the frame without consulting that limit.
+  The prior Rust change had reused the decoder limit for outbound request and
+  response encoding, which would reject messages Java still sends.
+- Rust now applies the configured property to inbound frame decoding only.
+  Outbound encoding allows sizes above the decoder limit and remains bounded
+  by the signed Java length-prefix representation.
+- Extended the Java probe to encode a 4096-byte body under a configured
+  decoder limit of 4096 and verify the resulting frame is larger than that
+  limit. The Rust child-process loopback sends an inbound length prefix whose
+  total frame exceeds the configured limit, verifies the connection closes,
+  and verifies an outbound frame of that size still encodes.
+- PASS: `cargo test -p rocketmq-classic-remoting --locked` (84 unit, 6 codec,
+  1 fuzz regression, 5 security, and 86 transport tests); strict all-target,
+  all-feature Remoting Clippy; Maven verify (37 scenarios, default/configured
+  frame-limit probes including the encoder case, 2 base cross-decodes, 54 typed
+  headers, and 14 typed bodies); format and diff checks.
+- Code commit: `a06853ba fix(remoting): apply frame cap to inbound decode only`.
+- Updated the Phase 2 compatibility row and release checklist. The reverse
+  scan also recorded the public `codec::frame` constant and caller-selected
+  limit functions as an unresolved P18-V01 API-disposition candidate.
+- The complete P18-V02 workspace/server-free gate must be rerun after this code
+  commit. Broad P18-V01, current-revision GitHub Ubuntu/P18-V04 evidence,
+  Phase 19 local Docker/Broker automation, and release version/registry checks
+  remain open.
+- The pinned Java source repository was read-only. No plan, push, tag,
+  publication, or Broker validation was performed.

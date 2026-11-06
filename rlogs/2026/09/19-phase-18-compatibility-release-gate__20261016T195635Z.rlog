@@ -1,0 +1,42 @@
+Phase 18 public API reverse-scan continuation — 2026-10-16
+
+Context
+- Plan: `plan/2026/09/19-phase-18-compatibility-release-gate.md`; plan unchanged.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Pinned Java client source commit:
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Audit findings and actions
+- All-feature Rustdoc JSON surfaced public `RequestResponseFuture::is_timeout_at`
+  on the Core API. Source search found callers only in the Core request/reply
+  registry; the Java 5.5.1 API has `isTimeout()` and no explicit-clock method.
+  Changed the helper to `pub(super)` and added a compile-fail doctest proving it
+  is not externally callable. The Phase 15 matrix records the owner-only clock
+  adapter disposition.
+- A nearby Java-worktree method, `acquireCountDownLatch`, was checked before
+  implementation. It is absent from pinned commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9` and from the Maven 5.5.1 artifact;
+  it exists only in the current Java worktree at `2238256de1d227a4384ba969dfa31473187b4d08`.
+  An initial fixture compilation correctly failed to resolve it. The temporary
+  candidate changes were reverted; no Java-oracle/API mismatch remains from
+  that probe.
+- Pinned `RequestResponseFuture.java` SHA-256:
+  `08f2a1eec7e492d95fd9502e3b942960df948674182de5632b7b02d0514d95d4`.
+- Code commit: `aa4ce064` (`fix(core): keep request timeout clock helper
+  internal`). Documentation and this log are committed separately.
+
+Validation
+- `cargo test -p rocketmq-classic-core --all-features --locked` passed: 168
+  unit tests, all Core integration suites, and 14 doctests including the new
+  compile-fail API-boundary case.
+- `cargo clippy -p rocketmq-classic-core --all-targets --all-features --locked
+  -- -D warnings` passed.
+- All-feature Core Rustdoc JSON generated; `is_timeout_at` is absent from the
+  public item index.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+
+Scope status
+- This closes one Rust-only timeout-helper exposure. P18-V01's broader
+  bidirectional Java/Rust API, settings, input/error/flow, inherited-surface,
+  and reverse-export audit remains open, as does the final-revision workspace
+  P18-V02 gate.

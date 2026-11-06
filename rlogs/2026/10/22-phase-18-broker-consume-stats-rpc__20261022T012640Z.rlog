@@ -1,0 +1,28 @@
+# Phase 18 Broker consume-statistics RPC — 2026-10-22T01:26:40Z
+
+- Closed the pinned Java 5.5.1 `MQClientAPIImpl.fetchConsumeStatsInBroker`
+  request 317 slice. `MQClientApi::fetch_consume_stats_in_broker` sends the
+  primitive `isOrder` header, applies configured VIP conversion, honors the
+  caller timeout, and decodes `ConsumeStatsList`.
+- Added Java Fastjson decoding and compact encoding for nested
+  `ConsumeStatsList` groups, including `MessageQueue` object keys in each
+  `ConsumeStats.offsetTable`. Primitive total fields default to zero for
+  omitted or explicit-null inputs. The Java oracle now covers populated,
+  default, null-list/address, null-primitive, success-without-body, and Broker
+  error cases.
+- Added the typed Java request-header fixture and validation inventory entry.
+  `fixtures/producer/core.json` SHA-256:
+  `96581e4c748fa88328a6c06d880540758d5865ffa5fc1ebe1a17c45fd90fe692`.
+  Request-header fixture SHA-256:
+  `58d0e4a1a86f65e517d068cb72c744c9067f4cf80b3b64b1e9a3e8a50e1b3cb3`.
+- Validation passed: full protocol/core locked tests; strict workspace
+  all-target/all-feature Clippy; pinned Java Maven `verify` (37 scenarios, 89
+  Rust-generated typed headers, 16 typed bodies); `cargo fmt --all`; and
+  `git diff --check`.
+- Updated the Phase 6 API map, request-code inventory, and direct-operation
+  audit. Fourteen initial direct-operation rows remain open; the broader
+  P18-V01 source/API/input/error/control-flow/reverse-export audit remains
+  open. Current-revision Ubuntu and native Windows P18-V04 evidence remains
+  unavailable under the no-remote-CI constraint. No Broker or Docker work was
+  run.
+- Phase 19 worktree files remain untouched and unstaged.

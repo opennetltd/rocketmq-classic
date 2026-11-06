@@ -1,0 +1,42 @@
+2026-10-15 17:23 UTC — resumed the P18-V01 MessageDecoder compatibility slice.
+
+Added a direct pinned-Java fixture invocation for each generic MessageDecoder
+decode overload and both clientDecode readBody variants across eleven stored
+records, including an empty-body record. The first Rust differential exposed
+two behavior differences: Java leaves body null when body reading is disabled
+or the encoded body length is zero, and leaves properties null when the record
+has no properties section. Rust decoding now preserves both nullable states.
+
+Validation passed: all 20 tests in
+`cargo test -p rocketmq-classic-common --test message_decode --locked`, offline
+Maven verification of the eleven pinned records, `cargo fmt --all`, and
+`git diff --check`. Updated the Phase 8 method matrix, message fixture checksum,
+and release checklist. This closes the direct decoder overload/body-null slice
+only. Broad P18-V01, full-workspace P18-V02 gates on the final revision,
+current-revision GitHub Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker
+automation, and release version/registry checks remain open. Owner-run
+deployment/live Broker checks remain manual validation. No plan, push, tag,
+publication, deployment, or live Broker action occurred.
+
+Follow-up validation passed the full Common crate suite (21 unit tests, 20
+`message_decode` integration tests, one topic-validator test, and 17 doctests),
+strict all-target/all-feature Common Clippy, and the complete offline Maven
+`verify` (37 scenarios with cross-decodes and fixture checks).
+
+Documentation follow-up: refreshed the current message-record fixture SHA-256
+references in the Phase 8 matrix and Phase 6 API/config map to
+`761ffe884d0a7c907bb694969ce0730fbb60390cc1fa92151c310f6894483dfd`; the
+checksum manifest matches `sha256sum fixtures/messages/records.json`.
+
+Continuation — completed the full server-free P18-V02 rerun on `f14d7c6a`.
+Default and all-feature workspace tests, all-target workspace check, strict
+workspace Clippy, pinned offline Maven verify (37 scenarios), differential
+self-test/manifest (37 scenarios), race/leak smoke (16 cases × 3), release
+example build, workspace benchmark compilation, locked Cargo metadata,
+metadata/license/dependency checks, seven package listings, Asia/Taipei
+unique-ID differential, formatting and diff checks passed. Fuzz smoke now
+reports 104 frame seeds, 11 message seeds, and 1,840 bounded mutations after
+the message fixture gained an explicit empty-body record. The release checklist
+records this gate. P18-V01, current-revision GitHub Ubuntu/P18-V04 evidence,
+Phase 19 Docker/Broker automation, and release version/registry checks remain
+open; owner-run deployment/live Broker checks remain manual.

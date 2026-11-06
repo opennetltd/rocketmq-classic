@@ -1,0 +1,90 @@
+# Phase 18 Message clone alias implementation and server-free gate rerun — 20261015T082726Z
+
+- Implemented `Message::clone_message()` with shared, lock-protected body/property storage. `set_body`/`set_properties` replace only the receiver's storage; ordinary Rust `Clone` remains a deep independent copy. Safe body/property accessors use guards or owned strings so Rust does not expose references beyond a lock guard.
+- Extended the Rust message differential to cover bidirectional body/property mutations and setter detachment against the invoked Java 5.5.1 `messagePublicApi` fixture. Fixture SHA-256: `b9f6f527720c425b17af57367a524f65e1f16da20acfc369502d64fa37b821e7`.
+- Updated `PHASE_8_OFFLINE_METHOD_MATRIX.md` and `docs/release-checklist.md` to record alias parity, ordinary `Clone` behavior, and remaining Phase 18/19 gates. No plan changed.
+- Fixed two strict-Clippy findings and applied rustfmt.
+- PASS: `cargo test --workspace --locked`; `cargo test --workspace --all-features --locked`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `mvn -f compat/java-reference/pom.xml verify` (37 scenarios and fixture/cross-decodes); differential comparator self-test; 37-scenario manifest validation.
+- PASS: deterministic race/leak smoke (16 cases × 3); fuzz smoke (104 frame seeds, 10 message seeds, 1,824 bounded mutations); release example build; workspace benchmark compilation.
+- PASS: locked Cargo metadata; workspace metadata/license/dependency check; seven package listings; unique-ID fixture test under `TZ=Asia/Taipei`.
+- Code commit: `cfed06f6 fix(message): preserve Java cloneMessage alias semantics`.
+- Remaining gates: broad bidirectional P18-V01 Java/Rust source/API/settings/input/error/control-flow/reverse-export audit; current-revision GitHub Ubuntu/P18-V04 CI evidence; Phase 19 local Docker/Broker automation; pre-publication version/registry resolution checks. Deployment-only owner checks remain separately tracked.
+- No push, release, or tag action taken; the Java reference checkout remains read-only.
+
+# Common MessageExt reverse-export follow-up — 20261015T084330Z
+
+- Re-read the pinned Java 5.5.1 `MessageExt` source at commit `efa1be59d6fc747ad220f036c86030f05f0419f9`. It extends `Message` and declares no `message()` or `message_mut()` composition accessors.
+- Rust already implements `Deref`/`DerefMut` to expose the inherited `Message` API. Removed the two extra public wrapper methods, migrated internal/test/example call sites to inherited methods, and added compile-fail doctests for both names.
+- The first workspace build found three remaining example call sites; updated them to `topic()` through `Deref`. The first strict Clippy pass flagged explicit auto-deref in a transaction-hook argument; switched to the idiomatic auto-deref and reran the checks.
+- PASS: `cargo test --workspace --locked`; `cargo test --workspace --all-features --locked` (exit 0); `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` (exit 0); `cargo fmt --all -- --check`; `git diff --check`.
+- Code commit: `fcab764e fix(compat): remove extra MessageExt accessors`.
+- Updated `PHASE_8_OFFLINE_METHOD_MATRIX.md`, `PHASE_6_REQUIREMENT_AUDIT.md`, and `docs/release-checklist.md` to record this bounded API closure. The broad P18-V01 bidirectional source/API/input/error/flow/reverse-export audit remains open.
+- No push, release, or tag action taken. The Java reference checkout was not modified.
+
+# Message fixture isolation follow-up — 20261015T084330Z
+
+- A final-tree `cargo test --workspace --all-features --locked` first failed in `message_constants_match_java_551`: the parallel `message_public_api_matches_java_551_fixture` test had temporarily modified the same process-wide `STRING_HASH_SET` while the constants fixture read it.
+- Added a test-local `Mutex` shared by those two fixture tests; no production behavior changed. The focused `cargo test -p rocketmq-classic-common --test message_decode --locked` passes all 19 tests.
+- PASS after the synchronization fix: `cargo test --workspace --locked` (exit 0); `cargo test --workspace --all-features --locked` (exit 0); strict all-target/all-feature Clippy (exit 0); format and diff checks.
+- Test-only commit: `21f13891 test(compat): serialize mutable message fixtures`.
+- The first all-features failure was a test-isolation race, not a product behavior failure; the corrected suites now pass. Full current-revision P18-V02 auxiliary gates (Maven/differential manifest, race/fuzz smoke, examples/bench/package checks) still need their final rerun before phase closure.
+
+# Current-revision P18-V02 server-free verification — 20261015T085704Z
+
+- Completed the remaining current-revision gates on `c8bdae9d`:
+  `bash tests/stress/run-offline-smoke.sh` (16 cases × 3, exit 0),
+  `cargo build -p rocketmq-classic --examples --release --locked`,
+  `cargo bench --workspace --no-run --locked`, locked Cargo metadata,
+  `scripts/check-workspace-metadata.py`, and all seven
+  `cargo package --workspace --list --locked --allow-dirty` package listings.
+- PASS: the Java-backed unique-ID helper fixture under `TZ=Asia/Taipei`.
+  Prior final-revision checks also pass: default and all-feature workspace
+  tests, strict all-target/all-feature Clippy, pinned Maven verify (37
+  scenarios and cross-decodes), comparator self-test and 37-scenario manifest,
+  fuzz smoke (104 frame seeds, 10 message seeds, 1,824 mutations), formatting,
+  and diff checks.
+- P18-V02 server-free gates are complete on `c8bdae9d`. P18-V01 broad
+  bidirectional Java/Rust source/API/settings/input/error/flow/reverse-export
+  reconciliation, current GitHub Ubuntu/P18-V04 CI evidence, Phase 19 local
+  Broker/Docker automation, and pre-publication version/registry resolution
+  checks remain open. No plan file changed; no push, release, or tag action
+  taken; the Java reference checkout remains read-only.
+
+# Common MessageExt declared-surface audit — 20261015T090153Z
+
+- Read the pinned Java 5.5.1 `MessageExt.java` source and enumerated its public
+  constructors, host-byte conversion overloads, scalar/system-flag accessors,
+  inherited `Message` methods, and `toString`. Cross-checked each declaration
+  against the Rust owners and invoked fixtures in
+  `PHASE_8_OFFLINE_METHOD_MATRIX.md`; no additional missing declaration
+  surfaced in this class.
+- Updated the Phase 6 audit and release checklist to close this inventory
+  slice only. Broader P18-V01 reconciliation remains open. No plan or Java
+  reference files were modified.
+
+- PASS: `cargo test -p rocketmq-classic-common --test message_decode --locked
+  message_ext_` (4 fixture tests); `git diff --check`.
+
+# MessageClientExt decoded offset-ID parity — 20261015T091456Z
+
+- Audited Java `MessageClientExt`'s `getMsgId`/`getOffsetMsgId` behavior against
+  the Rust adapter and client decoder. Added assertions wrapping both individual
+  and batch client-decoded messages. The new test first failed with
+  `producer-unique-1` returned where Java returns physical ID
+  `C633641400002A9F0000018BCFE56829`.
+- Fixed `MessageClientExt` lookup/update to retain the decoded physical offset
+  separately, prefer the live `UNIQ_KEY` for `message_id`, and fall back to the
+  offset after the unique key is cleared. Added replacement-offset assertions.
+- Code commit: `e15f0417 fix(compat): retain decoded MessageClientExt offset IDs`.
+- PASS: 19 Common message fixtures; default and all-feature workspace tests;
+  strict all-target/all-feature Clippy; Maven offline verify (37 scenarios and
+  Java/Rust cross-decodes); differential self-test and 37-scenario manifest;
+  race/leak smoke (16 cases × 3); fuzz smoke (104 frame seeds, 10 message
+  seeds, 1,824 mutations); release examples; workspace benchmark compilation;
+  locked Cargo/workspace metadata and license/dependency checks; seven package
+  listings; UTC/Asia-Taipei unique-ID fixture; formatting and diff checks.
+- Updated the Phase 8 API matrix and P18-V01 audit. This closes the decoded
+  `MessageClientExt` offset flow only; broad P18-V01, GitHub Ubuntu/P18-V04 CI,
+  Phase 19 Broker/Docker automation, and pre-publication version/registry
+  resolution remain open. No plan or Java reference files were modified.

@@ -1,0 +1,40 @@
+# Phase 18 P18-V01 — Fastjson empty-value writer features
+
+- Timestamp: 2026-10-16 22:56:47 UTC
+- Branch: `phase/19-phase-18-compatibility-release-gate`
+- Code commit: `dc791e63` (`feat(protocol): support empty writer features`)
+- Java oracle: RocketMQ client 5.5.1; Fastjson2 2.0.63 fixtures already pinned
+- Scope: implement the fixture-observed `NotWriteEmptyArray` and `IgnoreEmpty`
+  writer behaviors across inherited body, route, and heartbeat serializers.
+
+## Changes
+
+- Empty arrays/collections and empty maps are omitted from object properties by
+  `NotWriteEmptyArray`; `IgnoreEmpty` also omits empty-string properties.
+- The feature validation accepts both options, and fixture comparisons cover
+  default, populated, nested, body, route, and heartbeat DTO cases where the
+  pinned Java output differs.
+- The Phase 6 map now records eight behavior-mapped writer features out of 48;
+  the remaining 40 are still explicitly unsupported.
+
+## Validation
+
+- `TZ=UTC cargo test -p rocketmq-classic-protocol --all-features --locked`:
+  passed (122 unit tests, all Protocol integration targets, 42 doctests).
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features
+  --locked -- -D warnings`: passed.
+- `TZ=UTC mvn -o -q -f compat/java-reference/pom.xml verify`: passed all 37
+  scenarios and Java/Rust fixture-drift checks.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- Full workspace default and all-feature tests passed on parent revision
+  `c7c26cc0`; the final full-workspace P18-V02 gate is still required after
+  `dc791e63`.
+
+## Remaining work
+
+- Forty writer features and the broad P18-V01 source/API/settings/input/error/
+  flow/reverse-export reconciliation remain open.
+- Current-revision Ubuntu and native Windows CI evidence, release version and
+  registry preflight, and Phase 19 local Docker/Broker automation remain open.
+- No plan edit, Docker/Broker execution, push, tag, publication, or release
+  action occurred.

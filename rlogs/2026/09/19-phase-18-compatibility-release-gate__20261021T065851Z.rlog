@@ -1,0 +1,35 @@
+Goal: close the pinned Java 5.5.1 producer and Broker diagnostics RPC/DTO
+slice within Phase 18, on branch `phase/18-phase-18-compatibility-closure`.
+
+Changes:
+- Added `MQClientApi::get_producer_connection_list`,
+  `get_all_producer_info`, and `get_broker_runtime_info` for request codes 204,
+  328, and 28. They set Java language, apply configured VIP port translation,
+  preserve the supplied address in typed response errors, and decode nullable
+  success bodies.
+- Added Java-compatible `ProducerConnection`, `ProducerInfo`,
+  `ProducerTableInfo`, and `KvTable` response models, including Java defaults,
+  explicit null behavior, mutable collection aliases, public method inventories,
+  and `ProducerInfo.toString()` behavior.
+- Added invoked Java 5.5.1 fixtures, Rust RPC comparisons, request-code
+  crosswalk entries, compatibility evidence, and release checklist results.
+
+Verification passed:
+- `cargo test -p rocketmq-classic-core --all-features --locked` (185 unit
+  tests, all integration targets, and 16 doctests).
+- `cargo test -p rocketmq-classic-protocol -p rocketmq-classic-core
+  --all-features --locked producer_diagnostic` (DTO, VIP loopback, and invoked
+  Java RPC fixture tests).
+- Strict all-target/all-feature Clippy for Common, Protocol, Remoting, Core,
+  Producer, Consumer, and the facade with `-D warnings`.
+- `mvn -q -f compat/java-reference/pom.xml verify` (37 invoked RPC scenarios,
+  67 typed-header frames, 15 typed-body fixtures, and Java/Rust cross-decodes).
+- `cargo fmt --all -- --check`
+- `git diff --check`
+
+Producer core fixture: `fixtures/producer/core.json`, SHA-256
+`85de9ff0aeeb0236d72fa0ecff85ec01cc24ff1b75a64308eddbc0ac5cfe077d`.
+
+This closes only the named producer/Broker diagnostics RPC and DTO slice.
+Broad P18-V01 and P18-V02/P18-V03/P18-V04 remain open. Phase 19 working-tree
+files were left unstaged and unchanged.

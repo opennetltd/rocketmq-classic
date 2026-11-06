@@ -1,0 +1,34 @@
+# Phase 18 compatibility release gate — 2026-10-18T08:28:32Z
+
+- Continued the nullable numeric custom-header reflection audit against the
+  pinned Java 5.5.1 source at `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+  The initial Rust regression failed on a valid Arabic-Indic numeric sibling:
+  Java decoded `groupSysFlag=12`, while Rust dropped it. Inspection also found
+  `ResetOffsetRequestHeader.queueId` is primitive with initial value `-1` and
+  must preserve that value when a reflection conversion fails.
+- Added invoked Java fixtures for both `useFastEncode` hints across
+  `ConsumerSendMsgBackRequestHeader`, `ResetOffsetRequestHeader`,
+  `ConsumeMessageDirectlyResultRequestHeader`, `ReplyMessageRequestHeader`, and
+  `SendMessageRequestHeaderV1`. Cases cover malformed and overflowing
+  nullable numerics, continued sibling decoding, Arabic-Indic digits, and the
+  primitive queue-id default. Fixture SHA-256:
+  `f4bc4d7c18fc82a43a07f45f052f710644dcd950f7a5c5c0a0333a25435580f5`.
+- Rust now applies Java `parseInt`/`parseLong` digit handling to typed numeric
+  header parsing and the reflection mode isolates conversion failures for the
+  named nullable fields. The first Maven command trying to override the
+  configured `compat.Main` did not select the new fixture class; the fixture
+  was updated and then independently checked by the pinned Java verifier in
+  the Maven `verify` lifecycle. The final Maven run passed (37 scenarios, 66
+  typed-header and 15 typed-body cross-decodes).
+- Validation passed: Protocol all-feature tests (142 unit tests, all
+  integration targets, 51 doctests), strict all-target/all-feature Protocol
+  Clippy, `cargo fmt --all -- --check`, and `git diff --check`.
+- Code and fixtures committed as `1a4924a3 fix(protocol): match reflective
+  numeric header decoding`. Compatibility-map and release-checklist updates
+  are recorded separately. The full-workspace P18-V02 gate must be refreshed
+  after remaining implementation work.
+- No Broker or Docker was used. The broader P18-V01 audit, final P18-V03
+  package/provenance review, current-revision Ubuntu/native Windows P18-V04
+  evidence, Phase 19 local scenarios/profiles, and pre-publication
+  version/registry checks remain open. Existing uncommitted Phase 19 runner
+  changes were not included.

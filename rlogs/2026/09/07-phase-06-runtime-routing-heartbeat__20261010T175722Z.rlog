@@ -1,0 +1,6 @@
+# Phase 6 API compatibility session — 2026-10-10T17:57Z
+
+- Pinned Java 5.5.1 probes cover null inputs to factory, producer, and consumer key/value/entry views plus null `removeIf` predicates and null `removeAll`/`retainAll` collections. Key membership/removal and values membership throw on null; values removal and null/invalid entry membership/removal return false.
+- Code/oracle commit: `2dd1ad82` (`Match nullable live table view inputs`). Rust view adapters map Java exception boundaries to typed `InvalidRoute` and preserve false no-op outcomes. `client-config.json` SHA-256: `59e055cf4285877bd25b77fa0f09596b4ce0e251b8351fa2c5aa3cddb519f8ab`.
+- Validation passed: manager-table 11/11, registry-table 13/13, locked workspace/all-target tests with local socket access, strict workspace/all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios and Java cross-decodes), comparator self-test/manifest22, formatting, and diff checks.
+- Updated the API/config map and requirement audit. Null elements inside non-null collection inputs and other map/view surfaces remain to audit; full Phase 6 source/API/input reconciliation remains open. P6-V04 remains a Phase 19 handoff.

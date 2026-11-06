@@ -1,0 +1,53 @@
+# Phase 18 POP timeout cache ownership and current-revision P18-V02 refresh — 2026-10-21T16:50:30Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `3182e8c7` (`fix(consumer): preserve pop idle timeout ownership`)
+Previous cache revision: `8589f104` (`fix(consumer): cache process queue idle setting`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Source audit follow-up
+
+The ProcessQueue and PopProcessQueue timeout caches were already separate for
+their direct expiry methods, but Push rebalance had used the ProcessQueue value
+for both assignment types. It now carries separate timeout slots and uses the
+PopProcessQueue value when evaluating POP assignments. Constructing a POP
+queue initializes its class-equivalent property cache. The regression
+`broker_assignment_error_preserves_worker_until_empty_assignment` sets a very
+large ProcessQueue timeout and an expired POP timeout, then checks that the POP
+assignment is replaced. The cache lifetime check is
+`pop_process_queue_pull_idle_property_keeps_its_first_java_class_value`.
+
+## Verification
+
+- PASS: `cargo test --workspace --locked`.
+- PASS: `cargo test --workspace --all-features --locked`; Consumer unit count
+  246.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`.
+- PASS: pinned Maven `verify`; 37 scenarios, fixture drift checks, 83 typed
+  headers and 16 typed bodies cross-decoded by Java. Existing JDK Unsafe and
+  reflective-final-field warnings were emitted.
+- PASS: differential comparator self-test and 37-row scenario manifest.
+- PASS: offline stress smoke, 16 cases × 3 repetitions.
+- PASS: release fuzz smoke, 137 frame seeds, 11 message seeds, 2,368 bounded
+  mutations, 201 frame decodes and 118 message decodes.
+- PASS: release examples and workspace bench compilation.
+- PASS: offline benchmark sample on Apple M5 Max, macOS aarch64, rustc 1.85.0:
+  frame encode/decode 2,366.8 ns/iteration, message zstd decode 1,174.4 ns,
+  producer request construction 1,254.4 ns, 128-entry route lookup 15.8 ns,
+  and loopback pending completion 63,309.7 ns.
+- PASS: formatting and `git diff --check`.
+- PASS on the preceding cache slice with unchanged manifests/package files:
+  locked metadata/workspace license validation, seven package file listings
+  containing `LICENSE` and `NOTICE`, and Unique ID fixture tests under UTC and
+  Asia/Taipei.
+
+## Remaining status
+
+Broad P18-V01 remains open, including raw Push consume-service replacement,
+the shared mutable stats-manager accessor, arbitrary application-defined
+`MessageExt` subclasses, and the remaining source/settings/input/error/
+control-flow/reverse-export audit. P18-V04 current-revision GitHub Ubuntu and
+native Windows runtime evidence remain absent. No remote CI or push was
+performed. Phase 19 live Broker/Docker validation remains separate. Protected
+Phase 19 working-tree paths were left untouched and unstaged.

@@ -1,0 +1,37 @@
+# Phase 18 platform and stale-audit follow-up — 2026-10-16T11:06Z
+
+- Source revision: `74cbc67a` on branch
+  `phase/19-phase-18-compatibility-release-gate`; product source was unchanged
+  during this session. Initial worktree was clean.
+- Installed the `x86_64-unknown-freebsd` Rust standard-library target and
+  Homebrew `mingw-w64` to advance the current address-adapter audit.
+- Windows GNU Core validation passed:
+  - `cargo check -p rocketmq-classic-core --all-targets --all-features
+    --target x86_64-pc-windows-gnu --locked`.
+  - `cargo test -p rocketmq-classic-core --all-features
+    --target x86_64-pc-windows-gnu --no-run --locked`; every Core unit and
+    integration test executable linked.
+  - `cargo clippy -p rocketmq-classic-core --all-targets --all-features
+    --target x86_64-pc-windows-gnu --locked -- -D warnings`.
+  The first Windows check, before installing MinGW, stopped in `zstd-sys`
+  because `x86_64-w64-mingw32-gcc` was missing; the same full command passed
+  after the toolchain was installed.
+- `cargo check -p rocketmq-classic-core --all-targets --all-features
+  --target x86_64-unknown-freebsd --locked` could not complete: native C
+  dependencies (`zstd-sys`/`aws-lc-sys`) require a FreeBSD sysroot, and
+  `stdlib.h` was unavailable for that target. A temporary crate outside the
+  repository included the actual `config/local_address.rs` by path; its
+  `cargo check` and strict Clippy both passed for `x86_64-unknown-freebsd`.
+  This is module type-check evidence only, not a full Core cross-build.
+- The Windows test binaries were not run. Windows IP Helper runtime
+  enumeration, non-macOS BSD runtime behavior, and a real IPv6-only host remain
+  unverified. The broad P18-V01 source/configuration/API/input/error/flow and
+  reverse-export reconciliation remains open; P18-V04 GitHub Ubuntu evidence
+  and Phase 19 Broker/Docker automation also remain open.
+- Updated `PHASE_6_RUNTIME_INVENTORY.md` to distinguish later Phase 7 producer
+  fallback, admin address/refresh serialization, and cumulative running/shared
+  user evidence from the old route-audit checkpoint. Added the current
+  cross-target evidence to the audit and release checklist. No product code or
+  plan changed; no Docker, Broker, push, tag, publication, or deployment action
+  was taken.
+- `git diff --check` is run after adding these notes.

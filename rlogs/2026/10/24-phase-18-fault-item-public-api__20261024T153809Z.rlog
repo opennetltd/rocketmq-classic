@@ -1,0 +1,52 @@
+# Phase 18 public FaultItem API compatibility
+
+- Recorded: 2026-10-24 15:38:09 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Code revision: `62f67cbb`
+- Host: macOS AArch64, Rust 1.85.0
+- Java reference: pinned offline Maven build
+
+## Change
+
+- Exported Producer's Java-compatible `LatencyFaultToleranceImpl.FaultItem`
+  value API and `FaultItemCompareError` through the Producer crate and facade.
+- Added an invoked Java public-surface/behavior fixture for all 15 public
+  methods, including the erased `Comparable.compareTo(Object)` bridge, plus
+  constructor state, duration updates and overflow, availability/comparison,
+  equality/hash field selection, Java exception branches, Unicode names, and
+  text output. Rust omits the implicit outer strategy reference because no
+  public helper method reads it.
+- Renamed the Producer's prior private strategy record to `FaultRecord` so the
+  public compatibility type and internal latency-selection state are distinct.
+- Producer fixture SHA-256:
+  `d6c23e4c1d213f02fd257abd0526b525d18f33167f1f26bda8510b75d189f398`.
+- Java fixture source SHA-256:
+  `3ba245113fb0e8585502cdbb81c67f0f52b087e27f2eccfe6289a6d668c3b255`.
+
+## Verification
+
+- Focused invoked `FaultItem` Producer differential and facade export test pass.
+- Producer package tests and default/all-feature locked workspace tests and
+  doctests pass.
+- Strict all-target/all-feature workspace Clippy passes.
+- Pinned offline Maven `verify` passes with 37 scenarios, 11 message fixtures,
+  106 typed headers, and 19 typed bodies.
+- Differential comparator self-test and all 37 manifest scenarios pass.
+- Offline deterministic race/leak smoke passes all 20 cases × 3 repetitions.
+- Bounded fuzz smoke passes 163 frame seeds, 11 message seeds, 11 property
+  seeds, 2,960 mutations, and 564/192/176 frame/message/property decodes.
+- Release facade examples build. Windows GNU all-target/all-feature workspace
+  check, strict Clippy, and test harness compile/link pass; no Windows runtime
+  execution is claimed.
+- Formatting and diff checks pass.
+
+## Remaining audit status
+
+- This closes the `FaultItem` public value API row only. Broad P18-V01
+  method/overload/input/error/control-flow and reverse-export reconciliation
+  remains PARTIAL.
+- Different-mode `MessageQueueAssignment` equal-hash outcomes still depend on
+  JVM-process-local enum identity hashes. Native Windows runtime and
+  current-revision remote Ubuntu CI remain unverified. No push or remote CI was
+  run.
+- Phase 19 user-owned paths remain unchanged and unstaged.

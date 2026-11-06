@@ -1,0 +1,1 @@
+{"case":"consumer-list-invalid-json","mode":"SYNC","outcome":"JSONException;malformed","provenance":{"client":"org.apache.rocketmq:rocketmq-client:5.5.1","entrypoint":"MQClientAPIImpl","serverBaselineContacted":false,"transport":"mock RemotingClient"},"request":{"code":38,"ext":{"consumerGroup":"consumer"}},"response":{"bodyBase64":"ew==","code":0,"ext":{}}}

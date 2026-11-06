@@ -1,0 +1,52 @@
+# Phase 18 factory refresh-registration failure order
+
+- Recorded: 2026-10-23 12:13:46 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Starting revision: `6af939a8`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: `MQClientAPIFactory.createAndStart` schedule-rejection order
+
+## Finding and change
+
+Pinned Java creates one API client, registers its NameServer callback, performs
+initial discovery, schedules that client's fixed-rate refresh, starts it, and
+only then assigns the returned instance to the factory array. Rust previously
+started and stored all clients before attempting the refresh registrations.
+Thus a rejected registration left different startup and pool state.
+
+Rust now performs the same sequence per slot. A scheduler rejection leaves
+earlier successfully returned slots active, with the failing and later slots
+still null. The default Tokio path also starts each slot's refresh task before
+starting that client. Address callbacks and refresh tasks retain the remoting
+client for that slot, so a refresh updates only its Java-equivalent owner.
+
+`RuntimeApiFactoryFixtures` now invokes a one-client domain factory with a
+scheduler that throws `RejectedExecutionException`. The fixture records the
+exception type, one schedule attempt, and `[null]` in the returned client
+array. The Core regression consumes that fixture and checks the same slot,
+plus that remoting creation occurred before scheduling.
+
+## Verification
+
+- `cargo test --offline -p rocketmq-classic-core --lib --locked api::factory::tests` — passed, 9 factory tests.
+- `cargo test --offline --workspace --locked` — passed, including all doctests.
+- `cargo test --offline --workspace --all-features --locked` — passed, including all doctests.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — passed.
+- `mvn -q -o -f compat/java-reference/pom.xml verify` — passed; 37 differential scenarios and invoked fixtures, including the updated factory fixture.
+- Direct `RuntimeApiFactoryFixtures --verify` through the Maven exec plugin — passed.
+- Differential comparator self-test and 37-scenario manifest validation — passed.
+- Workspace metadata/license/dependency check — passed.
+- Offline deterministic race/leak smoke — passed, 17 cases × 3.
+- Fuzz smoke — passed, 163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes, and 192 message decodes.
+- Release examples and fixed-input offline benchmark — passed.
+- Core all-target/all-feature Windows GNU cross-check — passed; compile evidence only.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+## Acceptance boundary
+
+This closes only the factory refresh-rejection ordering discrepancy. Broad
+P18-V01 source/API/settings/input/error/control-flow/reverse-export
+reconciliation remains PARTIAL. Native Windows runtime and current-revision
+remote Ubuntu CI were not run. Phase 19 Broker/Docker validation was not run.
+No push or remote CI was performed. The four user-owned Phase 19 worktree
+paths remain untouched and unstaged.

@@ -1,0 +1,66 @@
+Phase 18 P18-V01 continuation — 2026-10-18 UTC
+
+- Worktree inspection: branch `phase/18-phase-18-compatibility-closure`,
+  code revision `f5a924fa`; retained pre-existing Phase 19 changes in
+  `integration-tests/README.md`, `tests/differential/run.sh`,
+  `integration-tests/run-local.sh`, and its rlog untouched.
+- Read pinned Java 5.5.1 `Message.java` from source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9` (source SHA-256
+  `c58de775771666448168eb959a1d6ebb98959bb42855a4fadaabb5f8f1d158d7`),
+  Rust `Message` API, invoked `messagePublicApi` fixture, and its Rust
+  differential. Crosswalk denominator: five public constructors and 34
+  declared public methods.
+- Validation: `cargo test -p rocketmq-classic-common --test message_decode
+  message_public_api_matches_java_551_fixture` passed (1 test).
+  `mvn -o -q -f compat/java-reference/pom.xml verify` passed (37 scenarios,
+  11 Java message decode fixtures, fixture drift checks, and Java/Rust
+  cross-decodes).
+- Updated `docs/compatibility/PHASE_6_API_CONFIG_MAP.md` with the complete
+  declared-API crosswalk and `docs/release-checklist.md` with the slice result.
+  Current `fixtures/messages/records.json` SHA-256:
+  `0346a246d0f22440ed71773ac1854ad510acf857954d85f7ee9b8a451afc6471`.
+- This closes the declared `Message` API slice only. `MessageExt` inherited
+  API and broad P18-V01 bidirectional reconciliation remain open.
+- Commit status at log creation: documentation and this log are pending one
+  isolated docs commit; no source code or Phase 19 files are staged.
+
+MessageExt/MessageClientExt API crosswalk — 2026-10-18 UTC
+
+- The prior `Message` crosswalk was committed as `54427f4f`.
+- Read pinned `MessageExt.java` (SHA-256
+  `19a256b417a68daac6b1da6fe3b48a9bfa1fef7a9c09a6c8a29fdfb56ae34382`) and
+  `MessageClientExt.java` (SHA-256
+  `fff21b69a3ed518781706cd4e87294c9407cc04f5f33e996d446ba06984a251d`) at
+  Java source commit `efa1be59d6fc747ad220f036c86030f05f0419f9`; crosswalked
+  two `MessageExt` constructors/44 methods and one `MessageClientExt`
+  constructor/four methods, including inherited `Message`/`MessageExt` APIs.
+- Validation on code revision `f5a924fa`: `cargo test -p
+  rocketmq-classic-common --test message_decode message_ext` passed (4 tests);
+  `cargo test -p rocketmq-classic-common --test message_decode
+  message_client_ext_api_matches_java_551_fixture` passed (1 test). The
+  current-revision Maven verify evidence is the 37-scenario, fixture-drift,
+  and Java/Rust cross-decode pass recorded above in this log.
+- Updated the API map and release checklist. This closes the declared and
+  inherited `MessageExt`/`MessageClientExt` API slice only. Phase 19 worktree
+  files remain untouched and unstaged.
+
+MessageExt host-byte failure ordering — 2026-10-18 UTC
+
+- Pinned source at Java commit `efa1be59d6fc747ad220f036c86030f05f0419f9`
+  confirms missing born/store hosts throw `NullPointerException`. For short
+  caller buffers, Java writes 4-byte IPv4 or 16-byte IPv6 address bytes before
+  `putInt(port)` throws `BufferOverflowException`; buffer position and written
+  prefix remain observable. Rust now matches the prefix/position effects while
+  retaining typed `MissingAddress` and `BufferTooSmall` errors. Null-host
+  constructor behavior is also fixture-backed.
+- A first direct `exec:java` invocation ran the previously compiled fixture
+  class; the focused Rust differential correctly failed because the checked-in
+  JSON lacked the new fields, and Maven `verify` then reported fixture drift.
+  Recompiled the Java project before regeneration; `fixtures/messages/records.json`
+  now has SHA-256
+  `6b1a19fef78c1f88f52d7e0851905a6c4a1d6adb98de90fe2028642880a513b3`.
+- Passed: focused `message_ext_socket_address_api_matches_java_551`; Common
+  all-feature tests; strict all-target/all-feature Common Clippy; `cargo fmt
+  --all -- --check`; `git diff --check`; offline Maven `verify` (37 scenarios,
+  fixture drift checks, 66 typed-header and 15 typed-body cross-decodes).
+  Full-workspace P18-V02 must still be rerun after remaining source work.

@@ -1,0 +1,45 @@
+# Phase 18 compatibility release gate — 2026-10-22 03:48:50 UTC
+
+Base revision: `96fe5218`. This entry records the request 3002 `updateUser`
+Broker RPC slice. Pinned Java source is
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Compatibility changes
+
+- Added nullable `UpdateUserRequestHeader` with Java's no-op `checkFields()`
+  behavior and included it in the typed-header inventory and Java/Rust frame
+  cross-decode.
+- Added `MQClientApi::update_user` for request 3002 using the existing `UserInfo`
+  Java body encoding, caller timeout, Broker error mapping, and the supplied
+  Broker address unchanged when VIP channels are enabled.
+- Added invoked Java/Rust cases for populated/default/null-username values,
+  success, Broker rejection, exact body bytes, timeout, and VIP-enabled
+  unchanged-address behavior.
+- Updated request-code and Phase 6 API/reverse-audit documentation. The
+  direct-operation reverse audit now has 6 open rows; wider Phase 18 work
+  remains open.
+
+## Local verification
+
+- `cargo test -p rocketmq-classic-protocol --locked`: 155 unit tests, 57
+  integration tests, and 157 doctests passed.
+- `cargo test -p rocketmq-classic-core --test admin_rpc --locked`: 104 passed.
+- `cargo test -p rocketmq-classic-core --lib --locked`: 202 passed.
+- `cargo clippy -p rocketmq-classic-protocol -p rocketmq-classic-core -p rocketmq-classic-remoting --all-targets --all-features --locked -- -D warnings`: passed.
+- `cargo fmt --all` and `git diff --check`: passed.
+- `mvn -o -f compat/java-reference/pom.xml verify`: BUILD SUCCESS; Java
+  decoded 98 Rust typed-header fixtures and 19 Rust typed-body fixtures.
+- SHA-256 `fixtures/producer/core.json`:
+  `6b1962550bdc06dc735439a413132f7ae5977854e0cce790b268a97a06f62502`.
+- SHA-256 `fixtures/remoting/header-update-user-request.json`:
+  `0435690acd88cbf3407f12cedd8a5b3b68f1f8e5908c66c2b5c2d68af82640d8`.
+- SHA-256 `fixtures/remoting/header-update-user-request.bin`:
+  `49e3259a09226f7c91f7485efad825073b30e134f380945d4282f99deccf5614`.
+
+## Remaining work
+
+Request 3002 is closed. The direct-operation reverse audit still has 6 open
+rows, and broader Phase 18 settings, input, error, control-flow, reverse-export,
+and platform reconciliation remains open. No Broker, Docker, or remote CI was
+used. Pre-existing Phase 19 worktree paths remain unstaged and outside this
+slice.

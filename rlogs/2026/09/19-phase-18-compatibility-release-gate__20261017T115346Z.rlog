@@ -1,0 +1,58 @@
+# P18-V01 Remoting nullable ext-fields — 2026-10-17T11:53:46Z
+
+- Repository branch: `phase/19-phase-18-compatibility-release-gate`.
+- Java oracle: RocketMQ 5.5.1 commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; Java checkout remained read-only.
+- Closed the direct Java `HashMap<String, String>` null-key/null-value gap in
+  RemotingCommand. Added public `ExtFields` with nullable lookup, insert,
+  remove, and `putIfAbsent` adapters; JSON and RocketMQ binary encoding now
+  follow the invoked Java map behavior. The null-key JSON name is the literal
+  `"null"`; null values are omitted from JSON and both null-key/null-value
+  entries are omitted from RocketMQ binary map encoding.
+- Added invoked Java fixture cases for map membership/lookups, display, JSON,
+  binary serialization, nullable `addExtField`, and `putIfAbsent` replacing a
+  present null value. Migrated public command call sites, tests, examples, and
+  benchmark construction to `ExtFields`.
+- Removed `DerefMut` from `ExtFields`: exposing the backing `BTreeMap` mutably
+  allowed `.entry()` or index mutation to bypass nullable-map invariants. Added
+  safe `get_mut` and a regression proving replacement leaves one entry per key.
+- Code/test/fixture commit: `c07d3ac2 fix(remoting): preserve nullable
+  extension fields`.
+- `cargo test -p rocketmq-classic-remoting --all-features --locked
+  nullable_ext_fields_match_invoked_java_map_and_codec_behavior`: PASS.
+- `cargo test -p rocketmq-classic-remoting --all-features --locked`: all 119
+  unit tests passed; the next `tests/codec` binary remained at `_dyld_start`.
+  `sample` captured `_dyld_start` as its only stack frame and no test output;
+  that child was interrupted and this command is not counted as a passing full
+  suite.
+- Pinned Maven offline `verify`: PASS for all 37 scenarios, fixture drift, and
+  Java/Rust cross-decodes. `cargo fmt --all -- --check` and `git diff --check`:
+  PASS.
+- `cargo test --workspace --all-features --locked --no-run` is still live in
+  session 40341; its final result will be appended after completion. The
+  current-revision full-workspace P18-V02 gate remains open.
+- No plan files were modified; no push, tag, publish, or deployment occurred.
+
+## Workspace test-target compile result
+
+- The previously running `cargo test --workspace --all-features --locked
+  --no-run` completed with exit 0 after 38 minutes. It compiled every workspace
+  unit, integration, and binary test target, including the `live_client`
+  binary. This verifies the `ExtFields` public-type migration compiles across
+  all crates and test call sites.
+- This is compile-only evidence. Full workspace test execution and the
+  current-revision P18-V02 gate remain open because the Remoting `codec`
+  integration binary stalls at macOS `_dyld_start` in the full Remoting test
+  command.
+
+## Current-revision full workspace test launch stall — 2026-10-17T12:19:13Z
+
+- `cargo test --workspace --locked` on the nullable ext-fields revision exited
+  101 after the Remoting `codec` integration binary stalled for over a minute
+  at macOS `_dyld_start` with 0% CPU. `sample` recorded `_dyld_start` as its
+  only stack frame; the child was terminated with SIGTERM and Cargo reported
+  `tests/codec` failed to launch. This is not a passing full workspace test.
+- The workspace test-target compile-only run, targeted ext-field test, all 119
+  Remoting unit tests, Maven `verify`, strict Clippy, formatting, and diff
+  checks passed as recorded above. Current-revision full P18-V02 execution
+  remains open.

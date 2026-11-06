@@ -1,0 +1,30 @@
+P18-V01 no-argument `decodes` overload fixture — 2026-10-22 21:21 UTC
+
+Environment: macOS AArch64, Apple M5 Max (18 logical CPUs), Rust 1.85.0.
+Branch: `phase/18-phase-18-compatibility-closure`. Pinned RocketMQ Java
+client/source: 5.5.1, commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Test/fixture commit: `2c1cd60a test(common): cover Java default decodes
+overload`. Public-method review found the no-argument Java
+`MessageDecoder.decodes(ByteBuffer)` convenience overload was represented by
+Rust `client_decodes` but not directly invoked by a fixture. The malformed-tail
+oracle now compares Java's prefix count, `MessageClientExt` class, and final
+cursor with the Rust helper. Refreshed `fixtures/messages/records.json`
+SHA-256: `46a18677fc673222639e53ee2871f4836fa427f97d284f918c1bdeb57129beb0`.
+
+Validation on the implementation tree:
+- Java message-fixture generation — PASS; 11 fixtures written.
+- `cargo test --offline -p rocketmq-classic-common --locked` — PASS (unit,
+  integration, and doctest suites).
+- Common all-target/all-feature strict Clippy, format check, and
+  `git diff --check` — PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS; 37 scenarios,
+  11 message decoder fixtures, 36 route/VIP cases, 106 typed headers, and 19
+  typed bodies.
+
+This closes only the no-argument `decodes` malformed-tail overload slice.
+Broad P18-V01 API/settings/source/input/error/control-flow and reverse-export
+reconciliation, current-revision remote Ubuntu CI, native Windows execution,
+and Phase 19 Broker/Docker evidence remain open. The differential manifest
+still has 30 Phase 19 live-runner cases pending. No push or external CI was
+performed. Protected Phase 19 working-tree paths remain unstaged.

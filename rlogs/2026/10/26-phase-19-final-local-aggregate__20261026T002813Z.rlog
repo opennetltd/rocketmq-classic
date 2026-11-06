@@ -1,0 +1,71 @@
+# Execution log: Phase 19 final corrected current-tree local aggregate
+
+- Session date: 2026-10-26 UTC
+- Starting revision: `f92b7917` (`Record full Phase 19 local validation evidence`)
+- Production code candidate: `d3c7d2e845364e40ad72f0540a0a498fc1582247`
+- Aggregate workspace revision: `c877869bd1f9bfacf288a27593649cca12ed9c5d`
+- Pinned Java oracle: Apache RocketMQ 5.5.1 source
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; Java checkout was read-only.
+- Scope: finish Phase 19 local validation evidence and update the compatibility
+  and owner handoff records. No plan files were changed.
+
+## Aggregate result
+
+- `ROCKETMQ_CLASSIC_TEST_ENV=local-disposable bash integration-tests/run-local.sh --all`
+  passed at workspace revision `c877869bd1f9bfacf288a27593649cca12ed9c5d`.
+- All 23 gates passed: formatting, diff hygiene, default and all-feature
+  workspace tests, workspace check, strict Clippy, Java verification,
+  differential self-test, manifest validation, race/leak smoke, fuzz smoke,
+  release examples, benchmark build and run, Cargo metadata, workspace
+  metadata, package content, UTC and Taipei unique-ID checks, differential live
+  coverage, Docker toolchain, all live scenarios, and scenario evidence
+  reconciliation.
+- The live gate executed all 37 registered scenario IDs. Final reconciliation
+  verified all 37 manifest rows point to PASS evidence with exit status 0 and
+  `source_code_dirty=false`.
+- Aggregate evidence:
+  `docs/compatibility/evidence/phase-19/run-local/20261025T225807Z/`.
+  Metadata records `result=PASS`, revision `c877869bd1f9bfacf288a27593649cca12ed9c5d`,
+  and completion epoch `1792974321`.
+
+## Corrected diagnostics and final live evidence
+
+- Retained failed aggregate diagnostic
+  `docs/compatibility/evidence/phase-19/run-local/20261025T223516Z/`.
+  Strict Clippy found one needless borrow in `consumer.rs`; commit `21430d58`
+  removed it.
+- Retained failed aggregate diagnostic
+  `docs/compatibility/evidence/phase-19/run-local/20261025T224821Z/`.
+  Strict Clippy found three needless borrows in `live_client.rs`; commit
+  `d3c7d2e8` removed them. The final aggregate then passed strict Clippy and
+  all later gates.
+- Final clean-source live reruns: P3-V04
+  `docs/compatibility/evidence/phase-19/P3-V04/20261025T234833Z/`, P6-V04
+  `docs/compatibility/evidence/phase-19/P6-V04/20261025T235605Z/`, and P16-V02
+  `docs/compatibility/evidence/phase-19/P16-V02/20261026T002026Z/`. Each records
+  revision `c877869bd1f9bfacf288a27593649cca12ed9c5d`, clean source, and exit
+  status 0.
+- The final production changes covered Push subscription update/unsubscribe,
+  stale-subscription retry and pull snapshot behavior; test-only lifecycle
+  instrumentation; and Java 5.5.1 verified TLS hostname behavior. Production
+  code was committed at `d3c7d2e8`; the full aggregate used a later workspace
+  revision with documentation and evidence pointer updates.
+- The evidence and manifest pointer refresh was committed at `f92b7917`.
+  Generated synthetic private-key files were removed from the current tree.
+  Post-run filtered Docker queries found no Phase 19 containers, volumes, or
+  networks.
+
+## Owner handoff
+
+- MAN-05 remains N/A for additional owner-only feature checks after the
+  source-backed audit and complete local scenario matrix.
+- MAN-01 through MAN-04 remain blocked on owner-provided network paths,
+  organization security material and policy, authorized HA topology, and
+  representative workload/SLO inputs. No owner or production environment was
+  accessed. This local evidence does not approve production use or final
+  release.
+- The remote Docker CI job was not run; the results in this record are from
+  the completed local aggregate and its owned Docker projects.
+- Updated compatibility summaries, MAN-05 current-tree audit, owner handoff,
+  and release checklist. Documentation-only changes are being recorded in the
+  follow-up commit.

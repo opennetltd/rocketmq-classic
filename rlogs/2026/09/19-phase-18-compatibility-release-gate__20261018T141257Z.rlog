@@ -1,0 +1,92 @@
+# Phase 18 ClusterInfo DTO compatibility slice — 2026-10-18T14:12:57Z
+
+- Branch: `phase/18-phase-18-compatibility-closure`. Implementation commit:
+  `6b40e86c` (`fix(protocol): complete ClusterInfo DTO parity`). The Java
+  oracle at `/Users/bruce.tsai/Projects/3rd/rocketmq` remains pinned to
+  `efa1be59d6fc747ad220f036c86030f05f0419f9` and was not modified.
+- Reconciled Java `ClusterInfo` accessors, mutable nested map/set aliases,
+  `retrieveAllClusterNames`, `retrieveAllAddrByCluster`, Java null-failure
+  boundaries, equality, and hash code. The invoked fixture and Protocol
+  differential cover the public method list, null/missing cases, aliases, and
+  value methods; the Core scripted RPC differential still covers
+  `getBrokerClusterInfo`.
+- Fixture `fixtures/runtime/route.json` SHA-256:
+  `56e50086556b77e98b2829708b41a6131909dcbf855109364b49cee73097dfc5`.
+  Java `HashMap`/`HashSet` iteration order is unspecified; this slice does not
+  claim deterministic ordering for multi-element retrieval results.
+- Recorded local verification on macOS ARM64, Rust 1.85.0:
+  `cargo test --workspace --locked -- --test-threads=1` PASS;
+  `cargo test --workspace --all-features --locked -- --test-threads=1` PASS;
+  `cargo check --workspace --all-targets --all-features --locked` PASS;
+  strict all-target/all-feature workspace Clippy PASS; Maven offline `verify`
+  PASS (37 scenarios, 66 typed headers, 15 typed bodies); `cargo fmt --all --
+  --check` and `git diff --check` PASS.
+- This closes only the `ClusterInfo` DTO slice. Broad P18-V01
+  source/API/settings/input/error/flow/reverse-export reconciliation remains
+  open. The P18-V02 supplementary race/fuzz/example/benchmark/package gate
+  needs refresh after the latest implementation. Final P18-V03
+  package/provenance and version/registry preflight, current-revision P18-V04
+  Ubuntu/native Windows evidence, and Phase 19's 30 local Docker/Broker
+  scenario runners and required profiles remain open. MAN-01–04 remain
+  owner-environment checks; MAN-05 awaits the completed local matrix.
+- Pre-existing Phase 19 runner/README edits remain unstaged and were not
+  included in the Phase 18 implementation or documentation commits. No plan
+  files were modified.
+
+## P18-V02 current-revision supplementary gate — 2026-10-18T14:29:06Z
+
+- Revision under test: `6b40e86c` (`fix(protocol): complete ClusterInfo DTO
+  parity`). Environment: macOS ARM64, Apple M5 Max, Rust 1.85.0. Cargo artifacts
+  were isolated under `/tmp/rocketmq-classic-target`.
+- `cargo test --workspace --locked -- --test-threads=1` and the corresponding
+  `--all-features` command: PASS, including integration targets and doctests.
+  `cargo check --workspace --all-targets --all-features --locked --offline` and
+  strict all-target/all-feature workspace Clippy: PASS.
+- Maven offline `verify`: PASS (37 scenarios, 66 typed headers, 15 typed
+  bodies). The Java run emitted existing JDK `Unsafe` and reflective-final-
+  field warnings, then exited 0.
+- Differential comparator self-test and 37-row manifest validation: PASS.
+  `bash tests/stress/run-offline-smoke.sh`: PASS, 16 race/leak cases × 3.
+  `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked
+  --offline`: PASS, 120 frame seeds, 11 message seeds, 2,096 mutations, 164
+  frame decodes and 120 message decodes.
+- Release examples, `cargo bench --workspace --no-run --locked --offline`, and
+  `cargo bench -p rocketmq-classic --bench offline --locked --offline`: PASS.
+  Observed ns/iteration: frame encode/decode 2,367.5; Zstd message decode
+  1,220.3; Producer request construction 1,244.3; 128-entry route lookup 17.1;
+  loopback pending completion 28,162.1. Allocation results are in command
+  output; measurements are observations, not thresholds.
+- `cargo package --workspace --list --locked --allow-dirty` and
+  `scripts/check-workspace-metadata.py`: PASS; seven product package listings
+  include `LICENSE` and `NOTICE`, and dependency direction/license metadata
+  pass. Four Unique ID tests pass under both `TZ=UTC` and `TZ=Asia/Taipei`.
+  Locked Cargo metadata, format, and `git diff --check`: PASS.
+- P18-V02 server-free evidence is complete on `6b40e86c`. P18-V01's broad
+  bidirectional audit, final P18-V03 package/provenance and version/registry
+  preflight, P18-V04 current-revision Ubuntu/native Windows evidence, and
+  Phase 19's 30 local Docker/Broker runners and required profiles remain open.
+  MAN-01–04 remain owner checks; MAN-05 awaits local-matrix completion.
+
+## P18-V01 Connection DTO accessor/API slice — 2026-10-18T14:43:13Z
+
+- Branch: `phase/18-phase-18-compatibility-closure`. Code commit: `160f099a`
+  (`test(protocol): reconcile consumer connection DTO API`). Java oracle at
+  `/Users/bruce.tsai/Projects/3rd/rocketmq` remained read-only at pinned commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- Added Java reflection inventories for the two DTO constructors and all 19
+  declared public methods, plus invoked default/accessor/null/collection alias
+  cases. Rust Protocol differential checks the exact method inventories,
+  defaults, enum/scalar accessors, nullable tables, shared collection identity,
+  nested DTO identity, and mutation visibility.
+- `cargo test -p rocketmq-classic-protocol
+  consumer_connection_min_version_matches_invoked_java_api`: PASS. Offline
+  Maven `verify`: PASS (37 scenarios, fixture checks, 66 typed headers, 15
+  typed bodies). `cargo fmt --all -- --check` and `git diff --check`: PASS.
+  Fixture SHA-256:
+  `a2702341491aea02ece8494c65ac0dc5544e69947d42987414c171f2fb96cc31`.
+- This closes the two DTO API slices only. Full P18-V02 must be refreshed for
+  the current revision. Broad P18-V01 source/API/settings/input/error/flow and
+  reverse-export reconciliation, final P18-V03 package/provenance review,
+  current-revision P18-V04 Ubuntu/native Windows evidence, and Phase 19's 30
+  remaining Docker/Broker runners and profiles remain open. MAN-01–04 remain
+  owner-environment checks; MAN-05 awaits local-matrix completion.

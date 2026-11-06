@@ -1,0 +1,45 @@
+# Phase 18 consumer statistics window logging parity
+
+- Recorded: 2026-10-23 20:42:50 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Starting revision: `062de098`
+- Implemented revision: `4251b2b3`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: scheduled minute/hour/day consumer statistics output and daily sample window
+
+## Finding and change
+
+Java's five manager-wide `StatsItemSet`s schedule minute, hour, and day print
+callbacks. Rust already queued these jobs with Java's matching cadence, but the
+callbacks did not emit statistics. Rust now routes each callback into the
+corresponding `ConsumerStatsManager` window and emits `tracing::info!` events
+using Java's `org.apache.rocketmq.client.stat.ConsumerStatsManager` target and
+the matching RT/TPS metric groups and summary fields. The daily window samples
+hourly and retains 25 samples. Only initialized metrics emit events.
+
+The event message body carries the statistics fields; timestamps, thread names,
+and other log decorations remain determined by the configured Rust tracing
+subscriber and need not match the Java logging backend's envelope.
+
+## Verification
+
+- `cargo test -p rocketmq-classic-core --lib runtime::stats::tests -- --nocapture`:
+  passed, 6 tests, including daily hourly-sample cadence.
+- `cargo test --workspace --locked`: passed.
+- `cargo test --workspace --all-features --locked`: passed.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`:
+  passed.
+- Windows GNU all-target/all-feature workspace check and strict Clippy: passed.
+- `mvn -o -q -f compat/java-reference/pom.xml verify`: passed; 37 runtime
+  scenarios, 11 Java message fixtures, 106 typed headers, 19 typed bodies, and
+  Java/Rust cross-decodes.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+
+## Acceptance boundary
+
+The absent statistics-event gap is closed. Subscriber-specific log envelope and
+formatting remain backend-dependent; broad P18-V01 public API/settings/input/
+error/control-flow and reverse-export reconciliation remains open. Native
+Windows runtime, current-revision remote CI, and Phase 19 Broker/Docker
+validation were not run. No plan was edited, no push or remote CI was run, and
+the four user-owned Phase 19 worktree paths remain untouched and unstaged.

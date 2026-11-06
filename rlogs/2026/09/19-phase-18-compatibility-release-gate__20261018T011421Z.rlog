@@ -1,0 +1,29 @@
+# P18-V01 public MqClientAdmin surface inventory — 2026-10-18T01:14:21Z
+
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Pinned Java oracle: RocketMQ client 5.5.1 at
+  `efa1be59d6fc747ad220f036c86030f05f0419f9` in the read-only checkout
+  `/Users/bruce.tsai/Projects/3rd/rocketmq`.
+- Read `client/MqClientAdmin.java`, `client/impl/admin/MqClientAdminImpl.java`,
+  and `client/impl/mqclient/MQClientAPIExt.java`. The public interface declares
+  19 asynchronous operations, and the public `getMqClientAdmin()` accessor
+  returns `MqClientAdminImpl`. Proxy source has call sites for
+  `MQClientAPIExt`; the proxy implementation itself remains outside the
+  client-only implementation objective.
+- Compared the interface and method names with the Phase 17 admin matrix and
+  Rust `MQClientApi`/facade declarations. Some methods have related Rust
+  capabilities, but no complete request/result/error/control-flow crosswalk
+  exists. Do not count the interface as either fully missing or covered until
+  each of its 19 methods is reconciled.
+- A read-only first-pass scan found 79 unique remoting header names imported
+  directly under the Java client source tree and 51 named `*Header` types in
+  the Rust Protocol header modules. This is a candidate inventory only:
+  imports include implementation/proxy/tool operations, so every candidate
+  needs a client callsite/scope disposition before it can be called a gap.
+- Updated `PHASE_17_ADMIN_MATRIX.md`, `PHASE_6_REQUIREMENT_AUDIT.md`, and
+  `docs/release-checklist.md` to keep the interface explicitly open under
+  P18-V01. The Java oracle and plans were not modified.
+- No tests were run: this was a source/API inventory pass. No implementation
+  claim is made; all 19 method rows still need a Rust crosswalk, any missing
+  implementation, and invoked fixture evidence.

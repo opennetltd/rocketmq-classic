@@ -1,0 +1,23 @@
+# Phase 3 remoting transport work log — 2026-09-27 08:50:45 UTC
+
+## Scope
+Continue Java 5.5.1 transport parity review without declaring Phase 3 complete. P3-V04 remains for Phase 19; Phase 4 is not started.
+
+## Changes
+- Added Java reference PBES2 + 3DES private-key and matching certificate fixtures and a focused regression test. The test exercises password decryption, PEM parsing, rustls client-identity loading, and wrong-password rejection.
+- Expanded the Phase 3 inventory with explicit per-path exception/cause/remark differences, including Java constructor/path behavior and the current Rust typed-error surface. This remains pending user disposition; no parity claim is made.
+- Documented TLS fixture provenance, password, and test-only scope in `fixtures/README.md`.
+- Updated compatibility summaries and ADR to distinguish accepted address-only channel-event/Tokio lifecycle differences from unresolved exception taxonomy and to document TLS dependency/provider limits.
+- Documented exact Java fixture source and SHA-256 hashes. Source files are from the pinned read-only Java 5.5.1 reference checkout `remoting/src/test/resources/certs/privkey.pem` and its matching certificate.
+
+## Evidence collected
+- Targeted command previously passed: `cargo test -p rocketmq-classic-remoting --offline java_pbes2_3des_encrypted_private_key_is_decrypted_and_loaded`.
+- Local runtime: OpenSSL 3.6.4 and OpenJDK 21.0.2. JDK 21 SunJCE `Cipher.getInstance` recognizes PBEWithMD5AndDES, PBEWithSHA1AndDESede, and PBEWithSHA1AndRC2_40; it reports `NoSuchAlgorithmException` for PBEWithSHA1AndDES, PBEWithMD2AndDES, PBEWithMD5AndRC2. OpenSSL 3 default provider failed to generate PBE-SHA1-DES (`unsupported PBKDF1`), so this is recorded as provider evidence, not an implementation-impossibility claim. Rust dependency evidence previously recorded: pkcs8 0.10.2 -> pkcs5 0.7.1 -> sha1 0.10.7.
+- `cargo test --workspace --offline` passed: common 11, protocol 9, remoting unit 46, codec integration 4, transport integration 74; doc tests 0.
+- `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --offline -- -D warnings`, `python3 scripts/check-workspace-metadata.py`, `python3 tests/differential/compare.py --self-test`, and `git diff --check` all passed on this worktree.
+- Fixture SHA-256 values are in KNOWN_DIFFERENCES.md. OpenSSL public-key hashes for the encrypted key and matching certificate both equal `7aa4604270a4a907997a14b9c891467231adec6eb150aca8ad27a41575a1b523`.
+
+## Pending / gate
+- User disposition still required for each error class/cause/remark row in `PHASE_3_REMOTING_INVENTORY.md`.
+- Continue source-level review of NameServer scan/reconnect scheduling and processor/callback/event executor lifecycle; verify P3-V01/V02/V03/U01 evidence.
+- Phase 3 is not accepted or complete; no Phase 4 work begins. P3-V04 remains deferred to Phase 19.

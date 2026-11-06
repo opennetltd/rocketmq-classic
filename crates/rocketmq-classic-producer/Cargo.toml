@@ -1,0 +1,24 @@
+[package]
+name = "rocketmq-classic-producer"
+version.workspace = true
+description = "Producer APIs for the RocketMQ Classic Rust client."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+base64.workspace = true
+rocketmq-classic-common.workspace = true
+rocketmq-classic-core.workspace = true
+rocketmq-classic-protocol.workspace = true
+rocketmq-classic-remoting.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+bytes.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["test-util"] }

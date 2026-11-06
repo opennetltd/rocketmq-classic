@@ -1,0 +1,35 @@
+# Phase 18 compatibility release gate — 2026-10-16T13:51:41Z
+
+- Code revision: `28253d80` on `phase/19-phase-18-compatibility-release-gate`.
+  Java baseline remains client 5.5.1, source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- P18-V01 `MessageBatch` slice: added the Java declaration fixture for its
+  public `List<Message>` constructor and three declared methods; implemented
+  Rust `MessageBatch::{new,generate_from_list,encode}`, inherited `Message`
+  access, and owned/shared/mutable iteration; mapped compact encoding failures
+  into `ProducerError`; exported it through Producer and the primary facade.
+  Tests pin Java signatures, validation order, encoded bytes, iteration, and
+  facade import. Fixture SHA-256:
+  `f8acdeae600bef3a56250c4f07c144860c6c22fbd9f84fe8bfe14d930a497b8d`.
+- Implementation/test/fixture commit: `28253d80` (`feat(producer): expose
+  Java-compatible MessageBatch`).
+- PASS: Producer/facade all-feature tests; strict all-target/all-feature
+  Producer/facade Clippy; Maven `verify` (37 scenarios, fixture drift, and
+  Java/Rust cross-decodes); workspace default and all-feature locked tests;
+  workspace all-target/all-feature check and strict Clippy; comparator
+  self-test and 37-scenario manifest validation; offline stress smoke (16
+  cases × 3); fuzz smoke (105 frame seeds, 11 message seeds, 1,856 mutations,
+  146 frame decodes, 113 message decodes); release examples and workspace
+  benchmarks compile; metadata policy and package-content checks; Asia/Taipei
+  Unique ID test; formatting and diff checks.
+- Workspace metadata reports 7 members, 215 packages total and 208 registry
+  packages. `cargo package --workspace --list --locked --allow-dirty` succeeds;
+  workspace metadata policy checks pass.
+- The server-free P18-V02 gate passes on `28253d80`. Broad bidirectional
+  P18-V01 source/API/input/error/control-flow and reverse-export reconciliation
+  remains open. Current-revision GitHub Ubuntu/Linux evidence for P18-V04,
+  Phase 19 Docker/Broker automation, and pre-publication dependency registry
+  resolution remain open. Owner-run Windows/BSD and real-host IPv6 checks,
+  deployment topology, credentials/CA, and production checks remain manual.
+- No Java checkout changes, plan edits, Docker/Broker run, push, publication,
+  tag, or deployment.

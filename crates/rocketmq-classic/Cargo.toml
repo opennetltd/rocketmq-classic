@@ -1,0 +1,36 @@
+[package]
+name = "rocketmq-classic"
+version.workspace = true
+description = "Facade APIs for the RocketMQ Classic Rust client."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+rocketmq-classic-common.workspace = true
+rocketmq-classic-consumer.workspace = true
+rocketmq-classic-core.workspace = true
+rocketmq-classic-producer.workspace = true
+rocketmq-classic-protocol.workspace = true
+rocketmq-classic-remoting.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+base64.workspace = true
+bytes.workspace = true
+serde_json.workspace = true
+
+[[bench]]
+name = "offline"
+path = "benches/offline.rs"
+harness = false
+
+[[example]]
+name = "producer"
+path = "../../examples/producer.rs"
+
+[[example]]
+name = "pull_consumer"
+path = "../../examples/pull_consumer.rs"

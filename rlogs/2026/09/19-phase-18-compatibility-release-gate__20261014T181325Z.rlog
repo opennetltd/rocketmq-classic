@@ -1,0 +1,29 @@
+Phase 18 continuation — AdminQueryRequest public boundary and overload parity
+Session date: 2026-10-14 UTC
+Branch: `phase/19-phase-18-compatibility-release-gate`
+Java oracle: RocketMQ client 5.5.1, pinned source `efa1be59d6fc747ad220f036c86030f05f0419f9`; reference checkout read-only.
+Plans: left unchanged.
+
+Changes and decisions
+- `AdminQueryRequest` no longer exposes its request or derived route fields. The public builders represent nullable Java `clusterName`, `indexType`, and `lastKey`; `index_type` is optional so null survives to the wire header and Java's null/empty index filter returns no matches.
+- `by_key` and `by_unique_key` derive LMQ state from the topic. Cluster changes derive the route topic for logical topics and the wheel-timer topic; ordinary topics retain their route and use the cluster only for Broker filtering.
+- Producer, Pull, and Push query call sites no longer overwrite derived LMQ/index metadata. The Core integration test now uses the pagination builder.
+- Regression coverage includes a compile-fail guard for derived-field access, nullable index/pagination behavior, ordinary/LMQ/wheel-timer route derivation, and an LMQ fan-out case that checks cluster-filter bypass and request topic.
+- Updated the Phase 17 admin matrix, Phase 6 audit, and release checklist. P18-V01 remains open beyond this bounded query-envelope slice.
+
+Commits
+- `e7dcdf63` fix(compat): encapsulate admin query metadata
+- `daef67eb` test(compat): cover admin logical topic routes
+- `412f660d` docs(compat): record admin query request crosswalk
+
+Validation
+- Initial package test attempt found Rust-version incompatibility with a `let`-chain; it was replaced with nested `if` statements before successful validation.
+- PASS: `cargo test -p rocketmq-classic-core -p rocketmq-classic-producer -p rocketmq-classic-consumer --locked` — all unit, integration, and doctest targets passed on implementation commit `e7dcdf63`.
+- PASS after the test-only follow-up: `cargo test -p rocketmq-classic-core --locked query_cluster_inputs_derive_java_route_topic` and `cargo test -p rocketmq-classic-core --test admin_rpc --locked query_fanout_uses_cluster_for_logical_topic_route_and_request`.
+- PASS: strict workspace Clippy on the implementation and strict Core all-target/all-feature Clippy after the follow-up tests.
+- PASS: `cargo fmt --all -- --check`, `git diff --check`, and nightly workspace rustdoc JSON generation. The Core JSON lists `AdminQueryRequest` with stripped fields; its public methods remain the builder surface.
+
+Remaining work
+- P18-V01 broad source/API/configuration, overload/input/error/flow, inherited/trait, and reverse-export reconciliation remains open.
+- P18-V04 current-revision GitHub Ubuntu evidence, Phase 19 Broker/Docker scenarios, and release-version/registry-resolution gates remain outstanding.
+- No plan edit, Java oracle modification, push, publication, or tag was made.

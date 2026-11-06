@@ -1,0 +1,17 @@
+Execution session: 2026-10-10T14:42:25Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Initial state: clean worktree at `c03d2560` after documenting construction-sampled callback executor capacity. The callback configuration fixture showed that `Integer.MAX_VALUE` is an accepted Java executor capacity; Rust remoting still started one Tokio dispatcher task for every configured slot.
+
+Selected slice: remove eager task allocation proportional to `clientCallbackExecutorThreads` while preserving its configured concurrency ceiling and callback drain behavior.
+
+Oracle: the pinned Java `NettyRemotingClient.publicExecutor` reports core capacity `Integer.MAX_VALUE` and zero active threads at actual `MQClientInstance` construction. All six callback capacity cases now capture `activeAtConstruction=0`. Oracle/fixture commit `4beb7658`; current `fixtures/runtime/client-config.json` SHA-256 `ef3c51a7a3f8e796def2f9d6aae0267703f99b4ae5987c17d7fcf2fdf4640bb1`.
+
+Implementation: Rust remoting now starts one async callback dispatcher. It creates blocking callback jobs only when callbacks arrive and holds no more jobs than the configured capacity. A fixture-backed `i32::MAX` test starts the transport and completes two callbacks concurrently; the existing two-worker concurrency and queued-callback shutdown-drain regressions also pass. Core config fixture coverage asserts Java's zero active construction threads. Implementation/test commit `804e9b45`.
+
+Validation: full `cargo test --workspace --all-targets --locked` passed; strict `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` passed; pinned offline Maven verify passed (22 scenarios and cross-decodes); comparator self-test and manifest validation passed (22 scenarios); `cargo fmt --all -- --check` and `git diff --check` passed.
+
+Documentation: `PHASE_6_API_CONFIG_MAP.md` now records lazy max-capacity use; `PHASE_3_REMOTING_INVENTORY.md` describes the dispatcher and retains Tokio blocking-pool/executor-lifecycle differences; `PHASE_6_REQUIREMENT_AUDIT.md` records the fix and remaining scope. P6-V04 remains pending Phase 19 and overall Phase 6 reconciliation remains open.
+
+Documentation/log commit: pending.

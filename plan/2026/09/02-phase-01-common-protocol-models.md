@@ -93,10 +93,10 @@ Port the full pinned RequestCode/ResponseCode inventory, not just the master-pla
 
 Write the failing check/oracle fixture before its implementation. The cases below must become runnable checks, not manual checklist-only claims. Run these checks without Docker or a live Broker; use Java fixtures, controlled clocks and scripted peers. Shared commands and evidence rules are in the execution index.
 
-- [ ] **P1-V01** — Raw codes, signed boundaries, LanguageCode and SerializeType mappings round-trip without field loss.
-- [ ] **P1-V02** — Property golden cases cover separators, Unicode, empty input, duplicates and unknown keys.
-- [ ] **P1-V03** — Java queue ordering/allocation input fixtures and route/heartbeat JSON semantics match, including static metadata.
-- [ ] **P1-V04** — Every Phase 0 model field is representable and package dependency inspection shows no cycle.
+- [x] **P1-V01** — Raw codes, signed boundaries, LanguageCode and SerializeType mappings round-trip without field loss.
+- [x] **P1-V02** — Property golden cases cover separators, Unicode, empty input, duplicates and unknown keys.
+- [x] **P1-V03** — Java queue ordering/allocation input fixtures and route/heartbeat JSON semantics match, including static metadata.
+- [x] **P1-V04** — Every Phase 0 model field is representable and package dependency inspection shows no cycle.
 
 ### 5.1 Local commands after implementation
 

@@ -1,0 +1,23 @@
+# Phase 18 compatibility release gate — execution log
+
+- P18-V01 inherited-trait correction: pinned Java 5.5.1 `ConsumerRunningInfo`,
+  `ProcessQueueInfo`, `PopProcessQueueInfo`, and `ConsumeStatus` do not declare
+  `equals` or `hashCode`; reflection resolves both to `java.lang.Object`.
+  Separately constructed default instances are unequal. Rust had derived
+  structural equality for all four corresponding public DTOs. Removed those
+  `PartialEq`/`Eq` implementations and added compile-fail rustdoc guards.
+- Extended the invoked Java `ConsumerRunningInfoFixtures` with identity and
+  declaring-class cases. Rust checks all four cases and compares the decoded
+  Consumer Running Info body as normalized JSON values, preserving the wire
+  differential without using DTO value equality. Fixture SHA-256:
+  `a16ba3fd660aa1b8ad6ef2150163a9657283ada56c728f6769f39f98b0a5fbe8`.
+- Updated the Phase 6 API map, Phase 10 method matrix, release checklist, and
+  requirement audit. This closes four related inherited-trait discrepancies
+  only; broad P18-V01 remains open.
+- Verification passed: `cargo test -p rocketmq-classic-protocol --all-features
+  --locked` (all unit, integration, and 20 doctests); strict protocol Clippy;
+  `mvn -q -o -f compat/java-reference/pom.xml verify` (37 scenarios, fixture
+  drift and Java/Rust cross-decodes); `cargo fmt --all -- --check`; and
+  `git diff --check`.
+- The full workspace P18-V02 gate still needs rerunning on the revision that
+  includes these changes.

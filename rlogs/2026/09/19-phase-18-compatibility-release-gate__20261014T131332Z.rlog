@@ -1,0 +1,29 @@
+Phase 18 continuation — reply-host validation parity — 2026-10-14 UTC
+
+Starting state
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Reply-host implementation commit: `36b55a7b`.
+- Java reference remains pinned to RocketMQ client 5.5.1, commit `efa1be59d6fc747ad220f036c86030f05f0419f9`; checkout is read-only.
+
+Changes recorded
+- Added pinned Java `ClientRemotingProcessor.processRequest` fixture coverage for reply `bornHost`/`storeHost` conversion through `NetworkUtil.string2SocketAddress`: IPv4, unbracketed IPv6, missing separator, malformed and out-of-range ports, Unicode decimal port digits, and ports 0/65535.
+- Rust now validates the last-colon separator, Java signed decimal integer syntax/range and socket port range before completing a reply; malformed addresses map to `SYSTEM_ERROR`. Rust `MessageExt` remains string-backed.
+- Fixture `fixtures/runtime/inbound-routing.json` SHA-256: `614adec3fe0eb41a261000744602f0247aa3ddaf03fdd42fdabf9ee9b8785eb2`.
+- `b62c0edf` — compatibility matrices, Phase 6 audit and release checklist update, committed separately from the implementation.
+
+Validation reported for the implementation revision
+- PASS: `cargo test --workspace --locked`.
+- PASS: `cargo test --workspace --all-features --locked`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios).
+- PASS: differential comparator self-test and 37-scenario manifest validation.
+- PASS: `cargo fmt --all -- --check` and `git diff --check`.
+
+Remaining work, excluding final owner manual validation
+- P18-V01 broad bidirectional Java/Rust source, overload input/error/control-flow, inherited/trait API and reverse-export reconciliation remains open.
+- P18-V04 has no current-revision GitHub Ubuntu CI result for the Linux-specific Java address profile.
+- Phase 19 local Docker/Broker automated scenarios remain unbuilt and unrun, including cross-language request/reply (P15-V03) and admin/query (P17-V02) flows.
+- Phase 15–17 plans contain unchecked verification boxes that must be reconciled against their matrices and run records; some are stale relative to recorded local PASS evidence.
+- Before publication, confirm the intended `0.1.0` version set and registry dependency resolution. Packages remain `publish = false`.
+
+No phase plan or Java checkout was modified. No push, publication or tag was made.

@@ -1,0 +1,24 @@
+# Phase 3 remoting transport — execution log (20260927T051500Z)
+
+## Scope and decisions
+- Continued the required Java 5.5.1 transport lifecycle parity review. Phase 3 remains unaccepted; Phase 4 has not started.
+- Found a shutdown race in the default callback executor lifecycle: callback workers shared the global client shutdown signal with invoke/pending tasks. A worker could observe shutdown and exit before a still-running owned invoke task submitted its terminal callback, causing accepted callback delivery to be lost.
+- Changed the callback executor to use a dedicated shutdown signal. Client shutdown now first signals general shutdown, closes connections/fails pending work, joins general owned tasks and connection tasks, then signals callback-worker shutdown and joins those workers. This allows callbacks emitted by owned completion tasks during shutdown to be drained.
+- No change to callback executor thread identity, caller-owned executor lifecycle, Java `ResponseFuture` API or callback ordering semantics beyond ensuring queued work is retained through shutdown.
+
+## Changes
+- `crates/rocketmq-classic-remoting/src/client/mod.rs`: separate callback worker shutdown channel and handles from other owned tasks; stop and join callback workers after other tasks and connections have completed.
+- Added unit test `callback_workers_drain_late_tasks_after_client_shutdown_starts`, asserting a callback submitted after general shutdown begins but before callback-worker shutdown is executed.
+- Updated `docs/compatibility/PHASE_3_REMOTING_INVENTORY.md` and `docs/compatibility/KNOWN_DIFFERENCES.md` to record the corrected drain ordering and Rust's blocking join semantics.
+
+## Validation
+- `cargo test -p rocketmq-classic-remoting --offline callback_workers_drain_late_tasks_after_client_shutdown_starts` — passed.
+- `cargo test --workspace --offline` — passed (11 common, 9 protocol, 1 protocol fixture, 39 remoting unit, 4 codec, 67 transport; doc tests passed).
+- `cargo clippy --workspace --all-targets --offline -- -D warnings` — passed.
+- `cargo fmt --all --check`, `python3 scripts/check-workspace-metadata.py`, `python3 tests/differential/compare.py --self-test`, and `git diff --check` — passed.
+
+## Remaining work
+- Continue branch-by-branch review of connection, timeout, shutdown, callback/hook ordering, pending removal, API/config application timing, event queues, SOCKS and NameServer/reconnect behavior.
+- Reconcile all remaining PARTIAL items or document accepted scope limits, then perform final acceptance against both Phase 3 plans. Java stack/cause metadata and Netty event lifecycle/scheduling remain open parity differences.
+- P3-V04 Broker/TLS-auth/cross-language/live validation remains for Phase 19. No Phase 4 work started.
+- Changes are not yet committed.

@@ -1,0 +1,19 @@
+# Phase 3 completion continuation — 20261003T131611Z
+
+## Decisions recorded
+- User requires `ClientConfig` to remain a fixed construction-time snapshot; runtime mutation parity with Java is not required.
+- User accepts the documented Tokio executor, callback scheduling, ownership, and lifecycle differences.
+- User retains every Rust-only public API item enumerated in the Phase 3 inventory; these remain documented Rust-shaped adapters/results, not an instruction to remove them.
+- User confirms P3-V04 is deferred to Phase 19; it is not a Phase 3 local acceptance gate.
+
+## Work and validation
+- Initial status: clean branch `04-phase-03-remoting-transport`, HEAD `164db7c`.
+- Re-read both Phase 3 plans and inspected the inventory and prior audit log. Proceeding with source-backed gap review and local verification before making separately reviewable commits.
+- Final status: Phase 3 local acceptance complete; P3-V04 remains Phase 19.
+- Recorded the user's decisions in the Phase 3 inventory and known-differences ledger: fixed construction-time config snapshot, accepted Tokio executor/scheduling/lifecycle differences, retention of all inventoried Rust-only APIs, and P3-V04 deferral to Phase 19.
+- Aligned compatibility conclusions with those decisions and documented P3-V01/V02/V03/U01 as local Phase 3 acceptance gates. Did not claim Broker/live validation.
+- Validation passed: transport integration suite (77 tests); full workspace tests (all passed); `cargo fmt --all --check`; `cargo clippy --workspace --all-targets --locked --offline -- -D warnings`; workspace metadata check; differential comparator self-test; `git diff --check`.
+- Audit note: no additional concrete local behavior gap was identified in this pass; callback scanner's nominal 3s start, 1s cadence and +1s timeout grace remain represented and tested. Final review/commit pending.
+- Final audit found stale compatibility-summary wording and a log path that did not mirror the numbered-plan directory. Corrected the summary's acceptance scope and moved this session log to the existing `rlogs/2026/09/04/` plan-specific directory before commit.
+- Re-read both complete Phase 3 plans and verified local gate IDs P3-V01/V02/V03/U01 against named transport tests; P3-V04 remains an explicitly unchecked Phase 19 handoff.
+- Final status: Phase 3 locally complete under user dispositions; live Broker/TLS validation remains Phase 19. Committed in `e2f0aac` and `f9e5606`.

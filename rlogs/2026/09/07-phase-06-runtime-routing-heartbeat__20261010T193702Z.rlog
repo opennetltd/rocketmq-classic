@@ -1,0 +1,7 @@
+# Phase 6 execution session — 2026-10-10T19:37Z
+
+- Continued raw `TopicRouteTable` source/API parity on `07-phase-06-runtime-routing-heartbeat`; the Java source checkout remains absent, so the pinned 5.5.1 fixture is the oracle.
+- Pinned Java `TreeMap` traversal for raw route `putAll` visits `a`, `m`, `z`; a null route value at `m` throws `NullPointerException`, retains the `a` row, and skips `z`. Rust now provides `put_all_nullable_iter` with `put_all_nullable_rows` as its slice adapter. The regression compares iteration order, typed failure, and post-failure keys.
+- Code/fixture/test commit: `5e1df2e4` (`Generalize nullable raw route putAll`). The `runtimeTopicRouteTable` primitive count is 84; `fixtures/runtime/route.json` SHA-256 is `9e26380877df8f38523baea0a5706de99303efa058f24f7296c0bc2afb7fc306`.
+- Validation passed: focused raw route differential; `cargo test --workspace --all-targets --locked`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; pinned offline `mvn -o verify` (22 scenarios and Java cross-decodes); differential comparator self-test and 22-scenario manifest validation; `cargo fmt --all -- --check`; and `git diff --check`.
+- Updated the API/config map, requirement audit, route audit, and this session log. Phase 6 source/API/input/platform reconciliation remains open; P6-V04 stays a Phase 19 handoff.

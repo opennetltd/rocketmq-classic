@@ -1,0 +1,45 @@
+# Phase 18 compatibility release gate — 2026-10-22 04:28:26 UTC
+
+Base revision: `c7d00096`. This entry records the request 3006 `createAcl`
+Broker RPC slice. Pinned Java source is
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Compatibility changes
+
+- Added nullable `CreateAclRequestHeader` with Java's no-op `checkFields()`
+  behavior and included it in the typed-header inventory and Java/Rust frame
+  cross-decode.
+- Added `MQClientApi::create_acl` for request 3006. It takes the nullable
+  subject from `AclInfo`, serializes the ACL body using the Java-compatible
+  DTO writer, sends the supplied Broker address unchanged, and uses the caller
+  timeout.
+- Added invoked Java/Rust cases for populated/default/null-subject/empty-
+  subject ACLs, nullable list members, exact body bytes, success, Broker
+  rejection, timeout, and VIP-enabled unchanged-address behavior.
+- Updated request-code and direct API audits. Three auth operations remain
+  open: `updateAcl`, `deleteAcl`, and `listAcl`.
+
+## Local verification
+
+- `cargo test -p rocketmq-classic-protocol --locked`: 156 unit tests, 57
+  integration tests, and 157 doctests passed.
+- `cargo test -p rocketmq-classic-core --test admin_rpc --locked`: 114 passed.
+- `cargo test -p rocketmq-classic-core --lib --locked`: 207 passed.
+- `cargo clippy -p rocketmq-classic-protocol -p rocketmq-classic-core -p rocketmq-classic-remoting --all-targets --all-features --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- `mvn -o -f compat/java-reference/pom.xml verify`: BUILD SUCCESS; Java
+  decoded 103 Rust typed-header fixtures and 19 Rust typed-body fixtures.
+- SHA-256 `fixtures/producer/core.json`:
+  `ec6dce66b9480ae6f093210ba7a958fea23df1937797385e7668edeef0618fc7`.
+- SHA-256 `fixtures/remoting/header-create-acl-request.json`:
+  `2d042e8caa9a82d1160a6279997597d35e7dadd541867e107200d2c53a3255b3`.
+- SHA-256 `fixtures/remoting/header-create-acl-request.bin`:
+  `80bd26cfe6bc80088a085f6a77db9c1262f93505db5b19810d81558b53095b41`.
+
+## Remaining work
+
+Request 3006 is closed for the body and header states described above.
+`updateAcl`, `deleteAcl`, and `listAcl` remain unimplemented. Broader Phase 18
+settings, input, error, control-flow, reverse-export, and platform
+reconciliation also remains open. No Broker, Docker, or remote CI was used.
+Pre-existing Phase 19 worktree paths remain unstaged and outside this slice.

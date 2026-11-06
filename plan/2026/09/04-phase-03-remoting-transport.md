@@ -43,13 +43,13 @@ crates/rocketmq-classic-remoting/tests/transport.rs
 docs/architecture/ADR-0001-remoting-transport.md
 ```
 
-invoke(addr, command, deadline) returns one future; invoke_oneway never inserts a pending response. A pending entry includes connection generation, deadline and oneshot sender. A short synchronous lock may protect a map only if no guard crosses await; remove is the terminal ownership operation. One reader and one bounded writer path per connection plus an owned timeout scheduler are sufficient; do not spawn a timeout task per request. Use Tokio time so tests can advance deadlines deterministically.
+invoke(addr, command, deadline) returns one future; invoke_oneway never inserts a pending response. A pending entry includes connection generation, deadline and oneshot sender. A short synchronous lock may protect a map only if no guard crosses await; remove is the terminal ownership operation. One reader and one unbounded outbound enqueue/writer path per connection plus an owned timeout scheduler are sufficient; do not spawn a timeout task per request. Use Tokio time so tests can advance deadlines deterministically.
 
 ## 4. Ordered implementation tasks
 
 ### 4.1 P3-01 / P3-02 — Own and reuse connection generations
 
-Serialize writes, bound the outbound queue and retain join handles. Normalize address keys without breaking IPv6, DNS/SNI or TLS identity. Single-flight creation per key shares healthy connections; a stale close removes only its own generation. Cancelled creation must close unpublished sockets, and different addresses may connect concurrently.
+Serialize writes, enqueue outbound frames without a hard queue-capacity limit, and retain join handles; match Java Netty's writeAndFlush behavior rather than imposing a Rust-only queue-full rejection. Normalize address keys without breaking IPv6, DNS/SNI or TLS identity. Single-flight creation per key shares healthy connections; a stale close removes only its own generation. Cancelled creation must close unpublished sockets, and different addresses may connect concurrently.
 
 ### 4.2 P3-03 / P3-04 — Make pending ownership atomic
 
@@ -57,11 +57,11 @@ Use wrapping atomic opaque generation; on wrap do not replace a still-pending en
 
 ### 4.3 P3-05 / P3-06 — Apply one deadline to all stages
 
-Admission, connection acquisition, TCP/TLS handshake, outbound queue wait, write and response wait consume the same deadline. An already-expired invoke must not send. Distinguish connect, timeout, closed and malformed-frame errors. Oneway sets its bit and waits only for bounded transport acceptance/write semantics documented from Java; it never claims Broker storage success.
+Admission, connection acquisition, TCP/TLS handshake, socket write and response wait consume the same deadline. Outbound enqueue itself is unbounded and does not wait for queue capacity. An already-expired invoke must not send. Distinguish connect, timeout, closed and malformed-frame errors. Oneway sets its bit, enqueues without a hard queue-capacity limit, and follows Java's asynchronous write-failure handling; it never claims Broker storage success.
 
 ### 4.4 P3-07 — Dispatch inbound requests off the reader
 
-Classify response versus request before pending lookup. Dispatch requests by raw code through a bounded owned processor executor; send replies with the original opaque and response bit. Unsupported requests get the Java-compatible unsupported code, except inbound oneway commands must not receive replies. Define explicit overload behavior from the oracle; never silently drop accepted transaction/reply work.
+Classify response versus request before pending lookup. Dispatch requests by raw code through owned processor workers with queue admission matching Java's executor backlog (unbounded where the Java executor uses an unbounded queue); send replies with the original opaque and response bit. Unsupported requests get the Java-compatible unsupported code, except inbound oneway commands must not receive replies. Define rejection behavior from the oracle; never silently drop accepted transaction/reply work.
 
 ### 4.5 P3-08 — Implement verified TLS
 
@@ -75,11 +75,13 @@ Reject new work, cancel creation, close connections, drain pending requests, sto
 
 Write the failing check/oracle fixture before its implementation. The cases below must become runnable checks, not manual checklist-only claims. Run these checks without Docker or a live Broker; use Java fixtures, controlled clocks and scripted peers. Shared commands and evidence rules are in the execution index.
 
-- [ ] **P3-V01** — Barrier-controlled response/timeout/cancellation/shutdown races produce at most one completion and zero pending entries; repeat through opaque wrap.
-- [ ] **P3-V02** — Old-generation close cannot evict a replacement; concurrent creation shares one connection; saturated writes respect the deadline.
-- [ ] **P3-V03** — Loopback inbound requests, unsupported/oneway behavior and concurrent responses work without blocking the reader.
+- [x] **P3-V01** — Barrier-controlled response/timeout/cancellation/shutdown races produce at most one completion and zero pending entries; repeat through opaque wrap.
+- [x] **P3-V02** — Old-generation close cannot evict a replacement; concurrent creation shares one connection; unbounded outbound enqueue accepts beyond former queue sizes while a blocked socket write respects the operation deadline.
+- [x] **P3-V03** — Loopback inbound requests, unsupported/oneway behavior and concurrent responses work without blocking the reader.
 
-- [ ] **P3-U01** — Scripted TCP/TLS peers verify raw route framing, trusted/untrusted CA and hostname failures, deadlines and zero owned tasks after shutdown.
+- [x] **P3-U01** — Scripted TCP/TLS peers verify raw route framing, trusted/untrusted CA and hostname failures, deadlines and zero owned tasks after shutdown.
+
+These four checked items record local automated-test evidence only; they do not constitute Phase 3 acceptance. The Java/Rust executor and callback lifecycle review remains documented as partial where Tokio scheduling/ownership differs, and P3-V04 remains deferred to Phase 19.
 
 ### 5.1 Local commands after implementation
 

@@ -1,0 +1,6 @@
+# Phase 6 documentation session — 2026-10-10T17:09Z
+
+- Recorded commit `47e85563`'s combined host-testable Windows address-table pipeline evidence in the runtime inventory, API/config map, and requirement audit.
+- The records distinguish synthetic table projection/join/filter/order coverage and Windows-target type-check evidence from actual Windows IP Helper runtime enumeration.
+- Kept Windows runtime enumeration, non-macOS Unix runtime ordering, actual IPv6-only-host evidence, broader Phase 6 reconciliation, and P6-V04 open.
+- Validation: documentation diff and whitespace checks.

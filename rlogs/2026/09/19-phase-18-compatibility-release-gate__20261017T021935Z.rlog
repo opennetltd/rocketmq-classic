@@ -1,0 +1,25 @@
+# Phase 18 FieldBased writer-feature mapping — 2026-10-17T02:19:35Z
+
+- Confirmed the pinned Fastjson2 2.0.63 `FieldBased` writer feature is present
+  in the existing oracle corpus, which probes all 48 writer features. No
+  `FieldBased` output override is recorded across 41 body, 8 route, and 3
+  heartbeat cases; this includes populated `QueueTimeSpan` getter-derived
+  timestamp values. The feature is output-preserving for the currently mapped
+  RocketMQ DTO graph.
+- Added `FieldBased` to the implemented feature gate and to the body, route, and
+  heartbeat differential assertions. No Java fixture or external Java
+  checkout was modified.
+- `cargo test -p rocketmq-classic-protocol --all-features --locked`: passed
+  (126 unit tests, all Protocol integration targets, and 42 doctests).
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features
+  --locked -- -D warnings`: passed. `cargo fmt --all -- --check` and
+  `git diff --check`: passed.
+- `mvn -q -f compat/java-reference/pom.xml verify`: passed 37 scenarios,
+  fixture-drift checks, and Rust/Java cross-decodes.
+- Code/test commit: `6bce768d feat(protocol): map FieldBased writer flag`.
+  Compatibility-map and release-checklist updates are recorded in a separate
+  documentation commit.
+- Writer-feature coverage is 35/48; 13 features remain unmapped. Full-workspace
+  P18-V02 on the final Phase 18 revision, broad P18-V01 source/API/settings/
+  input/error/flow/reverse-export audit, current-revision Ubuntu/Windows CI,
+  P18-V04 handoff, and Phase 19 local Docker/Broker automation remain open.

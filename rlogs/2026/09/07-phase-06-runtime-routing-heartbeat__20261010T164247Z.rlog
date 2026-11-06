@@ -1,0 +1,9 @@
+# Phase 6 execution session — 2026-10-10T16:42Z
+
+- Re-ran the project verification gates after the Windows sockaddr conversion tests; the Phase 6 objective remains active.
+- The first sandboxed `cargo test --workspace --all-targets --locked` run had 123 core tests pass and three socket fixtures fail at loopback bind with `Operation not permitted`. The authorized local-loopback rerun passed the full workspace suite, including 126 core unit tests and the runtime lifecycle, lookup, route-table, heartbeat, and wire integrations.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`: exit 0.
+- `mvn -o -q -f compat/java-reference/pom.xml verify`: passed with pinned Java cross-decodes, Java runtime/address/route/heartbeat fixtures, and 22 differential manifest scenarios. Sandboxed attempts could not create the Maven resolver lock in the existing local cache; the approved rerun used only the preloaded cache and made no network calls.
+- `python3 tests/differential/compare.py --self-test`: passed. `--validate-manifest`: 22 scenarios validated. `cargo fmt --all -- --check` and `git diff --check`: passed.
+- The added IPv6 scope-id-zero assertion passes with all 17 focused `local_address` tests and strict core Clippy. Isolated `cargo check --manifest-path /private/tmp/p6-windows-address-check/Cargo.toml --tests --target x86_64-pc-windows-gnu --offline` compiles the exact repository module plus its test code.
+- The added conversion coverage commits are `b77b9719` and `e2795a8a`; audit evidence was updated. Windows IP Helper runtime enumeration, non-macOS Unix runtime enumeration, a real IPv6-only host, and the broad Phase 6 source/API/input/reverse-export audit remain open. P6-V04 remains the Phase 19 handoff.

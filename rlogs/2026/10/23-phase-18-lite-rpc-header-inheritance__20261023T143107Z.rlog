@@ -1,0 +1,32 @@
+# Phase 18 Lite request-header inheritance mapping
+
+- Recorded: 2026-10-23 14:31:07 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source revision: `5acaab89` (`fix(protocol): map Lite RPC request header inheritance`)
+- Pinned Java source: RocketMQ 5.5.1,
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Change
+
+- The Java `LiteSubscriptionCtlRequestHeader` declares no payload fields and
+  inherits `namespace`, `namespaced`, `brokerName`, and `oneway` from
+  `RpcRequestHeader`. Rust previously used a unit struct and discarded those
+  values.
+- Rust now keeps the four fields private, exposes the inherited accessor
+  surface, maps the four header keys, and compares/hashes only those fields.
+  Java hash and `toString()` fixture values are checked in the Rust tests.
+- The pinned identity/API fixture contains 46 entries and has SHA-256
+  `421e054be509f5f56fb5f1fe0cd5870745c83e956f56831082858e9780b4a10d`.
+
+## Verification
+
+- `cargo test --offline --locked -p rocketmq-classic-protocol --test header_inventory --test headers` — passed (16 inventory tests, 27 header tests).
+- `cargo test --offline --locked -p rocketmq-classic-protocol --all-features` — passed (160 unit tests, all integration tests, and 166 doctests).
+- `cargo clippy --offline --locked -p rocketmq-classic-protocol --all-targets --all-features -- -D warnings` — passed.
+- `mvn -q -o -f compat/java-reference/pom.xml verify` — passed; 37 scenarios, 11 message fixtures, 106 typed headers, and 19 typed bodies verified.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- No push or remote CI was run; existing Phase 19 user-owned paths were not edited or staged.
+
+This closes the Lite request-header mapping gap only. Broad P18-V01 remains
+PARTIAL; native Windows runtime and current-revision remote Ubuntu CI remain
+open, and Phase 19 Broker/Docker work remains outside scope.

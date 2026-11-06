@@ -1,0 +1,12 @@
+# Phase 18 execution session — 2026-10-13T11:06:44Z
+
+- Continued the Phase 9 raw Pull implementation audit against pinned Java client 5.5.1 source. Found a flow mismatch: Rust considered every facade-registered topic in need of route subscription data forever and accepted route callbacks for topics absent from the implementation subscription map.
+- Shared Pull's implementation subscription map with `PullConsumerRegistration`; `isSubscribeTopicNeedUpdate` now requires a subscription and absent cached route data, while `updateTopicSubscribeInfo` ignores topics not in the implementation subscription map. This also includes Java `subscriptionAutomatically` state.
+- The invoked Java fixture records unsubscribed, subscribed-before-info, subscribed-after-info, and unsubscribed-update outcomes. Rust unit coverage exercises the same branches, including an automatically subscribed topic. Updated the Phase 9 matrix; direct `doRebalance`/`tryRebalance` mapping remains open.
+- PASS: focused `pull_subscription_info_callbacks_follow_java_subscription_and_route_tables` test.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (171 unit tests, 43 integration tests, doc tests).
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and Java accessor fixture verification).
+- PASS: `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. The callback mapping is closed offline; remaining Phase 9 accessor findings include direct hook invocations, direct rebalance entrypoints, raw offset entrypoint behavior, direct running-info access, and mutable implementation-state accessors. P18-V01 remains open.
+- Source change, Java fixture, fixture JSON, method matrix, and this log are committed together as the independent callback-mapping change.
+- Clarification: callback source, fixture, method matrix, and the earlier `20261013T105957Z` log were committed together as `3a17c1d2`; this follow-up session record is a separate log-only commit.

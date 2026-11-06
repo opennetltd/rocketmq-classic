@@ -1,0 +1,48 @@
+# Phase 18 signed RPC timeout connection-order gate
+
+- Recorded: 2026-10-23 03:16:08 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Implementation commit: `76cdc31a161c22bcbd849ec5d295c25ec9e726e2`
+
+## Finding and change
+
+Pinned Java `NettyRemotingClient.invokeSync` records the call start time, calls
+`getAndCreateChannel`, and only then subtracts the elapsed milliseconds from
+the signed timeout. When the remaining budget is zero or negative, it throws
+before calling `invokeSyncImpl`, so it may establish a TCP channel but does not
+send a Broker request frame. `MQClientInstance.queryAssignment` forwards its
+signed timeout to `MQClientAPIImpl.queryAssignment`; consumer-list lookup uses
+the live signed `mqClientApiTimeout` setting.
+
+The Rust runtime previously converted non-positive values to an already-expired
+deadline. Its transport returned before acquiring a channel, which skipped the
+Java connection side effect. The new signed-millisecond invocation path first
+acquires or creates the connection, subtracts elapsed whole milliseconds, then
+either returns timeout without sending or continues with the remaining budget.
+Both runtime lookup methods now use this path. Consumer-list errors remain
+best-effort and return `None`; assignment errors remain propagated.
+
+## Verification
+
+- `cargo test --offline -p rocketmq-classic-core --test runtime_lookup` — passed
+  (17 tests). The timeout regression covers Java fixture values `0` and `-1`,
+  confirms a Broker socket is established with no request bytes, and checks a
+  negative live consumer timeout also emits no frame and is swallowed.
+- `cargo clippy --offline -p rocketmq-classic-core --all-targets --all-features -- -D warnings` — passed.
+- `cargo fmt --all` and `cargo fmt --all --check` — passed.
+- `git diff --check` — passed before the implementation commit.
+- Pinned source review: `NettyRemotingClient.invokeSync` lines 556–569;
+  `MQClientInstance.queryAssignment` lines 1373–1384; and
+  `MQClientAPIImpl.queryAssignment` lines 405–420;
+  `MQClientInstance.findConsumerIdList` lines 1355–1367; and
+  `MQClientAPIImpl.getConsumerIdListByGroup` lines 1435–1445.
+
+## Scope and remaining evidence
+
+This closes the signed timeout/channel-acquisition ordering slice for the two
+runtime lookups. It does not close broad P18-V01 source/API/settings/input/error
+and reverse-export reconciliation. Current-revision remote Ubuntu CI, native
+Windows runtime evidence, and Phase 19 Broker/Docker validation remain open.
+No external Java checkout or Phase 19 file was changed; no remote CI or live
+Broker was used.

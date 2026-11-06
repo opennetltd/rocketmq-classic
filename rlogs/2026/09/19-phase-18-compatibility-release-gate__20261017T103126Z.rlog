@@ -1,0 +1,68 @@
+# Phase 18 API audit continuation — 2026-10-17T10:31:26Z
+
+- Repository branch: `phase/19-phase-18-compatibility-release-gate`; initial
+  worktree clean at `d3111379`.
+- Java checkout `/Users/bruce.tsai/Projects/3rd/rocketmq` is on `master` at
+  `2238256de1d227a4384ba969dfa31473187b4d08` with an unrelated untracked
+  `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java`; leave it
+  untouched. Read the RemotingCommand source at pinned Java 5.5.1 commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9` via `git show`.
+- Focus: finish the RemotingCommand `toString()` multi-ext-field disposition
+  with an invoked Java fixture and Rust differential, then reconcile stale
+  P18 Remoting method-family rows in `PHASE_6_API_CONFIG_MAP.md`.
+- Evidence so far: pinned Java declares `extFields` as `HashMap` and directly
+  concatenates it in `toString()`; Rust uses sorted `HeaderMap` (`BTreeMap`).
+  The existing command string fixture only covers null or one ext-field.
+- No implementation or verification command has run in this session yet.
+- First fixture-generation attempt invoked `compat.RuntimeConfigFixtures`
+  directly through Maven and failed because the project exec plugin launches
+  `compat.Main`, which dispatches fixture subcommands. No repository output was
+  changed by the failed invocation. Corrected invocation: use
+  `runtime-config-fixtures <fixture-path>` through `compat.Main`.
+- The first corrected invocation used previously compiled Java classes because
+  `exec:java` does not invoke compilation. Re-ran as `mvn compile exec:java`;
+  the fixture grew from three to four `commandToString` cases. The new pinned
+  Java 5.5.1 output is `extFields={a=lower, Z=upper}` for the `Z`/`a` map.
+- Added a Rust fixture differential that parses Java's ext-field rendering as
+  a map, checks the same key/value set, and normalizes only that segment before
+  comparing the complete diagnostic string. This captures Java's
+  source-confirmed unspecified `HashMap` iteration order while retaining exact
+  comparisons for other command fields.
+- Validation passed: `cargo test -p rocketmq-classic-remoting
+  remoting_enum_methods_and_command_type_match_invoked_java --locked`;
+  `cargo fmt --all -- --check`; `git diff --check`; full Remoting all-feature
+  tests (115 unit, 8 codec, 1 fuzz regression, 7 security, 107 transport, 15
+  doctests); strict Remoting all-target/all-feature Clippy; and offline Maven
+  `verify` (37 scenarios, fixture drift and cross-decodes).
+- Code/test/fixture changes are ready for an independent commit. The API map
+  and release checklist still need a separate documentation update.
+- Code/test/fixture commit: `a0ee6aef test(remoting): pin ext-field display
+  semantics`.
+- Updated `PHASE_6_API_CONFIG_MAP.md` to close the source-confirmed display
+  order disposition and reconcile RemotingCommand defaults, timer/callback
+  APIs, and long-poll metrics. Recorded nullable Java ext-field keys/values as
+  an open API input difference for follow-up, and appended the evidence to the
+  release checklist. No plan file was changed.
+- Full current-revision P18-V02 rerun at source commit `a0ee6aef` passed:
+  default and all-feature workspace tests, strict all-target/all-feature
+  workspace Clippy, format/diff checks, comparator self-test, 37-row manifest,
+  offline race/leak smoke (16 cases x 3), fuzz smoke (105 frame seeds, 11
+  message seeds, 1,856 mutations), release examples, workspace bench
+  compilation, offline benchmark, and Maven verify. The bench observation was
+  recorded from Apple M5 Max / macOS aarch64 / rustc 1.85.0: frame encode/decode
+  1,801.8 ns and 4,612 allocated bytes; Zstd decode 1,151.2 ns and 197,493
+  bytes; Producer request construction 1,253.7 ns and 3,665 bytes; 128-entry
+  route lookup 16.2 ns and 0 bytes; pending completion 64,129.5 ns and 9,338
+  bytes. Cargo package listing still warns that the unpublished integration
+  package has no description; add package metadata before the metadata/package
+  verification finishes.
+- Resolved the package-list warning by adding a description to the unpublished
+  integration runner. `cargo test -p rocketmq-classic-integration --locked`,
+  `cargo metadata --locked --format-version 1 --no-deps`,
+  `python3 scripts/check-workspace-metadata.py`, and
+  `cargo package --workspace --list --locked --allow-dirty` all pass; the
+  package-list rerun has no missing-description warning. The runner remains
+  `publish = false`.
+- Package metadata commit: `9e8476c4 build(integration): describe unpublished
+  test runner`. Added the result to the release checklist; registry dependency
+  resolution remains intentionally deferred until after Phase 19.

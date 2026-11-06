@@ -1,0 +1,264 @@
+# Phase 18 continuation — 2026-10-20T04:31:03Z
+
+- Previous goal turn made progress: four runtime operation/ownership commits
+  and current-source 1,667-test gates. Revalidated current branch
+  `phase/18-phase-18-compatibility-closure` at `9b110f55`; pre-existing Phase 19
+  README/runner/log files remain unstaged. Prior command sessions are terminal.
+- Read coding/Rust/testing skill guidance and the complete Phase 18 plan.
+  Continue the actual through-Phase-18 objective; broad P18-V01 and final
+  original-plan audit remain open. Java inspection uses the pinned 5.5.1 tag
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`, not checkout HEAD.
+- Raw direct-consume source review found owner code unconditionally applying
+  client-ID conversion to ordinary MessageExt and collapsing null topic to an
+  empty string. Java's service preserves raw IDs, nullable topic and queue
+  topic; ClientRemotingProcessor alone uses MessageDecoder.clientDecode.
+- Extended the actual Java runtime/service probe with raw physical/unique ID,
+  MessageClientExt ID, null and empty topic inputs. Callback observations now
+  include effective/offset IDs and nullable property-map presence. Java always
+  calls getProperty(RETRY_TOPIC), whose null-map initialization is observable.
+- Generated the new Java oracle before compiling Rust comparisons. The first
+  raw plain-unique case failed against existing Rust: Java callback msgId was
+  physical-id and offset ID null; Rust rewrote them to client-unique and
+  physical-id. Removed the owner-side conversion and moved wire conversion
+  to ClientRemotingProcessor's client_decode boundary. Preserved nullable
+  message/queue topics and always performed the Java retry-property lookup.
+- All 26 direct-service cases now pass. The added inbound encoded-record
+  regression verifies unique and physical IDs across the processor's owned
+  task and listener. Strict workspace/all-target/all-feature Clippy passed.
+  Current fixture SHA-256:
+  `c7cda96e0bf61f51c9e848c7290859382964c01cd2c4db52b34e8fed2eb00c76`.
+- Full locked Consumer tests/doctests, focused Maven fixture verification,
+  workspace formatting and diff checks passed. Commit this direct-input
+  correction independently before continuing resume/rebalance reconciliation.
+- Committed raw direct-input correction as c99eff31. Continued pinned-source
+  review found Java truncates unsubscribed ProcessQueues independently of
+  assignment cleanup, without persist/removeOffset/unlock calls. Added a real
+  Java doRebalance probe after nullable reset; Rust initially failed because
+  it discarded the retained value 50. Added separate identity-checked native
+  truncation with pull cancellation and no store effects. Regression now passes.
+- Full locked Consumer tests/doctests, strict workspace/all-target/all-feature
+  Clippy, focused Maven runtime fixture verification, formatting and diff checks
+  passed for the truncation correction. Fixture SHA-256:
+  2935595b5c94dc9496d342d004f3869cf3d66d5e5ca042c6ad445bae1ec712b4.
+  Next review is real resume/finally target rebalance, not yet closed.
+- Committed unsubscribed truncation as 98fb3feb. Replaced the Java reset
+  probe's isolated resume override with actual super.resume for all reset and
+  store-handoff cases (the separate truncation probe keeps its isolated entry).
+  Regenerated fixtures before compiling the Rust comparison; existing Rust
+  failed null-topic-active because its returned queue had not been truncated.
+- Resume now always clears pause and awaits this owner's rebalance, including
+  already-unpaused invocations. A private weak owner reference preserves the
+  existing &self receiver and avoids selecting through replaceable group maps.
+  Normal reset success/error also awaits the round before returning; early
+  future cancellation retains its private scheduling recovery guard. Disarm
+  recovery before callbacks so a new callback suspend is not overwritten.
+- Added Java/Rust suspended then unpaused rounds with a sibling consumer left
+  untouched. Rust owners share one runtime. Added callback state-lock/new-pause
+  regression and reconciled the null-offset test to Java's final truncation.
+  All fifteen real-resume reset comparisons and both resume rounds pass.
+- Full locked Consumer tests/doctests, strict workspace/all-target/all-feature
+  Clippy, focused Maven verification, formatting and diff checks pass. Fixture
+  SHA-256 ee07499b6b8eb58ea9cefc013592013a2c378e97709f4fd0096cd2ba81ec2eea.
+  Broad P18-V01 still open, including authoritative assignment/dropped queue
+  retention and pull-idle-expiry branches; no current full-phase acceptance.
+- Committed real resume/finally target round as ee7e6d7f. Added two Java
+  subscribed-null-value retention cases (missing route / unchanged broadcast
+  assignment). The first probe setup lacked an explicit rebalance model;
+  corrected model/runtime initialization and regenerated before final checks.
+  Pinned source only cleans excluded/expired assignments, not dropped alone.
+- Existing Rust failed missing-route retention: present=false, persisted=50,
+  value=null versus Java present=true, persisted=null, value=50. Removed the
+  dropped-only cleanup trigger. Both corrected Java/Rust cases and all fifteen
+  reset cases pass, with queue states, values and callback events compared.
+  Full locked Consumer tests/doctests and strict workspace/all-target/all-feature
+  Clippy pass. Fixture SHA-256:
+  0ed55128b1905a5d0c451ca93c0fbb33b6c5089f2a0a8c5e188770354293a04b.
+- Updated the Phase 11 matrix to bound historical method claims and explicitly
+  retain pull-expiry/POP/public Rebalance-ProcessQueue review in the open audit.
+  Broad current-source default/all-feature workspace tests and full Maven
+  verification are running; no completion inferred from partial output.
+- Comparator self-test and 37-scenario manifest, metadata/license/dependency
+  checks, 16 race/leak cases x3, fuzz smoke (121/11 seeds, 2112 mutations,
+  170/109 decodes), release example build, and Asia/Taipei Unique ID test pass.
+  Offline benchmark remains running at this commit boundary.
+
+# Phase 18 continuation — 2026-10-21
+
+- Continued pinned Java 5.5.1 `ProcessQueue`/`PopProcessQueue` review. Both use
+  `rocketmq.client.pull.pullMaxIdleTime`, default `120000`, and strict signed
+  `currentTimeMillis - lastPullTimestamp > timeout` semantics. Rust now parses
+  the dotted process-environment property as a Java-compatible long at Push
+  startup, uses one shared expiry helper for Push and POP queues, and reports
+  invalid values through `PullIdleTimeSettings`.
+- Added a third invoked Java `rebalanceRetention` case with a subscribed,
+  assigned, expired queue. The first Rust comparison revealed both queue
+  expiry and fixture behavior: the Java rebalance removes the expired queue,
+  attempts to clear the dirty offset, then the fixture's unsupported offset
+  read prevents replacement. The Rust test recording store now injects that
+  read failure for this case, preserving the actual remove-then-add attempt;
+  production rebalance was not changed to suppress additions. The corrected
+  comparison matches table presence, dropped state, retained/persisted offset
+  and exact per-queue event order.
+- Added parser and exact-threshold/wrapping tests. An initial negative-timeout
+  assertion used an elapsed value equal to the timeout and failed; corrected
+  the test input to exercise the intended strict inequality. Final all-feature
+  Consumer tests pass (231 unit tests plus all targets/doctests), strict
+  all-target/all-feature Consumer Clippy passes, formatting and diff checks
+  pass. Pinned `mvn -f compat/java-reference/pom.xml verify` passes, including
+  consumer-operation fixture drift verification and the complete 37-scenario
+  Java compatibility suite. Fixture SHA-256:
+  `73e2e0e8514bbdc904c89a8bde71cfe5fcf8eae431b4f507e7c189a4dc8e62a2`.
+- Updated Phase 6 configuration mapping, Phase 11 method matrix, and the
+  Phase 18 runtime operation audit to document the property, expiry semantics,
+  evidence, and remaining POP assignment/public API audit. Broad P18-V01,
+  final workspace gate, and Phase 19 live evidence remain open.
+
+# Phase 18 continuation — POP assignment retention — 2026-10-21
+
+- Continued the RebalanceImpl assignment-source review for POP queues. Java
+  removes an expired POP queue only during an authoritative assignment update;
+  a dropped flag alone does not remove an assigned table entry. Rust previously
+  removed expired/dropped queues even when assignment lookup failed, and its
+  addition pass replaced a dropped-but-still-registered queue. Scoped cleanup
+  to unsubscribed truncation or authoritative assignment exclusion/expiry, and
+  kept Java's putIfAbsent behavior for already registered POP queues.
+- Added `popRebalance` to the pinned Java runtime fixture. It reflectively
+  invokes the actual `RebalanceImpl.updateMessageQueueAssignment` branch for
+  expired-assigned replacement, dropped-assigned retention, and empty
+  assignment removal. Rust's `broker_assignment_error_preserves_worker_until_empty_assignment`
+  compares the fixture rows and scripts an unavailable assignment while the
+  live replacement is expired, then verifies dropped-but-assigned retention
+  until a later authoritative empty result. Fixture SHA-256:
+  `3d7af953b38b28a742a0d3eeb2671e8484066203f06ade2c829e2485ead1de4f`.
+- The first full Maven pass reached the consumer fixture but the new reflected
+  branch had started a non-daemon `PullMessageServiceScheduledThread1`. A live
+  `jcmd Thread.print` confirmed Maven was joining that worker. Fixture teardown
+  now shuts down the pull message service explicitly; focused generation exits
+  normally and the complete pinned `mvn -f compat/java-reference/pom.xml verify`
+  passes (37-scenario manifest, Java fixture drift checks and cross-decodes).
+- Consumer all-feature tests pass (231 unit tests plus all crate integration
+  and documentation targets), strict all-target/all-feature Consumer Clippy,
+  formatting and diff checks pass. Phase 13 evidence now records the chosen
+  POP branches. Other POP assignment paths, public Rebalance/ProcessQueue API
+  correspondence, broad P18-V01, final workspace gates and Phase 19 live
+  evidence remain open.
+
+# Phase 18 continuation — workspace gates — 2026-10-21
+
+- Ran `cargo test --workspace --all-features --locked` and
+  `cargo test --workspace --locked`; both passed all unit, integration and
+  documentation tests. This includes the consumer/admin/facade tests, 231
+  consumer unit tests, protocol/remoting suites, fuzz mutation regressions and
+  compile-fail API boundaries.
+- Ran `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`, `cargo fmt --all -- --check`, and `git diff --check`; all passed.
+  P18-V02 still needs final review of benchmark/fuzz/race evidence and the
+  complete API audit; no full-phase acceptance is inferred.
+
+# Phase 18 continuation — concurrent expired-message cleanup — 2026-10-21
+
+- Pinned Java 5.5.1 `ConsumeMessageConcurrentlyService` marks each listener
+  message with `CONSUME_START_TIME` and schedules `ProcessQueue.cleanExpiredMsg`
+  after one consume-timeout interval, repeating at that interval. Added the
+  same start marker, queue-owned timestamp tracking and service-owned cleaner
+  timer to Rust. Cleanup uses Java's strict signed-millisecond comparison,
+  delay level 3, successful-send-back removal, the 16-attempt queue cap and
+  orderly-consume skip. In-flight batch completion remains safe when cleanup
+  removes an expired message.
+- Added pinned Java direct `ProcessQueue.cleanExpiredMsg` fixtures for
+  successful expiry, repeated send-back failure, orderly skip and retry cap.
+  Rust comparisons also cover strict timeout boundary, expiry during a blocked
+  listener callback, late completion and initial timer delay. Fixture SHA-256:
+  `76b9bdfdd20d3f6cbc1b73f4b12055c484955f39cfde5884e0d6688e38fd6f79`.
+- Expanded and drift-checked the nested Java API denominator for `RebalanceImpl`,
+  `RebalancePushImpl`, `RebalancePullImpl`, `ProcessQueue` and
+  `PopProcessQueue`; fixture SHA-256:
+  `e4266b7a84b005bd4bddb0b7c378e425bfa6d9b22a926d6d6d0d623ea7294e65`.
+  The audit records existing flow mappings and the unresolved direct API gap:
+  Rust does not yet expose Java's live mutable nested tables or concrete queue
+  types. P18-V01 remains open.
+- `mvn -f compat/java-reference/pom.xml verify` passes (37-scenario manifest,
+  Java fixture drift checks and cross-decodes). `cargo test --workspace
+  --all-features --locked` and strict workspace/all-target/all-feature Clippy
+  pass; formatting and `git diff --check` pass. No full-phase acceptance or
+  Phase 19 live evidence is inferred.
+
+# Phase 18 continuation — current-revision offline gates — 2026-10-21
+
+- On code revision `bbcc88ae89c7fb4cf73f59f6abf7290458e217ad`, default and
+  all-feature locked workspace tests, strict workspace Clippy, rustfmt and
+  `git diff --check` pass. Pinned Maven `verify` passes all 37 scenario and
+  fixture checks. Differential comparator self-test and all 37 manifest rows
+  validate; the Asia/Taipei Unique ID case passes.
+- `bash tests/stress/run-offline-smoke.sh` passes all 16 named race/leak cases
+  three times each. The fixed-seed fuzz smoke reports 121 frame seeds, 11
+  message seeds, 2,112 bounded mutations, 170 frame decodes and 109 message
+  decodes. Release facade examples build. The current offline benchmark ran on
+  macOS AArch64, Apple M5 Max, 18 logical CPUs, Rust 1.85.0; its machine-specific
+  observations are recorded in the benchmark baseline document.
+- Locked workspace metadata, license/dependency-direction checks and all seven
+  product `cargo package --list` checks pass with `LICENSE` and `NOTICE`.
+  All 37 live handoff IDs validate, and the checked-in Linux CI workflow's
+  server-free commands pass locally. No remote CI/native Windows run was
+  triggered. Broad P18-V01 remains open due to the direct nested implementation
+  API mismatch; Phase 19 Broker/Docker checks remain separate.
+
+
+# Phase 18 continuation — nested POP API slice — 2026-10-21
+
+- Exposed `PopProcessQueue` and its Java public methods, including signed
+  `decFoundMsg(int)` behavior, `ack()` return value, Java-shaped text output,
+  queue-info filling and the environment-backed expiry check. Push and Pull
+  owners now expose their live subscription/topic tables; Push exposes its live
+  POP table. Both owners create the public POP queue. Added Java direct behavior
+  fixture plus Rust API and table-identity tests.
+- The Java fixture was regenerated twice with the pinned 5.5.1 source and its
+  focused Maven drift verifier passed both times. SHA-256:
+  `e9690f9738fb8ccbfe81b8187e4b92b4676deca106a29b2dced86774e88a97e4`.
+- `mvn -f compat/java-reference/pom.xml verify` passed on the changed worktree
+  (37 scenarios and all fixture/cross-decode checks). Default and all-feature
+  locked workspace tests and strict all-target/all-feature Clippy passed; the
+  Consumer all-feature suite passed (236 unit tests plus integration and
+  documentation targets), as did the focused five-test facade API suite.
+  `cargo fmt --all -- --check` and `git diff --check` passed.
+- P18-V01 remains open: public `ProcessQueue` and its direct API, both live
+  process-queue tables, Pull's POP table, and the remaining inherited rebalance
+  call correspondence are not yet reconciled. Full current-revision P18-V02
+  supplementary gates and P18-V03/V04 review remain outstanding. Phase 19
+  Broker/Docker work was not run.
+
+
+# Phase 18 continuation — ProcessQueue API slice — 2026-10-21
+
+- Exposed the Java-shaped `ProcessQueue` public API, including mutable live
+  message-tree access, signed atomic counter handles, and the shared orderly
+  consume lock. Push and Pull expose live process-queue tables; Pull assignment
+  reconciliation adds and removes process queues. Added Java direct behavior
+  fixtures and Rust facade/table tests. Fixture SHA-256:
+  `d2a38d2f6f18436517520b28213e81f8d7b267895b0b6ba194f31fa4a4b4b3b6`.
+- Consumer all-feature tests pass (236 unit tests plus integration and doctest
+  targets), along with strict all-target/all-feature Consumer Clippy, the
+  focused Java drift verifier, `cargo fmt --all -- --check`, and
+  `git diff --check`. Pinned `mvn -f compat/java-reference/pom.xml verify`
+  passes all 37 scenarios and fixture/cross-decode checks on this worktree.
+- P18-V01 remains open for inherited rebalance call correspondence and Pull POP
+  assignment flow. Full current-revision P18-V02 supplementary gates and
+  P18-V03/V04 review remain outstanding. No Phase 19 Broker/Docker validation
+  was run.
+
+
+# Phase 18 continuation — Pull rebalance behavior slice — 2026-10-21
+
+- Matched pinned `RebalancePullImpl` behavior in Rust: client rebalance is
+  enabled, both offset helpers return zero, consume type is active Pull,
+  ProcessQueue creation succeeds, POP queue creation returns no value, and POP
+  init mode reports `no initMode for Pull`. The Pull POP table stays empty.
+- Added direct Java behavior output to the facade fixture, regenerated it from
+  pinned source, and passed its focused drift verifier. Fixture SHA-256:
+  `fe4523a2b16b7737e977dd6b5ff7beec9b4cb2e6c16b15aac6b43a6cd1f16d3a`.
+- The seven-test Consumer facade API suite, formatting and `git diff --check`
+  pass. An initial focused run caught the old assertion that Pull could create a
+  POP queue; that assertion was updated to match the pinned Java contract.
+- P18-V01 remains open for the inherited rebalance method/settings
+  correspondence and full client audit. Full P18-V02 refresh and P18-V03/V04
+  review remain outstanding. Phase 19 Broker/Docker validation was not run.

@@ -1,0 +1,13 @@
+P18-V01 `countInnerMsgNum` cursor disposition — 2026-10-22 20:32 UTC
+
+Reviewed pinned Java `MessageDecoder.countInnerMsgNum` and its call graph.
+Java advances the input buffer through the compact batch. The only production
+caller, `SendMessageProcessor`, wraps the message body in a temporary
+`ByteBuffer`, uses the returned count for `PROPERTY_INNER_NUM`, and discards
+the buffer. Rust's immutable-slice `count_inner_messages` preserves the count
+and omits this unobserved cursor state; the existing compact fixture covers
+valid counts and malformed-size outcomes. The API map and audit record this
+source-confirmed API-shape adaptation. Docs-only update; no tests were run.
+Broad P18-V01 reconciliation, current-revision remote Ubuntu CI, native
+Windows runtime, and Phase 19 Broker/Docker evidence remain open. Protected
+Phase 19 worktree paths were not staged. No external CI or push was run.

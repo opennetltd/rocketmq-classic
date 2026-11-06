@@ -1,0 +1,42 @@
+# Phase 18 P18-V01 rebalance membership no-result semantics — 2026-10-21T16:00:22Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Starting code revision: `659ec260` (`fix(consumer): map push implementation factory setter`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Source finding and change
+
+Pinned `RebalanceImpl.rebalanceByTopic` initializes `balanced=true`. If
+`findConsumerIdList` returns null or an empty list, that branch logs and skips
+allocation without changing the result or existing queue assignments. If the
+lookup throws, `doRebalance` catches the exception and marks a non-retry-topic
+pass unbalanced.
+
+Rust had treated both null and empty membership results as unbalanced. The
+clustering path now preserves the Java default result for those two no-result
+cases; transport/RPC errors still mark the pass unbalanced. The membership
+churn regression now covers both null and empty results while verifying that
+assignments remain in place. `unavailable_membership_keeps_the_previous_queue_assignment`
+continues to verify the thrown lookup-error retry path.
+
+## Verification
+
+- PASS: the membership churn and RPC-error regressions.
+- PASS: default and all-feature locked workspace tests; strict all-target,
+  all-feature workspace Clippy; formatting and diff checks.
+- PASS: pinned Maven `verify` (37 scenarios and Rust/Java fixture cross-decodes).
+- PASS: differential self-test and 37-scenario manifest validation.
+- PASS: offline stress smoke, 16 cases × 3. Its first attempt selected the
+  churn test by its former name and therefore matched zero tests; restoring the
+  expected test name made the focused case and complete stress script pass.
+- PASS: release fuzz smoke (137 frame seeds, 11 message seeds, 2,368 bounded
+  mutations, 201 frame decodes, 118 message decodes), release example build,
+  and offline benchmark.
+- PASS: locked Cargo metadata/workspace metadata, seven package listings with
+  `LICENSE`/`NOTICE`, and four Unique ID tests under UTC and Asia/Taipei.
+
+The Phase 11/18 rebalance crosswalks now record the null/empty versus thrown
+lookup distinction. Broad P18-V01 remains open, including the Push
+`ConsumeMessageService` replacement seam, shared mutable stats-manager
+accessor, reverse API coverage and additional source/control-flow rows.
+P18-V04 current Ubuntu/native Windows evidence remains open.

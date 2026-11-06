@@ -1,0 +1,22 @@
+P18-V01 direct subscription-group configuration lookup on 2026-10-21:
+- Added MQClientApi::get_subscription_group_config and its nullable-input
+  adapter for pinned Java MQClientAPIImpl.getSubscriptionGroupConfig, request
+  352. The typed request header carries nullable group plus inherited
+  namespace, broker-name, and oneway fields.
+- The synchronous RPC uses configured VIP conversion, returns an optional
+  SubscriptionGroupConfig (a missing Java body is null), and preserves Broker
+  response errors. Invoked Java fixtures and Rust differential cases cover
+  populated/default bodies, null/empty groups, missing body, and rejection.
+  A VIP-enabled loopback verifies the address transform.
+- Producer core fixture SHA-256:
+  b689e56eaba8e03838703da3b83a8333d5ae59aeb88591d38e2ec032955974d9.
+  Header fixture SHA-256:
+  9d27068774c24163e2b1d07402c963a69813a18c950bafd6e0d1e7bb43992134.
+- Focused Core RPC and VIP tests pass. Protocol header inventory passes (8
+  tests) and header_validation_matrix passes. Strict locked all-target/all-
+  feature workspace Clippy, cargo fmt check, and git diff check pass. Pinned
+  Maven verify passes with 37 manifest scenarios, 73 typed headers and 15
+  typed bodies.
+- Broad P18-V01, current-revision Ubuntu/native Windows P18-V04 evidence, and
+  Phase 19 live Broker scenarios remain open. Four preserved Phase 19 worktree
+  paths remain unstaged and untouched.

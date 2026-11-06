@@ -1,0 +1,31 @@
+# Phase 18 POP batch ACK DTO parity slice — 2026-10-18 17:25 UTC
+
+- Branch: `phase/18-phase-18-compatibility-closure`.
+- Pinned Java 5.5.1 source and reflection confirm that `BatchAck` and
+  `BatchAckMessageRequestBody` keep their fields private and expose the
+  recorded getters/setters. Made Rust fields private, migrated cross-crate
+  call sites to existing accessors, and added compile-fail privacy checks plus
+  Java public-field inventory assertions. No plan file or external Java
+  checkout file was modified.
+- Code/fixture commit: `a300224f fix(protocol): match batch ack DTO field visibility`.
+- Fixture SHA-256 (`fixtures/runtime/lookup.json`):
+  `1eea96b0635b4a8f8c8f2a82187c1702ac0335f529fa2b6790d0ca2ddab2c53f`.
+
+## Validation and correction record
+
+- Initial `exec:java` invocation reused stale Java class files. It generated a
+  fixture without the new inventory keys, and the Protocol inventory test
+  failed (`Null` versus empty array). Diagnosis: the Java source had not been
+  compiled before execution. No implementation test failure remained after
+  regeneration with `mvn -o -q -f compat/java-reference/pom.xml compile
+  exec:java -Dexec.args='runtime-lookup-fixtures <absolute lookup.json path>'`.
+- PASS: all-feature locked/offline tests for Protocol, Consumer, Remoting, and
+  Core. Protocol passed 143 unit tests and 73 doctests, including both new
+  compile-fail checks.
+- PASS: strict all-target/all-feature Clippy for all four crates with
+  `-D warnings`.
+- PASS: pinned offline Maven `verify`; all 37 scenarios, fixture checks, 66
+  typed-header cross-decodes, and 15 typed-body cross-decodes.
+- PASS: `cargo fmt --all -- --check` and `git diff --check`.
+- This slice does not close broad P18-V01 or the final workspace P18-V02 gate.
+  Phase 19 working-tree changes were not staged or included.

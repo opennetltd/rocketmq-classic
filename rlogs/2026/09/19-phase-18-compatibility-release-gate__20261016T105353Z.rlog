@@ -1,0 +1,31 @@
+# Phase 18 current-revision server-free gate — 2026-10-16T10:53Z
+
+- Revision `787157a066d1aabe35ffc4bb4fd248e0cd3ccbef`, branch
+  `phase/19-phase-18-compatibility-release-gate`; worktree was clean before
+  this evidence update.
+- After the recent Common API additions and lifecycle/thread-helper audit,
+  default and all-feature locked workspace tests, strict all-target/all-feature
+  Clippy, formatting, Maven `verify` (37 scenarios, fixture drift and
+  Java/Rust cross-decodes), and the differential self-test passed on this
+  revision. The 37-scenario manifest validation also passed.
+- `bash tests/stress/run-offline-smoke.sh` passed 16 deterministic race/leak
+  cases × 3 repetitions. Bounded fuzz smoke passed 105 frame seeds, 11 message
+  seeds, 1,856 mutations, 146 frame decodes, and 113 message decodes.
+- Release examples built successfully. `cargo bench --workspace --no-run
+  --locked` compiled all workspace benches. The workspace metadata/license/
+  dependency check passed; full locked Cargo metadata resolved 215 packages,
+  including 208 registry packages, all with license metadata. All seven
+  `cargo package --workspace --list --locked --allow-dirty` listings included
+  `LICENSE` and `NOTICE`.
+- The Asia/Taipei Unique ID fixture passed (4 tests). P18-V02 server-free gates
+  are complete on `787157a0`.
+- P18-V01's broad bidirectional Java/Rust source, API/settings, overload/input,
+  error/control-flow, and reverse-export audit remains open. A current-revision
+  GitHub Ubuntu address-profile result for P18-V04 remains absent. Phase 19
+  Broker/Docker automation and owner-environment validation, plus release
+  registry/version preflight, also remain open.
+- An initial metadata-summary one-liner had a Python quoting syntax error; the
+  corrected query returned the counts above. No project command failed.
+- `git diff --check` is run after this record is added. No plan changed. No
+  Docker, Broker, push, tag, publication, deployment, or compatibility claim
+  was made.

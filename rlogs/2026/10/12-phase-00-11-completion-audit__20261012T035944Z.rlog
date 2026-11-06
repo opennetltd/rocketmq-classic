@@ -1,0 +1,96 @@
+Phase 0–11 completion audit continuation — 2026-10-12 03:59 UTC
+
+Objective: continue correcting confirmed code/documentation issues and audit the current Phase 0–11 state. No commits were created; the existing uncommitted worktree was preserved.
+
+Findings and corrections:
+
+- Java 5.5.1 `NetworkUtil.getLocalAddress()` wraps IPv6 in brackets via `normalizeHostAddress`; its `denormalizeHostAddress` removes them. The ignored Linux IPv6-only constructor test had parsed the bracketed value directly. Updated the test to strip brackets and interface scope before parsing, while asserting the output remains bracketed IPv6 and non-loopback. The exact test passed 1/1 on Linux ARM64 with Rust 1.85.0 in Docker network `rocketmq-p6-ipv6-only` (`fd42:6::/64`, IPv4 disabled). This is container execution evidence, not real-host or same-interface Java/Rust parity.
+- Current Phase 6 audit summary contained stale Heartbeat input count 249 and stale `lookup.json` hash `c69e8f62...`. Updated the current summary to 276 cases and verified current hash `820791e55ecdf7e64482b2116c5a9f792da68a54fa003fced966188a9f6ab970` against the fixture. Recorded the current host-independent `client-config.json` SHA-256 `c775a513f9f22b5556ea1acaec3aaa423ee3ddbdb87b0920893938b6a3fa9acb`.
+- Updated the active Phase 6 API map, runtime inventory, and requirement audit with the Linux IPv6-only Docker evidence and retained the Windows IP Helper, non-macOS BSD, actual IPv6-only-host, same-interface Java/Rust, and broad source/API/input reconciliation gaps. Removed a duplicate IPv6-container status sentence from the API map.
+- Compared task IDs and checked states in all English/Traditional phase plans for Phase 0–11: every pair matches. All locally scoped checklist items are checked; the 11 unchecked IDs are live Phase 19 handoffs. Orderly queue locking/renewal/expiry remains explicitly owned by Phase 12.
+
+Validation:
+
+- Linux ignored test `automatic_client_ip_constructor_supports_ipv6_only_interfaces` — PASS, 1 passed, 0 failed.
+- `cargo fmt --all` followed by `cargo fmt --all -- --check` — PASS.
+- `git diff --check` — PASS.
+- `python3 tests/differential/compare.py --validate-manifest` — PASS, 31 scenarios.
+- `python3 tests/differential/compare.py --self-test` — PASS.
+- Phase 19 manifest and Java fixture re-verification with Maven (including all 31 scenarios) passed in the preceding `phase19-handoff-coverage` run.
+
+Remaining status: Phase 6 broad source/API/input reconciliation stays PARTIAL. Windows and non-macOS BSD runtime enumeration, a real IPv6-only host, and same-interface Java/Rust address-selection comparison remain unverified. Orderly consumption remains Phase 12 scope. Live Broker/TLS/mixed-client Phase 19 cases remain pending. No full workspace rerun was needed for the current test-only Rust change; the prior full Phase 0–11 workspace gates are recorded in the 03:31 UTC rerun log.
+
+Audit follow-up — 2026-10-12:
+
+- Removed the duplicated IPv6-only Docker evidence clause from the P6-01 requirement row. It now records one Linux ARM64 container result and clearly keeps Windows/BSD enumeration, a real IPv6-only host, and other settings-activation paths open.
+- Re-scanned Phase 0–11 English plan checkboxes. The 11 unchecked IDs are P0-V03, P3-V04, P5-V02, P6-V04, P7-V02/V03/V04, P9-V03, P10-V03 and P11-V03/V04; each is explicitly a Phase 19 live Broker/TLS/mixed-client handoff. Phase 10 orderly locked-queue work remains owned by Phase 12. No locally owned phase checklist item was found unchecked.
+- Verified current fixture hashes: `client-config.json` `c775a513f9f22b5556ea1acaec3aaa423ee3ddbdb87b0920893938b6a3fa9acb`, `heartbeat.json` `67b844d3a61ee31ac12c340cf09f30d81083435635d6f17bebc44206b65d37cc`, `route.json` `cc24364302cd391179c9648683da907d6dbb85eb6564d8b30396e0adb62390cb`, and `lookup.json` `820791e55ecdf7e64482b2116c5a9f792da68a54fa003fced966188a9f6ab970`.
+- `git diff --check` passes. No tests were run for this documentation audit.
+
+The remaining non-manual item is still Phase 6's broad source/API/input/reverse-export reconciliation: name/field inventories and the enumerated fixture corpora do not cover every overload, malformed DTO/raw input, Fastjson path/grammar, setting activation branch, or source-family ownership mapping. This is an open audit/compatibility gate, not a confirmed defect in every uncovered branch; close it by completing the source-to-method-to-input-to-Rust-export mapping and adding regressions for any mismatches found. Windows/BSD and real-host IPv6 checks remain platform/runtime evidence gaps, while the 11 unchecked IDs are the explicit Phase 19 live handoffs.
+
+Code-registry audit follow-up — 2026-10-12:
+
+- Fixed the Java fixture reflection to use `Class.getFields()` so `ResponseCode` includes its five inherited `RemotingSysResponseCode` constants, then regenerated `fixtures/protocol/request-response-codes.json` (166 request constants, 68 public response fields, five directly declared system response constants).
+- `cargo test -p rocketmq-classic-protocol --test code_registry --locked`, offline Maven `verify` (exit 0, including registry drift verification and Java/Rust cross-decodes), `cargo fmt --all -- --check`, and `git diff --check` pass. This closes the registry-fixture false gap; it does not change the Phase 6 broad reconciliation status.
+
+Phase 0–11 non-manual gap follow-up — 2026-10-12:
+
+- Rechecked local checklist ownership against the offline matrices. All 11 unchecked plan IDs are registered as Phase 19 live Broker/TLS/mixed-client handoffs. Phase 8–11 offline rows are locally verified, except for the additional Phase 7 detector probe coverage gap recorded below. Orderly lock/renewal/expiry remains Phase 12 scope.
+- A reverse public-name pass found `ClientRuntimeManager::shared_default` described only generically and `MQClientApi::probe_broker` absent from the Phase 5/6 maps. The Phase 6 map now names `shared_default` as a hidden Rust facade bridge shared by Producer/Pull/Push; the Phase 7 matrix maps `probe_broker` to Java's `DefaultMQProducerImpl` ServiceDetector and `MQClientAPIImpl.getMaxOffset` flow.
+- Source and fixture inspection found no direct scripted RPC invocation test for `probe_broker` request fields or successful, Broker-error, missing-offset, and invalid-offset response branches. The producer fixture's request-code/queue/committed constants are not invocation evidence. This remains a local automated test gap; no code behavior failure has been demonstrated.
+- The Phase 6 broad source/API/input/reverse-export audit remains PARTIAL; Windows and non-macOS BSD runtime address enumeration, candidate-order parity outside covered hosts, and real IPv6-only host behavior remain unverified.
+- No tests were run for this audit continuation. `git diff --check` passed after the documentation updates.
+
+Phase 7 probe coverage closure — 2026-10-12:
+
+- Added `producer_broker_probe_matches_get_max_offset_request_and_response_validation` to `crates/rocketmq-classic-core/tests/rpc.rs`. The scripted peer verifies GET_MAX_OFFSET, topic, queue ID 0, and `committed=true`; response checks cover a valid offset, Broker error, missing offset, and invalid offset.
+- Updated `PHASE_7_PRODUCER_MATRIX.md` with the Java `ServiceDetector.detect` → `MQClientAPIImpl.getMaxOffset` mapping and the new local evidence. Updated `PHASE_6_API_CONFIG_MAP.md` to name `ClientRuntimeManager::shared_default` as the hidden Rust facade-sharing bridge.
+- The focused locked RPC test passed (1/1); `cargo clippy -p rocketmq-classic-core --test rpc --locked -- -D warnings`, `cargo fmt --all -- --check`, and `git diff --check` passed.
+- This follow-up supersedes the preceding note that no tests were run for the audit continuation. It does not close the Phase 6 broad source/API/input reconciliation or platform runtime evidence gaps, and does not change the 11 Phase 19 live handoffs.
+
+Phase 0–11 full local gate rerun — 2026-10-12 04:41 UTC:
+
+- `cargo test --workspace --locked` — PASS; all workspace unit, integration, and protocol doctests passed, including the new broker-probe scripted case.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — PASS.
+- `cargo build -p rocketmq-classic --examples --locked` — PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS; 31 differential scenarios, Java fixture drift verification, pinned API probes, and Java decoding of Rust-generated fixtures completed.
+- `python3 tests/differential/compare.py --self-test` and `--validate-manifest` — PASS; 31 scenarios validated.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+- Updated the Phase 6 requirement audit to report this as the latest full local gate while keeping the broad source/API/input and platform gaps explicit. No live Broker/TLS/mixed-client scenarios were run.
+
+Linux Java/Rust address-order parity follow-up — 2026-10-12:
+
+- Compiled the current `RuntimeLinuxAddressFixtures` with offline Maven and captured pinned Java 5.5.1 `NetworkUtil.getLocalInetAddressList()` candidate sequences in Linux ARM64 containers.
+- `linux_production_candidate_order_matches_invoked_java_runtime_snapshot` passed against the same-namespace Java sequence on the default bridge (3 candidates) and on an IPv6-only Docker network with Docker IPv4 disabled (4 candidates). Rust 1.85.0; one test passed in each namespace. No Broker was contacted.
+- Updated the Phase 6 requirement/runtime/API records. This closes Linux same-namespace candidate-order parity for those two container topologies only; Windows IP Helper runtime enumeration, non-macOS BSD enumeration, an actual IPv6-only host, and broad Phase 6 source/API/input/reverse-export reconciliation remain open.
+
+Phase 11 evidence-count correction — 2026-10-12:
+
+- Updated the current Phase 11 offline method matrix and compatibility summary from 22 to 31 manifest scenarios. The earlier 22-scenario statements in chronological audit entries remain historical; the current validation record now matches the 31-scenario full local gate recorded above.
+- `git diff --check` — PASS. No code or plan files changed in this correction.
+
+
+Phase 0–11 completion audit follow-up — 2026-10-12 05:45 UTC:
+
+- Linux ARM64 `cargo test --workspace --locked` exposed two order/timing assumptions in existing Phase 3 remoting tests. The NameServer test sorted observed dynamic ports but compared them with allocation order; the async callback test read the context channel before the immediately-following success callback had appended its event. Both test assertions now compare sorted values / wait with a bounded timeout. The complete Linux ARM64 workspace suite then passed; no production remoting code changed.
+- Offline Maven `verify` exposed nondeterministic serialization of the nested broker-version map in `RuntimeRouteFixtures` (`Map.of` iteration order). `brokerAddressScenario` now stores it as a `TreeMap`; regenerated `fixtures/runtime/route.json` has 36 conversion cases and SHA-256 `a7c3d97104c2d80d37f42bc17889aae36b4cb085748a54d51ebdd8b08239110f`. The pinned Java/Rust case covers an explicitly empty static-mapping map with a matching ordinary Broker route; ordinary publish and subscribe results match. Together with the unmatched Broker case, both empty-mapping branches are covered.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS, including all 31 differential scenarios, route fixture drift verification and Java cross-decodes. `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`, comparator self-test, 31-scenario manifest validation, `cargo fmt --all -- --check` and `git diff --check` also pass.
+- Updated the current Phase 6 route/requirement summaries and Phase 11 offline matrix; chronological 35-case and 22-scenario checkpoints remain historical. All 11 unchecked Phase 0–11 plan IDs remain Phase 19 live Broker/TLS/mixed-client handoffs. The broad Phase 6 source/API/input/reverse-export audit remains PARTIAL; Windows IP Helper runtime enumeration, non-macOS BSD enumeration and an actual IPv6-only host remain unverified.
+
+
+Final Linux ARM64 workspace rerun after route-fixture canonicalization — 2026-10-12 05:45 UTC:
+
+- `cargo test --workspace --locked` — PASS (exit 0) against the regenerated `route.json` with stable broker-version key ordering.
+
+
+Route fixture determinism confirmation — 2026-10-12:
+
+- Regenerated `route.json` a second time with the pinned Java fixture entry point. `cmp` matched the checked-in fixture byte-for-byte; both SHA-256 values are `a7c3d97104c2d80d37f42bc17889aae36b4cb085748a54d51ebdd8b08239110f` (36 converter cases).
+- Clarified the older same-day route-audit hashes as checkpoint values so they are not mistaken for the current fixture hash.
+
+
+Final facade example compatibility build — 2026-10-12 05:51 UTC:
+
+- `cargo build -p rocketmq-classic --examples --locked` — PASS after the Phase 6 route changes and current fixture regeneration.
+- Updated the current Phase 6 audit gate summary to include this build.

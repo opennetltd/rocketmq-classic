@@ -1,0 +1,8 @@
+# Phase 6 execution log — 2026-10-09T14:03:02Z
+
+- Continued DTO input reconciliation on `07-phase-06-runtime-routing-heartbeat`; the TLS property lifecycle correction is recorded in the preceding session log.
+- Added 35 direct Fastjson 2.0.63 inputs: seven root JSON shapes for each of `QueueData`, `MessageQueue`, `BrokerData`, `TopicQueueMappingInfo`, and `TopicRouteData`. Empty objects decode; null roots reach the probe's field access and throw `NullPointerException`; arrays, numbers, booleans, and strings reject with `JSONException`.
+- Expanded `route_dto_inputs_match_invoked_java_fastjson` from 360 to 395 cases. Native acceptance and field outcomes match all new Java observations; no production change was needed. Route fixture SHA-256: `4c5634c4ddce8a311db77fe458e0bf16f63288e0bcd116f53af1c294700ed323`.
+- Validation passed: focused route DTO differential; full `cargo test --workspace --all-targets --locked`; strict all-target/all-feature Clippy; pinned offline Maven verify (22 scenarios and deterministic fixture checks); comparator self-test/manifest22; `cargo fmt --all -- --check`; `git diff --check`.
+- The sandbox initially denied three loopback binds; the complete workspace suite passed in the approved local-socket execution context. Updated route, runtime inventory, Java compatibility, and requirement audit records. No plan files changed.
+- This closes the tested root-token matrix only. Other enum/DTO/raw inputs, Fastjson SOCKS grammar, non-macOS/IPv6 host evidence, whole-source/reverse-export reconciliation and final plan/index audit remain open; P6-V04 stays `PENDING_PHASE_19`.

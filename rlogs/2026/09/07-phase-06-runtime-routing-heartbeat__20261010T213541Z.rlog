@@ -1,0 +1,5 @@
+# Phase 6 NameServer nullable address accessors — 2026-10-10T21:35:41Z
+
+- Added a direct pinned Java `DefaultTopAddressing.getNsAddr/setNsAddr` fixture for the initial null value, a set address, and a reset to null. `RuntimeDiscoveryFixtures --verify` passes; the discovery fixture now records 21 cases.
+- Added `nameserver_address_property_matches_invoked_java_accessors` to compare Rust `ns_addr/set_ns_addr` against that Java sequence. Updated the public API map and runtime inventory and recorded the bounded result in requirement audit item 29.
+- Java fixture verification passes offline (`Runtime discovery invoked cases verified: 21`). The focused Rust accessor differential passes, as do strict all-target/all-feature core Clippy, `cargo fmt --all -- --check`, and `git diff --check`. The broad Phase 6 source/input/platform audit remains PARTIAL; P6-V04 remains `PENDING_PHASE_19`.

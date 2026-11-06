@@ -1,0 +1,45 @@
+# Phase 18 P18-V01 BatchAck inherited serialization continuation
+
+Date: 2026-10-16
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md (unchanged)
+Branch: phase/19-phase-18-compatibility-release-gate
+Starting revision: 0a87eee1
+Code commit: bd228919eb038418a86ccc29d5db8185d5ac5067
+
+## Source and finding
+
+- Java oracle checkout: /Users/bruce.tsai/Projects/3rd/rocketmq
+- Pinned Java source commit: efa1be59d6fc747ad220f036c86030f05f0419f9
+- BatchAckMessageRequestBody.java SHA-256: 11b86eb41d3d427e4400aa6741916d57f5f7d035f5b2dec3c86c56b0f2688463
+- The pinned DTO extends RemotingSerializable. Rust previously had body field accessors and Fastjson field decoding but no inherited Java serializer adapters.
+
+## Changes
+
+- Added public Rust compact/pretty JSON and byte encoding adapters, single-value and list decoding adapters, fromJson adapters, and nullable handling for BatchAckMessageRequestBody.
+- Added optional-value adapters for inherited static encode(Object) and toJson(Object, boolean) null behavior.
+- Reused the crate-private Fastjson writer used by route DTOs; its visibility is crate-only.
+- Added Java reflection fixtures for both DTO constructors, all 19 BatchAck methods, the body's four declared methods, and its 13 callable methods including inherited overloads.
+- Added three Java serialization cases for default, explicit-null and populated nested values. Changed the 111-case BatchAck input differential to use the new Java-compatible nullable decoder.
+- Non-empty JSONWriter feature options remain outside the Rust adapter; the empty feature array is checked against default encoding.
+
+## Validation
+
+- Java fixture regeneration: compiled compat/java-reference, then invoked RuntimeLookupFixtures through compat.Main with runtime-lookup-fixtures and fixtures/runtime/lookup.json.
+- mvn -o -q -f compat/java-reference/pom.xml verify: passed, including the 37-scenario manifest and fixture drift checks. JDK and Fastjson emitted existing Unsafe/reflection warnings.
+- cargo test -p rocketmq-classic-protocol --all-features --locked: passed; 118 unit tests, all integration targets, 42 doctests.
+- Focused cargo test ... batch_ack: 4 matching tests passed.
+- cargo clippy -p rocketmq-classic-protocol --all-targets --all-features --locked -- -D warnings: passed.
+- cargo fmt --all -- --check and git diff --check: passed.
+
+## Iteration notes
+
+- The first Maven exec attempt used the wrong entry point; the fixture was regenerated using compat.Main's runtime-lookup-fixtures dispatch after compile.
+- Java initially resolved encode(null) to the instance varargs overload; the fixture now casts null to Object for the static overload.
+- Rust null-result assertions initially required DTO equality; changed them to is_none checks, preserving BatchAckMessageRequestBody's Java identity semantics.
+
+## Status
+
+- This closes the BatchAckMessageRequestBody inherited serializer adapter slice.
+- Broad P18-V01 source/API/settings/input/error/control-flow/inherited API and reverse-export reconciliation remains open. Non-empty Fastjson feature options need a scope disposition in the broader inherited API audit.
+- The final-revision full-workspace P18-V02 rerun and current-revision Ubuntu/Windows CI evidence remain open, as do Phase 19 Docker/Broker automation and scenario execution.
+- No Docker/Broker, push, tag, publication or release action was performed.

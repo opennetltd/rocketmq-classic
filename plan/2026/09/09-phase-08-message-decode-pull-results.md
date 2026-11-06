@@ -65,9 +65,9 @@ Port tag filtering and class-filter-related behavior that actually occurs in Pul
 
 Write the failing check/oracle fixture before its implementation. The cases below must become runnable checks, not manual checklist-only claims. Run these checks without Docker or a live Broker; use Java fixtures, controlled clocks and scripted peers. Shared commands and evidence rules are in the execution index.
 
-- [ ] **P8-V01** — Java-decoded JSON equals Rust for single/multiple records, all supported magic/host/compression combinations and body-option combinations.
-- [ ] **P8-V02** — Truncate valid records at every byte; mutate sizes/magic/properties and use oversized decompression output: no panic, overread or unbounded allocation.
-- [ ] **P8-V03** — FOUND/empty-filter/no-new/no-match/illegal-offset preserve Java next-offset and suggested-broker semantics.
+- [x] **P8-V01** — Java-decoded JSON equals Rust for single/multiple records, all supported magic/host/compression combinations and body-option combinations.
+- [x] **P8-V02** — Truncate valid records at every byte; mutate sizes/magic/properties and use oversized decompression output: no panic, overread or unbounded allocation.
+- [x] **P8-V03** — FOUND/empty-filter/no-new/no-match/illegal-offset preserve Java next-offset and suggested-broker semantics.
 
 ### 5.1 Local commands after implementation
 

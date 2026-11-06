@@ -1,0 +1,42 @@
+# Phase 18 MessageExt tags/keys override follow-up — 2026-10-21T18:51:54Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `3230a7c2` (`feat(common): dispatch subtype tags and keys`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `7a5fb470b3e3ad32f55b02d9ac77894b7a98439aff695f4c2a635c4f5515e9d4`.
+
+## Source audit and change
+
+- Java `Message.getTags()` and `getKeys()` delegate to virtual
+  `getProperty(String)`. Rust inherited these methods through `Deref`, which
+  called the base `Message` implementation and bypassed
+  `MessageExtSubtype::property`.
+- Added explicit `MessageExt::tags()` and `keys()` methods that use the
+  virtual property hook.
+- The invoked Java custom subtype returns `subtype-tag` and `subtype-key` from
+  `getProperty`; direct-consume callbacks compare the values and read counts.
+  The same fixture continues to compare ProcessQueue's custom `MAX_OFFSET`
+  behavior and `msgAccCnt=12`.
+- Updated Phase 6, Phase 10 and Phase 18 compatibility records and the release
+  checklist. Other property-derived getters and inherited methods remain open.
+
+## Verification
+
+- PASS: focused
+  `cargo test --locked -p rocketmq-classic-consumer --test runtime_direct_consume`
+  (3 tests).
+- PASS: pinned Java runtime fixture regeneration through Maven; 9 Running
+  Info, 27 direct-consume and 15 reset cases verified. Existing JDK Unsafe
+  warnings were emitted.
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- Full workspace tests, Maven `verify`, strict Clippy, and supplemental P18-V02
+  differential/stress/fuzz/example/benchmark/metadata/time-zone gates have not
+  been rerun on this revision; refresh them after the remaining local changes.
+
+## Remaining status
+
+Broad P18-V01 source/API/settings/input/error/control-flow/reverse-export
+reconciliation remains open, as do current-revision GitHub Ubuntu and native
+Windows P18-V04 runtime evidence. Phase 19 Broker/Docker validation remains
+separate. No push, remote CI, Broker or Docker run was performed. Pre-existing
+Phase 19 worktree paths were left untouched and unstaged.

@@ -1,0 +1,19 @@
+Phase 0–11 complete local gate rerun — 2026-10-12 03:07 UTC
+
+Scope: rerun the repository's current offline gates after the Heartbeat DTO Fastjson input corpus reached 249 cases. No live Broker, Docker cluster, TLS server, or mixed Java/Rust client scenario was started.
+
+Host: macOS 26.6.1 arm64 (`Darwin 25.6.0 arm64`).
+
+Commands and results:
+
+- `cargo fmt --check` — PASS.
+- `cargo test --workspace --locked` — PASS; all workspace unit tests, integration tests and protocol doctests passed. The current Heartbeat DTO input differential covers 249 Java-invoked cases.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — PASS.
+- `cargo build -p rocketmq-classic --examples --locked` — PASS.
+- `mvn -f compat/java-reference/pom.xml verify` — PASS; pinned Java oracle checks, 22-scenario manifest, runtime fixture drift checks, and Java cross-decodes of Rust-generated frames/bodies completed.
+- `python3 tests/differential/compare.py --self-test` — PASS.
+- `python3 tests/differential/compare.py --validate-manifest` — PASS; 22 scenarios validated.
+- `git diff --check` — PASS.
+- `sha256sum fixtures/runtime/heartbeat.json` — `98b5029aafaa9146a801e3a68d7edc70707f25ba4c17d3ceca40012e4673e0b3`.
+
+This closes the full local-gate rerun that was pending after the fixture grew from 247 to 249 cases. It does not close the Phase 6 whole-source/API/input/platform audit, platform-specific Windows/BSD runtime evidence, actual IPv6-only-host evidence, or any Phase 19 live Broker/TLS/cross-language gate. Orderly locking remains intentionally owned by Phase 12.

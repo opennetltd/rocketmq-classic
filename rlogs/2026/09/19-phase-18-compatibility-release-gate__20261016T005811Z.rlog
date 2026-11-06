@@ -1,0 +1,12 @@
+Session: 2026-10-16T00:58:11Z
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Branch: phase/19-phase-18-compatibility-release-gate
+Base code revision: 375aeff5
+
+P18-V01 request/reply facade export correction:
+- Pinned Java 5.5.1 exposes public `RequestCallback` and `MessageUtil.createReplyMessage` APIs. The Producer crate already had Rust equivalents, but the primary `rocketmq-classic` facade did not re-export them.
+- Re-exported `RequestCallback`, `create_reply_message`, and `ReplyMessageError` from the facade. Added a facade integration test that imports these names, constructs a reply, and checks the null-request error. Updated the Phase 15 request/reply matrix and appended the bounded disposition to the Phase 6 audit; the full P18-V01 audit remains open.
+- Initial focused test compilation exposed that `assert_eq!` required `Message: PartialEq`; changed the error assertion to `matches!` because reply messages intentionally do not implement structural equality.
+- `cargo test -p rocketmq-classic --test request_reply_public_api --locked` — passed (1 test).
+- `cargo clippy -p rocketmq-classic --all-targets --all-features --locked -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.

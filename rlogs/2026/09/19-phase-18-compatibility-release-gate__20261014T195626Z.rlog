@@ -1,0 +1,25 @@
+Phase 18 continuation — Push pull live-setting parity
+Session: 2026-10-14T19:56:26Z
+Branch: `phase/19-phase-18-compatibility-release-gate`
+Java oracle: `/Users/bruce.tsai/Projects/3rd/rocketmq`, pinned source commit `efa1be59d6fc747ad220f036c86030f05f0419f9` (read-only).
+Plan files left unchanged.
+
+Changes
+- Confirmed the pinned `DefaultMQPushConsumerImpl.pullMessage` reads `pullBatchSize` and `pullBatchSizeInBytes` for every request; Rust previously exposed only construction-time values through an immutable consumer config reference.
+- Changed the two Rust settings to atomic live values and added a scripted pull regression proving post-construction changes reach the wire as `maxMsgNums=7` and `maxMsgBytes=12345`.
+- Extended the invoked Java orderly fixture with defaults and configured values. Fixture SHA-256: `c00fbd654d1966bc7d4a870c03dca739d0b9465367b9bad239383dc6c11478c5`.
+- Code commit: `7ece0e66 fix(consumer): read live pull batch settings`.
+- Updated the Phase 10 method matrix, Phase 6 audit, and release checklist with behavior and test evidence.
+
+Validation
+- PASS: `cargo test -p rocketmq-classic-consumer --locked`.
+- PASS: `cargo test --workspace --locked`.
+- PASS: `cargo test --workspace --all-features --locked` (exit 0).
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios; fixture verified without regeneration).
+- PASS: `cargo fmt --all -- --check` and `git diff --check`.
+
+Audit status
+- P18-V01 remains open for the broad Java/Rust API, setting, input/error/control-flow, and reverse-export reconciliation.
+- A pinned-source search identified additional runtime read-timing rows to reconcile: `pullInterval`, pull flow-control thresholds, `messageModel`, POP batch/invisibility, `consumeTimeout`, `consumeThreadMax`, and `consumeFromWhere`. These are open audit items, not yet all confirmed defects.
+- P18-V04 still lacks a current GitHub Ubuntu CI result for the address profile. Phase 19 local Broker/Docker scenarios and version/registry release checks remain open.

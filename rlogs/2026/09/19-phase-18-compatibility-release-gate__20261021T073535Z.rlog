@@ -1,0 +1,74 @@
+Goal: reconcile the current Fastjson writer-feature inventory and docs after
+confirming all 48 pinned JSONWriter.Feature values are mapped for the supported
+RocketMQ DTO adapters on code revision `6441ca56`.
+
+Changes:
+- Updated the current Phase 6 compatibility map to 48/48 and removed stale
+  claims that 13 writer features remain unsupported.
+- Repaired the malformed RemotingSerializable table row and replaced the stale
+  35/48 summary with current fixture and validation evidence.
+- Corrected the writer_feature.rs module documentation to describe the full
+  feature mapping and output-preserving cases.
+- Added a release-checklist follow-up. The broader P18-V01 API/source/settings/
+  input/error/control-flow/reverse-export audit remains open.
+
+Validation passed:
+- `cargo test -p rocketmq-classic-protocol --all-features --locked` (148
+  passed, including doctests)
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features
+  --locked -- -D warnings`
+- `cargo fmt --all -- --check`
+- `git diff --check`
+
+The current-revision full-workspace and Java Maven P18-V02 results remain
+recorded for code revision `6441ca56`. The four Phase 19 worktree paths were
+left unchanged and unstaged.
+
+P18-V03 package/provenance refresh on code revision `6441ca56`:
+- Rechecked nine cached Maven 5.5.1 artifacts against recorded SHA-256 and
+  published SHA-1 values; four source-JAR files match their pinned tag bytes
+  and the tag target is `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- `cargo metadata --locked --format-version 1` resolves 216 packages (208
+  registry packages), including eight workspace packages; all eight remain
+  version 0.1.0 with publication disabled. Workspace metadata/license/
+  dependency-direction checks pass. Cargo lists eight workspace packages:
+  seven product crates with LICENSE/NOTICE and the unpublished integration
+  helper.
+- P18-V03 preparation review is current. Release-version selection and
+  published-registry dependency resolution remain post-Phase-19 work per plan;
+  no release claim is made.
+
+P18-V01 direct subscription-group RPC closure on 2026-10-21:
+- Added `MQClientApi::create_subscription_group` for the pinned Java
+  `MQClientAPIImpl.createSubscriptionGroup(String, SubscriptionGroupConfig,
+  long)` signature and request 200. It Java-encodes a present config, sends no
+  body for null, applies the configured VIP port transform, and maps Broker
+  errors. Java fixtures cover populated/default/null configs and Broker error.
+- Fixture SHA-256:
+  `aaab68664cf25ff86c9b19a48c27e4691596b31124123fdbd83f7ceb93f89b57`.
+- Passed the focused Rust filter (2 unit and 3 integration tests), strict
+  all-target/all-feature Core Clippy, `cargo fmt --all -- --check`,
+  `git diff --check`, and pinned Java Maven `verify` (RPC harness plus 68
+  typed-header and 15 typed-body cross-decodes).
+- Scope is limited to this direct API gap. The broad P18-V01 audit,
+  current Ubuntu/native Windows P18-V04 evidence, and Phase 19 live Broker
+  scenarios remain open. The four preserved Phase 19 worktree paths were not
+  staged.
+
+P18-V01 NameServer KV direct APIs on 2026-10-21:
+- Added Java `MQClientAPIImpl` mappings for get value (101), broadcast put
+  (100), broadcast delete (102), and get namespace table (219). Null request
+  fields/results are preserved; get operations select one NameServer; put and
+  delete visit all configured NameServers and report the final non-success
+  response, matching the direct low-level Java methods. The separate
+  `MqClientAdmin.deleteKvConfig` explicit-address operation is unchanged.
+- Added Java request/response header models and Java→Rust/Rust→Java typed
+  fixtures. The header inventory and Maven verification now cover 72 frames.
+  Producer core fixture SHA-256:
+  `7e6aecbca17b9711ed3276de4aae2c500fdd8f90bdeb1bde7a7c59b0d3c402af`.
+- Passed Protocol locked tests (148 tests including doctests), focused Core
+  Java differential, strict locked all-feature workspace Clippy, and pinned
+  Maven `verify` (37 RPC cases, 72 typed headers, 15 typed bodies).
+- This closes only the NameServer KV slice. Broad P18-V01 and current-revision
+  Ubuntu/native Windows P18-V04 evidence remain open. Four preserved Phase 19
+  worktree paths remain unstaged.

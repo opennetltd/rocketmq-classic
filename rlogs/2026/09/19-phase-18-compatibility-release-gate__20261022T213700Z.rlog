@@ -1,0 +1,43 @@
+P18-V02 server-free gate refresh after decoder API correction —
+2026-10-22 21:37 UTC
+
+Environment: macOS AArch64, Apple M5 Max (18 logical CPUs), Rust 1.85.0.
+Branch: `phase/18-phase-18-compatibility-closure`. Source revision:
+`95525c06 fix(common): hide non-Java strict batch APIs`. Pinned RocketMQ Java
+client/source: 5.5.1, commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Current-revision verification:
+- Default and all-feature workspace tests — PASS.
+- Strict all-target/all-feature Clippy, format check, and `git diff --check` —
+  PASS.
+- Common Rustdoc generation — PASS; the generated public decoder page lists
+  Java-mapped batch methods but no strict `decode_many` exports.
+- Pinned `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS; 37
+  scenarios, 11 message decoder fixtures, 36 route/VIP cases, 106 typed
+  headers, and 19 typed bodies.
+- Differential comparator self-test and manifest validation — PASS (37
+  scenarios); the validator checks all pending prior-phase handoff source IDs.
+  30 live scenarios are registered as `PENDING_PHASE_19`.
+- Bounded fuzz smoke — PASS (163 frame seeds, 11 message seeds, 2,784
+  mutations, 245 frame decodes, 192 message decodes).
+- Offline deterministic race/leak smoke — PASS (16 cases x 3 repetitions).
+- Release facade examples and offline benchmark — PASS.
+- Workspace metadata checks and seven product package listings — PASS; each
+  listing contains `LICENSE` and `NOTICE`.
+- Four Core Unique ID tests under both `TZ=UTC` and `TZ=Asia/Taipei` — PASS.
+- Windows GNU Core all-target check and Consumer unit-test cross-compilation —
+  PASS; native Windows execution was not run.
+
+Offline benchmark sample: Remoting encode/decode 2,275.7 ns
+(40 allocations / 4,676 bytes); Zstd message decode 1,161.0 ns
+(17 / 197,493 bytes); Producer request construction 1,182.4 ns
+(54 / 3,665 bytes); route lookup 14.2 ns (0 / 0 bytes); loopback pending
+completion 67,924.7 ns (81 / 9,546 bytes). Timings are machine/run specific;
+no acceptance threshold is defined.
+
+This closes the current local server-free P18-V02 gate only. Broad P18-V01
+source/API/settings/input/error/control-flow and reverse-export reconciliation,
+current-revision remote Ubuntu CI, native Windows execution, and Phase 19
+Broker/Docker evidence remain open. No push, external CI, publication, or
+release action was performed. Protected Phase 19 worktree paths remain
+unstaged.

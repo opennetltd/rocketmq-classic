@@ -1,0 +1,9 @@
+# Phase 19 CI revalidation
+
+- Pushed source/evidence commits `92cae47d` and `5eb2cb24` on `phase/19-docker-local-validation`.
+- CI run `40352003113` completed with the main test job and Windows stack-runtime job passed. The main job passed the slow release examples build within its 120-minute cap.
+- The Docker matrix completed in 1h57m58s. All server-free gates passed; live `P5-V02-producer` and `P5-V02-consumer` passed. It failed while executing `P5-V02-extensions` and emitted no underlying command error or TSV output.
+- A focused P5 extensions run on clean source revision `5eb2cb2450ec6dbb936bf2b69e7acbfbbb759edc` passed in 151 seconds with Compose cleanup. Evidence: `docs/compatibility/evidence/phase-19/P5-V02-extensions/20261026T174312Z/`.
+- Added per-substep console markers to the P5 extension scenario and a CI failure artifact upload for run-local/P5 evidence. The manifest now points to the clean focused run.
+- Raw CI logs and run metadata: `docs/compatibility/evidence/phase-19/CI-DOCKER-RETRY-005/20261026T174120Z/`.
+- No Phase 19 plan files were edited. The next push must validate the diagnostic upload and continue the live scenario inventory.

@@ -1,0 +1,56 @@
+# Phase 18 compatibility continuation — 2026-10-18 05:21:34 UTC
+
+## Scope and branch
+
+- Continued the user goal to close Phases 15–18, with phase-specific branches
+  and separate code/documentation commits. Created branch
+  `phase/19-phase-18-compatibility-release-gate-resume` from the existing
+  Phase 18 gate branch. Existing uncommitted Phase 19 runner/readme changes
+  were preserved and excluded from this Phase 18 code commit.
+- Pinned Java oracle remains the read-only RocketMQ checkout at
+  `/Users/bruce.tsai/Projects/3rd/rocketmq`, client source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## P18-V01 `getConsumeStats`
+
+- Added the Java `MqClientAdmin.getConsumeStats(address, header, timeout)`
+  method mapping to `MQClientApi::mq_client_admin().get_consume_stats`, request
+  code 208, nullable success body and Broker error classification.
+- Added `ConsumeStats` and `OffsetWrapper` Rust DTOs with the Java public
+  accessors, zero defaults, nullable MessageQueue-keyed offset table, mutable
+  shared map/entry aliases, and wrapping `computeTotalDiff` /
+  `computeInflightTotalDiff` arithmetic.
+- Extended the invoked Java 5.5.1 fixture with method signatures, public DTO
+  methods, defaults, aliases, request fields, encoded response data, computed
+  totals, null-body result and Broker error. Added a Java/Rust typed-body
+  fixture for this response; the typed-header oracle now uses request code 208.
+- Code commit: `7375c283 feat(admin): add consume stats RPC adapter`.
+
+## Verification
+
+- `cargo test -p rocketmq-classic-protocol --all-features --locked` — passed:
+  134 unit tests, integration targets and 51 doctests.
+- `cargo test -p rocketmq-classic-core --test admin_rpc --locked` — passed all
+  48 tests, including success, null body, Broker error and malformed body for
+  `getConsumeStats`.
+- `cargo clippy -p rocketmq-classic-protocol -p rocketmq-classic-remoting -p rocketmq-classic-core --all-targets --all-features --locked -- -D warnings` — passed.
+- `mvn -q -f compat/java-reference/pom.xml verify` — passed 37 scenarios,
+  fixture drift checks, 66 Rust-generated typed-header decodes and 15
+  Rust-generated typed-body decodes.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- The first Java compile exposed comparator-lambda type inference and a local
+  variable name collision; explicit generic typing and a distinct DTO variable
+  resolved both. The first Core test compile exposed a local `api` binding that
+  shadowed the test helper; renaming the binding resolved it. Final runs above
+  pass. No Broker or Docker was used.
+
+## Remaining work
+
+- The source-backed `MqClientAdmin` count is now 17/19; implement and verify
+  `updateOrCreateSubscriptionGroup` and `getConsumerRunningInfo`, then finish
+  the broad bidirectional P18-V01 audit.
+- Final-revision full-workspace P18-V02, P18-V03 package/provenance review,
+  current-revision P18-V04 Ubuntu/Windows evidence, Phase 19 local
+  Docker/Broker scenarios and runner reconciliation, and pre-publication
+  version/registry checks remain open. Owner-only validation remains in the
+  separate manual handoff.

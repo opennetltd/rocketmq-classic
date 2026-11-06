@@ -1,0 +1,11 @@
+# Phase 18 execution session — 2026-10-13T10:59:57Z
+
+- Continued P18-V01 on `phase/19-phase-18-compatibility-release-gate`. The working tree contained the unfinished Pull implementation accessor state/subscription mapping; this session completes its fixture and offline evidence and commits it independently.
+- Reconciled the pinned RocketMQ Java 5.5.1 `DefaultMQPullConsumerImpl` accessors with Rust: `groupName`, `messageModel`, `isUnitMode`, `consumeType`, `consumeFromWhere`, and `subscriptions`. Confirmed Java `SubscriptionData.equals/hashCode` includes `subVersion`, so Rust registration uses a `HashSet<SubscriptionData>` and preserves distinct versions for otherwise identical specifications. Pull's fixed `CONSUME_FROM_LAST_OFFSET` accessors are separate from the crate-private config bridge still needed by the Lite adapter.
+- Added invoked Java fixture cases for pre-start group name, model/unit settings before and after mutation, consumption type/origin, empty/topic-derived/explicit subscription branches, and equal subscription specs with different versions. Added Rust differential and lifecycle checks and updated the Phase 9 method matrix.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (170 unit tests, 43 integration tests, doc tests).
+- PASS: `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, including Java accessor fixture verification and cross-decodes).
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. This closes the listed Pull state/subscription accessor rows only. P18-V01 remains open for raw hook invocation, rebalance entrypoint, offset raw-entrypoint, running-info accessor, and implementation-state accessor reconciliation; Phase 6 broad source/API/input/platform audit remains partial.
+- Code, Java fixture, compatibility matrix, and this execution log are included in the independent accessor-mapping commit for this session.

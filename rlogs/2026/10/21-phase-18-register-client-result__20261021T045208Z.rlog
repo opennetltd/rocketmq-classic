@@ -1,0 +1,27 @@
+# Phase 18 registerClient result compatibility slice — 2026-10-21T04:52:08Z
+
+- Continued the pinned Java client source audit at
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`. `MQClientAPIImpl.registerClient`
+  was missing from Core despite sharing heartbeat request code 34 with the
+  existing heartbeat operation. Its Java contract sends a synchronous request
+  to the supplied address and returns true only for `SUCCESS`; other Broker
+  response codes return false.
+- Added `MQClientApi::register_client`, preserving the empty header, encoded
+  `HeartbeatData`, supplied address, and boolean response contract. The direct
+  Java invocation fixture and Rust scripted RPC compare the exact signature,
+  request body, timeout, and success/non-success outcomes. Producer core
+  fixture SHA-256:
+  `434a3fe8b1cba71732f41ccb710e601e0d8ce4cbcf196265695cef7641b90905`.
+- Validation passed: Core all-feature locked suite (177 unit tests, all
+  integration targets, 16 doctests); strict all-target/all-feature Clippy for
+  Common, Core, Producer and facade; Producer pinned fixture comparison;
+  pinned Java Maven `verify` (37 scenarios, fixture drift, 67 typed-header
+  frames, 15 typed-body fixtures and Java/Rust cross-decodes); formatting;
+  and scoped `git diff --check`.
+- Updated the Phase 6 API map and requirement audit, Java compatibility
+  summary, producer fixture digest progression, release checklist and this
+  record. The Phase 18 plan was not edited. Broad P18-V01, final
+  current-worktree P18-V02, P18-V03 package/provenance review and current
+  Ubuntu/native Windows P18-V04 evidence remain open. No remote CI or Phase 19
+  Broker/Docker validation ran.
+- Phase 19 worktree files remain untouched and unstaged.

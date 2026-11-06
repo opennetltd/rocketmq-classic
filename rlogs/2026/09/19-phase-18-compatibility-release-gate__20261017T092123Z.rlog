@@ -1,0 +1,46 @@
+# Phase 18 RemotingCommand default-constructor parity execution log
+
+- Session timestamp: 2026-10-17 09:21:23 UTC.
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Java oracle: `/Users/bruce.tsai/Projects/3rd/rocketmq`, pinned source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; checkout inspected read-only.
+- Scope: align the Rust `RemotingCommand::default()` state with the pinned Java
+  constructor and preserve the Java request-ID increment behavior in factories.
+
+## Changes
+
+- `Default` now uses Java language code and allocates the next process-wide
+  opaque ID, along with the existing Java-equivalent zero/null/default fields.
+- Factory construction now uses the ID allocated by `Default`, so each command
+  consumes one ID rather than allocating and discarding an extra ID.
+- The JSON header regression now checks the Java default language code.
+- The invoked Java fixture reflects the protected constructor and records the
+  default fields and opaque-ID increment; Rust compares them in an isolated
+  child process with serialization properties cleared.
+- Fixture SHA-256:
+  `b1dc81c3c70894dfd4e669a59027590bb6d79499a8c34e4c87ca1b6d60cb70ab`.
+
+## Commands and results
+
+- Focused default behavior and factory request-ID tests: exit 0.
+- `cargo test -p rocketmq-classic-remoting --all-features --locked`: exit 0;
+  113 unit, 8 codec, 1 fuzz regression, 7 security, 107 transport and 15
+  doctests passed. An initial run caught the old JSON test's `RUST` expectation;
+  it was changed to the Java constructor value and the complete run passed.
+- `cargo check --workspace --all-features --locked`: exit 0.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings`: exit 0.
+- `cargo fmt --all -- --check` and `git diff --check`: exit 0.
+- `mvn -o -q -f compat/java-reference/pom.xml verify`: exit 0; 37 scenarios,
+  fixture-drift checks and Java/Rust header/body cross-decodes passed.
+
+## Commit and remaining gates
+
+- Code/test/fixture and documentation are prepared for separate commits.
+- This closes the default-state difference only. Long-poll RPC metric emission,
+  multi-entry `toString()` map ordering, custom-header representation details,
+  and broad bidirectional P18-V01 remain open.
+- The final full-workspace P18-V02 run, current-revision Ubuntu/Windows CI,
+  P18-V03 package/version review, P18-V04 handoff/CI evidence, and outstanding
+  Phase 19 local Broker scenarios remain open.

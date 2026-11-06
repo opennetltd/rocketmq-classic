@@ -1,0 +1,61 @@
+# Phase 18 Push ConsumeMessageService replacement seam — 2026-10-21T17:43:15Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `8b1a77ff` (`feat(consumer): expose consume message service parity`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `2ceab3283085fa8335cd3e7a965c1698e10960ae720c76b148af4cb52a196b4b`.
+
+## Source audit and change
+
+- Added the public Rust `ConsumeMessageService` trait, future alias and nullable
+  Push owner getter/setter. Custom services receive direct-consume and normal
+  Pull submissions, accepted pool updates, adjustment hooks and shutdown.
+- Java 5.5.1 routes POP consumption through its separate private
+  `consumeMessagePopService`; Rust retains that split after primary-service
+  replacement. Built-in primary `submitPopConsumeRequest` remains unsupported.
+- Matched Java `ProcessQueue.removeMessage` for in-flight entries, including
+  cached count/bytes, removed-offset tracking and returned next offset.
+- Extended the Java accessor fixture to record all nine public
+  `ConsumeMessageService` signatures. Updated the Phase 6, 10, 18 and release
+  compatibility records.
+- Explicit null service assignment no longer falls back to the previous
+  built-in service for direct, Pull or pool-update paths. Built-in adjustment
+  hooks remain no-ops, matching the pinned Java services.
+
+## Verification
+
+- PASS: focused Java service accessor and in-flight `ProcessQueue` removal
+  tests; all Consumer package tests and doctests.
+- PASS: `cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked --quiet`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`; `cargo fmt --all --check`; `git diff --check`.
+- PASS: `mvn -q verify` from `compat/java-reference`; 37 scenarios, fixture
+  drift checks, Java/Rust cross-decodes, 83 typed headers and 16 typed bodies.
+  Existing JDK Unsafe and reflective-final-field warnings were emitted.
+- PASS: `python3 tests/differential/compare.py --self-test` and
+  `--validate-manifest` (37 scenarios).
+- PASS: `bash tests/stress/run-offline-smoke.sh` (16 deterministic cases × 3).
+- PASS: release fuzz smoke (137 frame seeds, 11 message seeds, 2,368 bounded
+  mutations, 201 frame decodes and 118 message decodes).
+- PASS: `cargo build --workspace --examples --release --locked` and
+  `cargo bench --workspace --no-run --locked`.
+- PASS: `cargo bench -p rocketmq-classic --bench offline --locked` on macOS
+  AArch64, Apple M5 Max, Rust 1.85.0. Measurements: frame encode/decode
+  2,299.7 ns/iteration; message zstd decode 1,184.7 ns; producer request
+  construction 1,181.0 ns; 128-entry route lookup 14.6 ns; loopback pending
+  completion 74,033.7 ns. These are observations, not thresholds.
+- An initial `cargo test --workspace --all-targets --locked` attempt executed
+  the offline benchmark in test mode and failed its release-mode guard. The
+  standard workspace test commands above passed; the benchmark was then built
+  and run through its release-mode command successfully.
+
+## Remaining status
+
+This closes the named raw service-replacement seam only. Broad P18-V01 remains
+open: arbitrary application-defined Java `MessageExt` subclasses and the
+remaining source/API/settings/input/error/control-flow/reverse-export review.
+Current-revision GitHub Ubuntu and native Windows P18-V04 evidence remain
+absent, and Phase 19 Broker/Docker validation remains separate. No remote CI or
+push was performed. Pre-existing Phase 19 working-tree paths were left
+unstaged and untouched.

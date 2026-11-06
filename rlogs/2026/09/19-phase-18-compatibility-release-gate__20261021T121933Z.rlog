@@ -1,0 +1,24 @@
+Phase 18 `getBrokerLiteInfo` RPC and response DTO
+
+Date: 2026-10-21 UTC
+Branch: `phase/18-phase-18-compatibility-closure`
+
+Scope:
+- Added `MQClientApi::get_broker_lite_info` for pinned Java request 200074, with a null custom header, no body, configured VIP address transform, caller deadline and nullable response body.
+- Added `GetBrokerLiteInfoResponseBody`, including Java primitive defaults, nullable `topicMeta`/`groupMeta` values and mutable getter aliases.
+- Added six invoked Java cases and Rust differentials for populated/default DTOs, absent/malformed bodies, and known/unknown Broker errors; a VIP loopback checks the address transform.
+- Updated the request-code map, Java compatibility evidence and release checklist.
+
+Evidence:
+- Code commit: `35de5ec4` (`feat(core): add get broker lite info RPC`).
+- Success fixture SHA-256: `57eff87ee4fd5bc652076a744109cdc2fb4d395362558b6ed5802e5dc166fe0e`.
+- Focused protocol/Core body and VIP tests passed; `rpc_invoked_ext_more_fixtures::invoked_lifecycle_extension_cases_match_rust` passed.
+- `cargo fmt --all -- --check`, `git diff --check`, and strict locked all-target/all-feature workspace Clippy passed.
+- `cargo test --workspace --locked` and `cargo test --workspace --all-features --locked` passed. The first all-features run hit a transient failure in the unrelated consumer cleanup race test; that test passed alone and the complete all-features run passed on rerun.
+- Pinned `mvn -f compat/java-reference/pom.xml verify` passed with 37 scenario-manifest cases, 80 Java-decoded Rust typed header frames, and 15 typed body frames.
+
+Remaining:
+- Broad P18-V01 bidirectional API/settings/input/error/control-flow/reverse-export audit remains open.
+- Other pinned Lite discovery calls still require parity closure: `GET_PARENT_TOPIC_INFO` (200075), `GET_LITE_CLIENT_INFO` (200077), and `GET_LITE_GROUP_INFO` (200078).
+- Current Ubuntu/native Windows P18-V04 evidence and Phase 19 live Broker scenarios remain open.
+- Preserved Phase 19 worktree paths remain unstaged and untouched.

@@ -1,0 +1,8 @@
+# Phase 18 continuation — 2026-10-18T18:57:53Z
+
+- Branch: `phase/18-phase-18-compatibility-closure`. Java oracle at `/Users/bruce.tsai/Projects/3rd/rocketmq` remained read-only. Existing uncommitted Phase 19 README, differential runner and local runner changes were not staged or modified.
+- Pinned Java 5.5.1 `QueryMessageResponseHeader` has private watermark fields. Made the Rust fields crate-private, added Java-equivalent getters/setters, migrated Core/Consumer/Remoting/Protocol call sites, added the class to the Java API inventory and asserted its empty public-field list in the Rust differential.
+- The first filtered Protocol test command selected zero tests. Re-ran the full Protocol `headers` target; all 15 passed.
+- Verification passed: workspace all-target/all-feature `cargo check`; Protocol `headers` target (15) and doctests (98); Remoting query/admin reflection differential (1); Core `admin_rpc query_message` (6); Consumer `admin query` (1); strict workspace all-target/all-feature Clippy; `TZ=UTC mvn -o -q -f compat/java-reference/pom.xml verify` (37 scenarios, fixture checks, 66 typed-header and 15 typed-body cross-decodes); formatting and `git diff --check`.
+- Query-admin fixture SHA-256: `482d0d317162c15b8d159326f5ef59822b3142241c0dad00ea2ba293121d35e0`. Code commit: `85c9bae5` (`fix(protocol): align query response header visibility`). Checklist and this log are tracked separately.
+- This closes one response-header visibility row only. Broad P18-V01 bidirectional reconciliation, the final current-revision P18-V02 gate, current GitHub Ubuntu/native Windows P18-V04 evidence, and Phase 19's 30 missing local Broker/Docker scenario runners/profiles remain open. Owner-only validation remains in the separate manual handoff.

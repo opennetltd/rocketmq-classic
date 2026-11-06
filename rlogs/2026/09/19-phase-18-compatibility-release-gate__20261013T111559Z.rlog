@@ -1,0 +1,11 @@
+# Phase 18 execution session — 2026-10-13T11:15:59Z
+
+- Continued the Phase 9 Pull subscription/rebalance audit. Java `DefaultMQPullConsumerImpl.subscriptionAutomatically` writes the implementation `subscriptionInner`, and rebalance traverses that table. Rust's `rebalance_once` had traversed only facade `register_topics`, so a raw automatically subscribed topic could not enter the rebalance loop.
+- Changed Pull rebalance to derive current topics from the shared implementation subscription map, retaining previous assignments in the scan so removed subscriptions are reconciled. The clustering rebalance test now has an implementation subscription with no facade registration and verifies assignment from that map.
+- Updated the Phase 9 matrix to describe the shared-map rebalance path and test evidence.
+- PASS: focused `pull_rebalance_uses_implementation_subscription_map_and_membership` test.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (172 unit tests, 43 integration tests, doc tests).
+- PASS: `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- No Java fixture changed in this session; the existing pinned-source fixture remains verified by the prior `mvn -q -f compat/java-reference/pom.xml verify` run. No live Broker or Docker was used.
+- This closes the automatic-subscription topic selection behavior in the runtime rebalance flow. Direct raw `doRebalance`/`tryRebalance` and callback facade entrypoints remain to be mapped; P18-V01 remains open.
+- Rust source, test, method matrix, and this log are included in the independent rebalance-subscription commit.

@@ -43,13 +43,13 @@ crates/rocketmq-classic-remoting/tests/transport.rs
 docs/architecture/ADR-0001-remoting-transport.md
 ```
 
-invoke(addr, command, deadline) 回傳一個 future；invoke_oneway 不插入 pending response。pending entry 包含 connection generation、deadline 與 oneshot sender。map 可由短暫同步鎖保護，但 guard 不得跨 await；remove 就是 terminal ownership 操作。每個 connection 一個 reader 與有界 writer path，加上受管理 timeout scheduler 即足夠；不可每個 request 建立 timeout task。採 Tokio time，讓測試可確定性推進 deadline。
+invoke(addr, command, deadline) 回傳一個 future；invoke_oneway 不插入 pending response。pending entry 包含 connection generation、deadline 與 oneshot sender。map 可由短暫同步鎖保護，但 guard 不得跨 await；remove 就是 terminal ownership 操作。每個 connection 一個 reader 與無界 outbound enqueue/writer path，加上受管理 timeout scheduler 即足夠；不可每個 request 建立 timeout task。採 Tokio time，讓測試可確定性推進 deadline。
 
 ## 4. 依序實作步驟
 
 ### 4.1 P3-01 / P3-02 — 管理與重用 connection generation
 
-序列化 write，限制 outbound queue，保留 join handle。address key 正規化不得破壞 IPv6、DNS/SNI 或 TLS identity。同 key 採 single-flight creation 並分享健康 connection；stale close 只可移除自己的 generation。creation 被取消時需關閉未公開 socket，不同 address 則可並行連線。
+序列化 write；outbound frame enqueue 不設硬容量上限並保留 join handle，遵循 Java Netty `writeAndFlush` 行為，不額外加入 Rust 專屬 queue-full 拒絕。address key 正規化不得破壞 IPv6、DNS/SNI 或 TLS identity。同 key 採 single-flight creation 並分享健康 connection；stale close 只可移除自己的 generation。creation 被取消時需關閉未公開 socket，不同 address 則可並行連線。
 
 ### 4.2 P3-03 / P3-04 — 讓 pending ownership 具原子性
 
@@ -57,11 +57,11 @@ opaque 使用 wrapping atomic generation；wrap 時不得覆寫仍 pending 的�
 
 ### 4.3 P3-05 / P3-06 — 所有階段共用一個 deadline
 
-admission、connection acquisition、TCP/TLS handshake、outbound queue wait、write 與 response wait 共用同一 deadline。已逾時 invoke 不得送出。區分 connect、timeout、closed 與 malformed-frame error。oneway 設定對應 bit，只等待由 Java 記錄而來的有界 transport acceptance/write 語意，不宣稱 Broker 儲存成功。
+admission、connection acquisition、TCP/TLS handshake、socket write 與 response wait 共用同一 deadline。outbound enqueue 無界，不等待 queue capacity。已逾時 invoke 不得送出。區分 connect、timeout、closed 與 malformed-frame error。oneway 設定對應 bit，以無硬容量上限方式 enqueue，並遵循 Java 的非同步 write failure 處理；不宣稱 Broker 已收到或儲存成功。
 
 ### 4.4 P3-07 — 將 inbound request 移出 reader 處理
 
-先區分 response 與 request，再查 pending。依 raw code 將 request 交給有界且受管理 processor executor；response 保留原 opaque 並設定 response bit。不支援的 request 回 Java 相容 unsupported code，但 inbound oneway 不得回覆。依 Oracle 定義 overload 行為；不得靜默丟棄已接受的 transaction/reply 工作。
+先區分 response 與 request，再查 pending。依 raw code 將 request 交給受管理 processor workers，queue admission 須符合 Java executor backlog 行為（Java 採無界 queue 時，Rust 亦不設人為容量上限）；response 保留原 opaque 並設定 response bit。不支援的 request 回 Java 相容 unsupported code，但 inbound oneway 不得回覆。依 Oracle 定義 rejection 行為；不得靜默丟棄已接受的 transaction/reply 工作。
 
 ### 4.5 P3-08 — 實作具驗證的 TLS
 
@@ -75,11 +75,13 @@ admission、connection acquisition、TCP/TLS handshake、outbound queue wait、w
 
 先寫對應失敗測試／Oracle fixture，再依序實作；以下 case 必須成為可執行檢查，而非人工勾選。以下檢查不依賴 Docker 或 live Broker，使用 Java fixture、可控時鐘及 scripted peer；共通命令與證據規則見執行索引。
 
-- [ ] **P3-V01** — 以 barrier 控制 response/timeout/cancellation/shutdown race，最多完成一次且 pending 為零；包含 opaque wrap。
-- [ ] **P3-V02** — old-generation close 不得移除 replacement；並行 creation 只產生一個 connection；write 飽和仍遵守 deadline。
-- [ ] **P3-V03** — loopback inbound request、unsupported/oneway 行為及並行 response 正常，reader 不被阻塞。
+- [x] **P3-V01** — 以 barrier 控制 response/timeout/cancellation/shutdown race，最多完成一次且 pending 為零；包含 opaque wrap。
+- [x] **P3-V02** — old-generation close 不得移除 replacement；並行 creation 只產生一個 connection；無界 outbound enqueue 可超過先前 queue 容量，socket write 阻塞仍遵守 operation deadline。
+- [x] **P3-V03** — loopback inbound request、unsupported/oneway 行為及並行 response 正常，reader 不被阻塞。
 
-- [ ] **P3-U01** — scripted TCP/TLS peer 驗證 raw route framing、CA 信任／不信任與 hostname 失敗、deadline 及 shutdown 後零 owned task。
+- [x] **P3-U01** — scripted TCP/TLS peer 驗證 raw route framing、CA 信任／不信任與 hostname 失敗、deadline 及 shutdown 後零 owned task。
+
+以上四項勾選只記錄本機自動化測試證據，不代表 Phase 3 已驗收。Java/Rust executor 與 callback lifecycle review 仍於 inventory 標示 Tokio 排程／所有權差異；P3-V04 仍延後至 Phase 19。
 
 ### 5.1 實作完成後的本機命令
 

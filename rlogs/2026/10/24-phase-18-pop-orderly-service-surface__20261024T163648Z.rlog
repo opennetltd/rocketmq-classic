@@ -1,0 +1,52 @@
+# Phase 18 POP orderly service public-surface disposition
+
+- Recorded: 2026-10-24 16:36:48 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Inventory/test revision: `43ab1572`
+- Host: macOS AArch64, Rust 1.85.0
+- Java reference: `org.apache.rocketmq:rocketmq-client:5.5.1`, source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Finding
+
+- Pinned `ConsumeMessagePopOrderlyService` has one public constructor and 15
+  declared public methods. Its Java service field in
+  `DefaultMQPushConsumerImpl` is private and has no getter.
+- The fixture now records all constructor and method signatures. Java's active
+  owner calls are startup, shutdown, scheduled lock renewal and POP request
+  submission. The nested `ConsumeRequest.run` ends after its dropped check and
+  sharded lock lookup. `submitConsumeRequest` throws
+  `UnsupportedOperationException`; `processConsumeResult` returns `true`
+  without processing.
+- Rust owns POP delivery and orderly lock lifecycle through `PushConsumer`,
+  `OrderlyConsumeService` and its internal POP worker. It does not expose a
+  separately constructible concrete POP-orderly service. No one-to-one parity
+  claim is made for direct construction or helper methods not reached from the
+  active request path.
+- Java source SHA-256:
+  `0ac19d46f50110b5b5f2e6b3e21d4b6ac5e71ee33a81f63bfd24f5508803ad08`.
+- Invoked fixture source SHA-256:
+  `42ba03bb1f206cba0e71277aab1df308037280e0650b7fb8a09449103154cfc1`.
+- Updated fixture SHA-256:
+  `be16e9671f172e534116f6b575d278a8105a883a2b2a7a847931fa4e656e8b15`.
+
+## Verification
+
+- `pinned_java_pop_orderly_service_surface_is_recorded` passes with the exact
+  public constructor and all 15 declared methods.
+- Strict Consumer all-target/all-feature Clippy passes.
+- Pinned offline Maven `verify` passes all 37 scenarios, fixture drift checks,
+  11 message fixtures, 106 typed headers, and 19 typed bodies. The first verify
+  correctly rejected the stale checked-in fixture; the fixture was regenerated
+  from the invoked Java class and the complete verify then passed.
+- `cargo fmt --all -- --check` and `git diff --check` pass.
+
+## Remaining audit status
+
+- This records the concrete implementation-class API and its owner-path
+  disposition; direct Rust construction/helper-method parity is not provided.
+  Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export
+  reconciliation remains PARTIAL.
+- Native Windows runtime and current-revision remote Ubuntu CI remain
+  unverified. No push or remote CI ran.
+- Phase 19 user-owned paths remain unchanged and unstaged.

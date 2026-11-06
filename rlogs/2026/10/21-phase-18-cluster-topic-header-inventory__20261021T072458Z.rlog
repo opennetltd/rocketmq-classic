@@ -1,0 +1,33 @@
+Goal: close the missing Phase 18 header inventory and reverse-frame evidence for
+the already implemented `GetTopicsByClusterRequestHeader`, on branch
+`phase/18-phase-18-compatibility-closure`.
+
+Changes:
+- Added `GetTopicsByClusterRequestHeader` to the Protocol header inventory and
+  validation matrix. Its Java constructor, getter, setter, and no-op
+  `checkFields` API inventory is recorded in the query-admin decode fixture.
+- Added the request-224 typed Rust frame with `cluster=cluster-a` to the
+  Java cross-decode generator and verifier, raising the exact header count
+  from 67 to 68.
+- Replaced randomized `Map.of`-derived `KVTable` fixture order with explicit
+  insertion order. `fixtures/producer/core.json` SHA-256:
+  `861cc12c939270c338349d9ec343a4aaceb8e987031c99c016f75e03df4537c1`.
+- Updated request-code and Java compatibility evidence and the release
+  checklist. The pinned Phase 18 plan was not edited.
+
+Verification passed:
+- `cargo test -p rocketmq-classic-protocol --locked --test headers
+  header_validation_matrix`
+- `cargo test -p rocketmq-classic-protocol --locked --test header_inventory`
+- `cargo test --workspace --locked`
+- `cargo test --workspace --all-features --locked`
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`
+- `mvn -q -f compat/java-reference/pom.xml verify` (37 invoked RPC scenarios,
+  68 Rust typed-header frames, 15 typed-body fixtures, and Java/Rust
+  cross-decodes)
+- `cargo fmt --all -- --check` and `git diff --check`
+
+This closes only the named header inventory and reverse-frame evidence gap.
+Broad P18-V01 and P18-V02/P18-V03/P18-V04 remain open. The four Phase 19
+working-tree paths were left untouched and unstaged.

@@ -1,0 +1,24 @@
+Phase 18 continuation — Push runtime setting read-timing parity
+Session: 2026-10-14T20:25:17Z
+Branch: `phase/19-phase-18-compatibility-release-gate`
+Java oracle: `/Users/bruce.tsai/Projects/3rd/rocketmq`, pinned source commit `efa1be59d6fc747ad220f036c86030f05f0419f9` (read-only).
+Plan files left unchanged.
+
+Changes
+- Made post-construction Push settings mutable through the retained config reference where pinned Java reads them at runtime, including pull interval/batches, flow-control thresholds, POP request values, consume timeout/thread maximum/origin/timestamp, retry/suspend/consume batch values, unit mode, shutdown wait, adjustment threshold, `clientRebalance`, and message queue listener.
+- Preserved Java's start-time snapshot behavior: `PullAPIWrapper` captures unit mode at start; `RebalanceImpl` captures message model and allocation strategy at start. Facade/heartbeat setting reads remain live where Java reads the consumer directly.
+- Added regressions for dynamic pull/flow/POP/consume/offset settings, post-construction rebalance boolean/listener updates, and pre-start versus post-start strategy/model mutation.
+- Code commit: `f0eaf53e fix(consumer): honor live push runtime settings`.
+- Updated Phase 10 timing matrix, Phase 6 audit, and release checklist. Broad P18-V01 API/source/input/error/control-flow/reverse-export audit remains open.
+
+Validation
+- Initial test run found the broker-assignment regression's scripted membership queue now held two rows; corrected its expected remaining count.
+- A follow-up compile caught `PushConsumerConfig::validate` passing the new lock-backed timestamp field instead of its getter value; validation now reads the getter.
+- PASS: `cargo test -p rocketmq-classic-consumer --all-features --locked` (205 unit tests, all consumer integration targets and doctests).
+- PASS: `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all -- --check` and `git diff --check`.
+
+Remaining release/phase gates
+- P18-V01 broad bidirectional API/settings/input/error/flow and reverse-export reconciliation remains incomplete.
+- P18-V04 still lacks current-revision GitHub Ubuntu CI evidence for the address profile.
+- Full Phase 18 server-free gates must be rerun on the final revision; Phase 19 Broker/Docker execution and pre-publication registry/version checks remain later gates.

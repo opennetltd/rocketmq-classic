@@ -1,0 +1,21 @@
+Phase 18 `getLiteGroupInfo` RPC and response DTO
+
+Date: 2026-10-21 UTC
+Branch: `phase/18-phase-18-compatibility-closure`
+
+Scope:
+- Added `MQClientApi::get_lite_group_info` for pinned Java request 200078, with nullable group/liteTopic inputs, primitive `topK`, synchronous invocation, configured VIP conversion, caller deadline, and nullable response decoding.
+- Added the Java-compatible request header and response DTO models, including mutable aliases for the nested `OffsetWrapper` and lag lists/items. The DTOs preserve nullable list elements and Java defaults; `LiteLagInfo.consumerOffset` is omitted from JSON serialization.
+- Added seven invoked Java fixtures, a Rust Core differential, VIP loopback coverage, Java-to-Rust and Rust-to-Java typed header evidence, bidirectional response-body evidence, and focused Protocol regressions.
+- Code commit: `abe0f449` (`feat(core): add get lite group info RPC`). Compatibility documentation and this execution log are committed separately. Four preserved Phase 19 worktree paths remain unstaged and untouched.
+
+Evidence:
+- Success fixture SHA-256: `da245ed2dece655a09e8f05ab70fec33c513dbc194b35aab12eb35ed74ef608d`.
+- Focused Core invoked-fixture differential, Protocol header test, and all 12 `header_inventory` tests pass.
+- Locked `cargo test --workspace` and `cargo test --workspace --all-features` pass. The default run initially exposed a boundary-sensitive existing expiry test; moving its test timestamp 1 second inside the non-expired window removed the async wall-clock race without changing production behavior, and the focused test plus both full suites pass.
+- Strict `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`, `cargo fmt --all -- --check`, and `git diff --check` pass.
+- Pinned `mvn -f compat/java-reference/pom.xml verify` passes with 37 manifest scenarios, 83 Java-decoded Rust typed header frames, and 16 typed body frames.
+
+Remaining:
+- Broad bidirectional P18-V01 audit, current Ubuntu/native Windows P18-V04 evidence, and Phase 19 live Broker scenarios remain open.
+- Preserved Phase 19 paths `integration-tests/README.md`, `tests/differential/run.sh`, `integration-tests/run-local.sh`, and `rlogs/2026/09/20-phase-19-docker-local-validation__20261017T224455Z.rlog` remain unstaged and untouched.

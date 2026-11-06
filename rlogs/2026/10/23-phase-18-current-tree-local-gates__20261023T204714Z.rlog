@@ -1,0 +1,48 @@
+# Phase 18 current-tree server-free gate refresh
+
+- Recorded: 2026-10-23 20:47:14 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Code revision: `4251b2b3`
+- Documentation revision: `23265067`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: refresh local P18-V02 and package evidence after stats-window logging
+
+## Verification
+
+- `cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked`: passed, including doctests.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings`: passed.
+- Windows GNU all-target/all-feature workspace check and strict Clippy: passed
+  as cross-compilation evidence.
+- `mvn -o -q -f compat/java-reference/pom.xml verify`: passed; 37 runtime
+  scenarios, 11 Java message fixtures, 106 typed headers, 19 typed bodies, and
+  Java/Rust cross-decodes.
+- Differential comparator self-test and 37-scenario manifest validation:
+  passed.
+- `bash tests/stress/run-offline-smoke.sh`: 20 deterministic race/leak cases
+  passed × 3 repetitions.
+- Offline fuzz smoke: passed 163 frame seeds, 11 message seeds, 2,784 bounded
+  mutations, 245 frame decodes, and 192 message decodes.
+- Workspace metadata/license/dependency-direction checks, locked metadata
+  parse (8 workspace packages), and locked offline package listings passed.
+- Optimized workspace example build, workspace benchmark compilation, fixed-
+  input offline benchmark, and strict offline benchmark Clippy passed. The
+  machine-specific sample is recorded in
+  `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`; no threshold is
+  set.
+- Rustdoc JSON generation passed. Distinct public-name counts, excluding each
+  generated root item: Common 440, Consumer 461, Core 788, Producer 362,
+  Protocol 1,525, Remoting 338. Counts are name-level inventory only. Rustdoc
+  emitted the existing workspace `publish` and Consumer `AtomicU64::fetch_update`
+  warnings.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+
+## Acceptance boundary
+
+This refreshes the local server-free P18-V02 evidence at the stats logging code
+revision. It does not complete broad P18-V01 source/API/settings/input/error/
+control-flow and reverse-export reconciliation. Native Windows runtime and
+current-revision remote Ubuntu CI remain open; Phase 19 Broker/Docker validation
+was not run. No plan was edited, no push or remote CI was run, and the four
+user-owned Phase 19 worktree paths remain untouched and unstaged.

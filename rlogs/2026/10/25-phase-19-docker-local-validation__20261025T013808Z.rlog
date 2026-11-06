@@ -1,0 +1,665 @@
+# Execution log: Phase 19 Docker local validation
+
+- Session started: 2026-10-25T01:38:08Z
+- Plan: `plan/2026/09/20-phase-19-docker-local-validation.md` (read in full)
+- Starting revision: `698172cd9882e87e610edb19bcee40798f23ecc6` (`Additional update`)
+- Starting branch: `phase/18-phase-18-compatibility-closure`, clean, one commit ahead of origin
+- Preserved all existing work and created `phase/19-docker-local-validation` at the existing Phase 19 commit.
+- Initial inventory: 37 Phase 19 live manifest rows; 7 implemented/pass, 30 pending. Current runner refuses `--all` until all 37 have implementations.
+- Docker Engine available, runtime `linux/aarch64`; pinned `apache/rocketmq:5.3.4` image is not present locally yet.
+- Local Rust/Cargo `1.85.0`; Maven reports Java `27`; default `java` command is OpenJDK `21.0.12.1`.
+- No Phase 19 source files have been modified in this session yet.
+
+## Docker artifact and current live results
+
+- Verified the Docker Hub Apache Software Foundation `apache/rocketmq:5.3.4` official image page and 5.3.4 Apache release page. Docker pulled the pinned multi-platform index digest `sha256:d57ee4ebbd9d7bb6e185775bde41c128e98f185b25bf0b05c77d4e6c010572b8` for this `linux/arm64` engine. `docker image inspect` reported the same image ID/repository digest; image runtime inspection reported Ubuntu 24.04 and Eclipse Temurin OpenJDK 8u472. `mqadmin clusterList` reported `V5_3_4` during every basic-profile run.
+- Refreshed and passed `ROUTE-001-get-existing-topic`, `ROUTE-002-topic-not-exist`, `HEARTBEAT-001`, and `PROD-001-sync-send` through `PROD-004-batch-send`, each in a unique Compose project with scenario-owned resources, Java 5.5.1 and Rust 1.85.0 outputs, cleanup, and archived evidence. Run IDs are in `docs/compatibility/SERVER_5_3_4_RESULTS.md` and `tests/differential/scenarios.yaml`.
+- Ran `ROCKETMQ_CLASSIC_TEST_ENV=local-disposable bash integration-tests/run-local.sh --all` at repository revision `698172cd9882e87e610edb19bcee40798f23ecc6`. All 19 server-free steps passed: format, diff, default/all-feature workspace tests, workspace check, strict Clippy, Maven verify, differential self-test/manifest, race/leak and fuzz smoke, release examples, benchmark build/run, metadata/package checks, and UTC/Taipei unique-ID checks. The live-coverage gate reported all 30 unimplemented scenario IDs and returned 3 before starting Docker. Evidence is `docs/compatibility/evidence/phase-19/run-local/20261025T015135Z/`.
+- `integration-tests/run-local.sh` now records each step, archives the missing-ID log, reports that incomplete matrix as `BLOCKED`, and runs all server-free gates before the live coverage check. Its latest status/command-log presentation edits and the differential runner's manifest-status-only dirty check were made after the archived run; shell syntax and the comparator/self-test/manifest checks passed afterward.
+
+## Remaining Phase 19 gaps
+
+- Current live coverage is 26/37 PASS, with 11 scenarios pending: `P5-V02-extensions`, `P7-V03`, `P7-V04`, `P10-V03`, `P11-V03`, `P11-V04`, `P12-V03`, `P14-V03`, `P15-V03`, `P16-V02`, and `P17-V02`. The initial inventory had 30 cases without implementations. No unsupported case is counted as a pass or reassigned to manual validation.
+- The broad P18-V01 Java source/public API/settings/flow reverse audit remains open, so P19-V04 cannot pass. Java/Rust matched results and success-path evidence are not available for the unimplemented cases.
+- `docs/owner-validation.md` records MAN-01 through MAN-05 as BLOCKED because owner topology/identity/workload inputs are absent and the security/failover/stress probes are incomplete. No owner environment was accessed; no production mutation was made.
+- The new Docker CI job is defined but has not been run remotely. It will fail closed at the current live coverage gate until the remaining 11 pending scenarios have passing evidence.
+- No final compatibility or release approval is supported by the present evidence.
+
+## Committed-revision refresh
+
+- Phase 19 implementation/reporting commit: `553564a21e4d2a40148c60637f4817c7d6f26b74` on `phase/19-docker-local-validation`.
+- Reran the seven supported scenarios after that commit. All passed with `source_code_dirty=false`, each recording source revision `553564a21e4d2a40148c60637f4817c7d6f26b74`. Current evidence pointers are in `tests/differential/scenarios.yaml` and the current-candidate table in `docs/compatibility/SERVER_5_3_4_RESULTS.md`.
+- Reran the committed `integration-tests/run-local.sh --all` at the same source revision. All 19 server-free steps passed again. The full live coverage gate reported the same 30 missing IDs and returned BLOCKED before provisioning. Evidence: `docs/compatibility/evidence/phase-19/run-local/20261025T022131Z/` (`result.txt` begins `BLOCKED`).
+- `bash -n` passed for both shell runners; comparator self-test and validation of all 37 manifest rows passed after the live evidence pointers were refreshed. `git diff --check` passed before the Phase 19 commit; final documentation updates are being checked before amending the local Phase 19 commit.
+- Docker projects from all seven runs were removed by scenario cleanup. No production/owner environment was contacted.
+
+## P19 basic consumer probes — 2026-10-25
+
+- Added and committed the Java 5.5.1/Rust direct consumer-offset and pull probes in `cb351d8ae6a67b9bdb4cbf9fdacd497602e0b9a4` (`Phase 19: add consumer offset and pull probes`). `CONS-001-query-offset`, `CONS-002-pull-found`, `CONS-003-pull-no-new-msg`, and `CONS-004-update-offset` each pass on a fresh basic-profile Broker project with `source_code_dirty=false`; clean evidence IDs are `20261025T025233Z`, `20261025T031409Z`, `20261025T031529Z`, and `20261025T031646Z`, respectively.
+- The found-pull probe compares response status, offsets, broker ID, and raw message bytes, and checks that the seeded `pull-seed` body is present. The empty-pull probe requires `NO_NEW_MSG` with an empty body. Both clients set the same subscription sysflag using the pinned Java helper semantics.
+- Diagnostic runs are retained but not referenced as passing evidence: the first pull attempt lacked the subscription flag and received Broker error 24; a committed-revision `CONS-004` attempt timed out on its first Java update RPC, cleaned its owned topic and Compose project, and passed on a later fresh project.
+- The fail-closed coverage check now reports 26 missing IDs and exits before starting Docker. The other 26 local live cases remain pending. This does not close the two-Broker/TLS/ACL/transaction/request-reply/admin/stress matrices, broad P18-V01 audit, MAN-01..05 owner inputs, or remote Docker CI.
+- Follow-up commits preserve the existing Phase 19 commits; no existing commit was amended or rewritten. `--check-all` is expected to fail until all 37 live cases have runners.
+
+## Current-revision local gates — 2026-10-25 (`70e9a4d8`)
+
+- Reran `ROCKETMQ_CLASSIC_TEST_ENV=local-disposable bash integration-tests/run-local.sh --all` at revision `70e9a4d84861318d4397b77a05213f2a61cb6023`. All 19 server-free gates passed, including default/all-feature workspace tests, workspace check, strict Clippy, Maven verify, differential self-test and manifest validation, race/leak and fuzz smoke, examples, benchmark build/run, metadata/package checks, formatting, and both UTC/Taipei Unique ID checks.
+- The final coverage gate returned `BLOCKED`, enumerated all 26 missing live scenario IDs, and started no Docker resources. Evidence: `docs/compatibility/evidence/phase-19/run-local/20261025T080256Z/`.
+- No Phase 19 Compose resources remain. The current live status is 11/37 passing with 26 still pending; MAN-01 through MAN-05, broad P18-V01, full profile matrix, and remote Docker CI remain open.
+- Follow-up evidence retention: the `*.log` files produced by `run-local.sh` are ignored by the repository-wide `*.log` rule. They were explicitly force-added after the summary commit so the archived record contains all 19 gate logs plus the 26-ID coverage log; the run-local finish hook redacted repository/home paths in those files.
+
+## P5 route case — 2026-10-25 (`63000299`)
+
+- Implemented `P5-V02-route` using the existing Java/Rust route probes. A fresh basic-profile run created only `compat_p5_route`, compared both clients' four broker-a queues, compared both clients' `NO_ROUTE` result for `compat_p5_missing`, and cleaned the owned topic/project. Clean rerun evidence `20261025T081906Z` records revision `6300029907b78a03cb1276a434393972330bdf0d`, `source_code_dirty=false`, exit status 0.
+- Live coverage is now 12/37 passing and 25 pending. Full `run-local.sh --all` gates passed at `70e9a4d8` before this runner addition; they have not yet been rerun on `63000299`.
+
+## P19 two-Broker ORDER-001 runner implementation — 2026-10-25
+
+- Added an isolated `two-broker` Compose profile with a second pinned 5.3.4 Broker, separate store volume/config, and setup readiness that requires both `broker-a` and `broker-b`. The profile validation project `rocketmq-classic-p19-check-two-broker-20261025` listed both Brokers at `V5_3_4`; its containers, network, and volumes were removed.
+- Added Java 5.5.1 and Rust direct lock/unlock probes for `ORDER-001-lock-unlock`. The runner checks that both clients can lock an open queue, a second client is denied during Java ownership, Rust acquires after Java unlock, and Java can acquire after Rust unlock.
+- Dirty-source rehearsal `20261025T082648Z` passed all lock assertions and cleanup (`exit_status=0`, 135 seconds), but records `source_code_dirty=true`; it is retained as diagnostic evidence and is not the manifest PASS pointer. A fresh clean-source run is required after committing the implementation.
+- Focused validation before the rehearsal: Rust integration binary build, pinned offline Maven compile, shell syntax, Cargo formatting, diff whitespace, Compose config validation, and all 37 scenario manifest rows passed. Fail-closed `--check-all` now lists 24 unimplemented IDs and starts no Docker resources.
+- Source implementation, pending manifest input, and diagnostic evidence are being committed separately from the clean-run status/docs. The complete P19 local gate rerun and remaining 24 live cases are still outstanding.
+
+## P19 ORDER-001 clean-source evidence and documentation — 2026-10-25
+
+- Committed the two-Broker profile and probes as `6684ff8c22c92fdb0fc3af8f97574fd3e34c9a82` (`Phase 19: add two-broker lock probes`). A fresh run `20261025T083111Z` then passed `ORDER-001-lock-unlock` with `source_code_dirty=false`: Java and Rust each acquired/released the open queue; the second client was denied during ownership, then acquired after unlock. Topic/group cleanup and project teardown passed. The manifest now points at this clean evidence; the dirty rehearsal remains diagnostic-only.
+- Updated the runner README, Java compatibility status, server results, and release checklist to 13/37 passing and 24 unimplemented. The report distinguishes this two-Broker lock evidence from replicated HA/failover.
+- Validation before the clean run: Rust `live_client` build, pinned offline Maven compile, `bash -n` for run/setup/cleanup, Cargo fmt, diff check, Compose two-Broker config, and 37-row manifest validation passed. `--check-all` now fails closed with 24 missing IDs and starts no Docker resources.
+- Full `ROCKETMQ_CLASSIC_TEST_ENV=local-disposable bash integration-tests/run-local.sh --all` has not yet been rerun on the new source revision; MAN-01..05, broad P18-V01, remaining local scenarios, and remote Docker CI remain open.
+
+## P19 full local gate rerun — 2026-10-25 (`a96aad3d`)
+
+- Ran `ROCKETMQ_CLASSIC_TEST_ENV=local-disposable bash integration-tests/run-local.sh --all` at committed revision `a96aad3d4df378e7b38ed5ebd0e819f764a89dc4`.
+- All 19 server-free gates passed: Cargo format/diff, default and all-feature workspace tests, workspace check, strict Clippy, pinned Maven verify, differential self-test and manifest, race/leak and fuzz smoke, release examples, benchmark build/run, Cargo/workspace metadata, package-content validation, and UTC/Taipei Unique ID checks.
+- The final `differential-live-coverage` step returned `BLOCKED` with the 24 IDs listed in the evidence log. No Docker resources were started by this gate. Evidence is `docs/compatibility/evidence/phase-19/run-local/20261025T083442Z/` (`result.txt` is `BLOCKED`).
+- Current live status remains 13/37. The remaining 24 locally runnable cases and the broad P18-V01 audit are not complete; MAN-01..05 and remote Docker CI remain open.
+
+## P19 REBAL-001-average-10q-3c — 2026-10-25
+
+- Added pinned Java 5.5.1 and Rust live average-allocation probes, the two-Broker scenario runner, exact 10-queue/3-consumer manifest inputs, and fail-closed handling for any selected scenario without an assertion handler. Implementation commit: `b347d11c5e33c18d3e443c852bc8680e83892c2f`.
+- Focused validations passed: `cargo fmt --all -- --check`, locked offline integration binary build, offline Maven compile, `bash -n tests/differential/run.sh`, `git diff --check`, and 37-row differential manifest validation. `--check-all` refused to skip 23 remaining scenarios and started no Docker resources.
+- Initial rehearsal `20261025T085632Z` exposed a false-positive path: setup and cleanup completed without executing probes. Its manifest PASS pointer was removed; `diagnostic-note.txt` marks the run invalid. The assertion handler was moved after compilation and a missing handler now exits 3.
+- Corrected dirty-source rehearsal `20261025T085935Z` passed: Java and Rust emitted identical assignment rows covering five queues on each Broker, with a 4/3/3 split. It is retained as diagnostic evidence only.
+- Clean-source run `20261025T090131Z` passed on commit `b347d11c5e33c18d3e443c852bc8680e83892c2f` (`source_code_dirty=false`). Evidence records identical Java/Rust TSVs, all ten unique live queues, exact 4/3/3 assignment, topic deletion, and Compose cleanup. No project containers or volumes remained.
+- Updated the manifest and compatibility/release documentation to 14/37 passing and 23 pending. The full local gate was last run at `a96aad3d` before this implementation and remains to be rerun. Broad P18-V01, MAN-01 through MAN-05, and remote Docker CI remain open.
+
+## P19 TX-001 / TX-002 transaction visibility — 2026-10-25
+
+- The transaction producer probes and initial runner were committed as `c6084967`; first clean startup showed that the basic profile advertised a Docker-only Broker address. The failed run is retained at `TX-001-commit/20261025T090935Z` and made no pass claim.
+- Added the dedicated `transaction` profile at `ab7539ca`; its Broker advertises host address `127.0.0.1:30911`. Callback/offset-only clean runs passed at `20261025T091320Z` and `20261025T091433Z` but did not prove consumer visibility.
+- Strengthened the runner in `1cc67ce358d4f191b20dc33e71b59a175a57eb59` to create an isolated consumer group and compare Java/Rust pull output. TX-001 now requires two committed message bodies at offsets 0–2; TX-002 requires `NO_NEW_MSG`, empty response bytes, and empty queue offsets.
+- Clean-source `TX-001-commit` passed at `20261025T091920Z`; both transactional producers returned `COMMIT_MESSAGE`, Java/Rust pull TSVs matched byte-for-byte, both `transaction-body` payloads were present, and max offset was 2. Clean-source `TX-002-rollback` passed at `20261025T092046Z`; both producers returned `ROLLBACK_MESSAGE`, pulls matched with no body, and max offset stayed 0. Both runs record `source_code_dirty=false`, exit status 0, and completed topic and Compose cleanup.
+- Current transaction evidence is under `docs/compatibility/evidence/phase-19/TX-001-commit/20261025T091920Z/` and `TX-002-rollback/20261025T092046Z/`. No matching Docker containers, volumes, or networks remain.
+- Manifest and current compatibility/release documentation now report 16/37 passed and 21 pending. The last complete server-free gate still predates the rebalance and transaction additions. Broad P18-V01, MAN-01 through MAN-05, the other 21 live cases, and remote Docker CI remain open.
+
+## P19 P0-V03 aggregate — 2026-10-25
+
+- Added `P0-V03` as a clean-evidence aggregate in commit `34f14b727e200016961d5189f160dc96ceb3a06e`. It launches no parent Broker; each constituent runner owns a separate fresh project and performs its existing Java/Rust assertions and cleanup.
+- The aggregate passed at `20261025T092635Z` on that revision after 11 constituent replays: route lookup, heartbeat, sync/async/oneway/batch send with cross-client readback, four consumer/offset cases, and two-Broker lock/unlock. The parent requires every child manifest row to be PASS, same-revision, `source_code_dirty=false`, exit status 0, and a PASS result file before recording the evidence table.
+- All child runs passed on the same committed revision. Their refreshed evidence is listed in `P0-V03/20261025T092635Z/constituent-results.tsv`; logs and parent metadata are in that run directory. Parent duration was 858 seconds. No Phase 19 containers, volumes, or networks remained.
+- The manifest and current compatibility/release documentation now report 17/37 passed and 20 pending. The full server-free gate has not been rerun after the rebalance, transaction, and aggregate work. Broad P18-V01, MAN-01 through MAN-05, the other 20 live cases, and remote Docker CI remain open.
+
+## P19 P7-V02 high-level producer modes — 2026-10-25
+
+- Added the pinned Java 5.5.1 high-level producer probe, Rust `Producer` probe, and host-routed single-Broker profile. Commit `f9bfeb2aa120638a12ca0eba87c8fb2f7a4ddcec` includes sync, async, oneway, explicit-queue, selector, valid two-message batch, and mixed-topic batch rejection checks.
+- Focused validation passed: Rust integration binary build, Maven offline compile, Rust format check, shell syntax and whitespace checks, scenario JSON parse, and Docker Compose host-routed profile validation.
+- Clean-source `P7-V02` passed at `20261025T094705Z` with `source_code_dirty=false`, exit status 0, and duration 64 seconds. Java and Rust both returned `SEND_OK` for sync and async (one completion), no response for oneway, queue 1 for explicit queue, queue 2 for selector, accepted the two-message batch, and rejected the mixed-topic batch.
+- The scenario-owned topic and host-routed Compose project, network, and volume were removed. The manifest points to `docs/compatibility/evidence/phase-19/P7-V02/20261025T094705Z/`.
+- Current live coverage is 18/37 passed and 19 pending. The full server-free gate remains to be rerun after the rebalance, transaction, Phase 0 aggregate, and P7 work. Broad P18-V01, MAN-01 through MAN-05, the remaining 19 live cases, and remote Docker CI remain open.
+
+## P19 P6-V04 shared-runtime heartbeat and unregister — 2026-10-25
+
+- Added the Java 5.5.1 `LiveSharedRuntimeProbe` and Rust `p6-shared-runtime` path. Each starts two producer groups and a push consumer on the same client runtime, changes the subscription from `*` to `KEEP`, verifies the Broker no longer delivers `DROP`, unregisters producer A, and confirms producer B still sends a consumed message. Implementation commit: `1261cedd9245fe9d38b32d3ff34333bad8179284`.
+- Focused validation passed: locked Rust live-client build, Maven offline Java compile, shell syntax, Rust formatting, manifest validation, and runner selection. `--check-all` now identifies 18 remaining unimplemented IDs and starts no Docker resources.
+- Clean-source P6-V04 run `20261025T095527Z` passed on revision `1261cedd9245fe9d38b32d3ff34333bad8179284`; metadata records `source_code_dirty=false`, exit status 0, and 76 seconds. Java/Rust observed the same three messages and lifecycle markers. Evidence is under `docs/compatibility/evidence/phase-19/P6-V04/20261025T095527Z/`.
+- The scenario-owned topic and host-routed Compose project were removed. No matching containers, volumes, or networks remain. Manifest and current coverage docs report 19/37 passed and 18 pending. Full local gates have not been rerun since the P6 runner was added; broad P18-V01, MAN-01..05 owner inputs, remaining 18 live cases, and remote Docker CI remain open.
+
+## P19 P9-V03 explicit pull and offset resume — 2026-10-25
+
+- Added Java `DefaultMQPullConsumer` and Rust `PullConsumer` probes for manual pull, four Broker statuses, suggested Broker ID, min/max/search offset RPCs, and persisted offset resume. Implementation commit: `3343347dab7c640cd9fdbf24467c08dac4175580`.
+- Focused validation passed: locked Rust live-client build, Maven offline Java compile, shell syntax, formatting, manifest validation, and clean-runner selection. The fail-closed coverage gate now reports 17 unimplemented IDs.
+- Clean-source P9-V03 run `20261025T100359Z` passed on the implementation revision with `source_code_dirty=false`, exit 0, duration 76 seconds. Java and Rust matched FOUND, NO_MATCHED_MSG, NO_NEW_MSG, OFFSET_ILLEGAL, suggested Broker ID 0, min/max/search values 0/2/0, the seeded message body, and offset 1 after restart.
+- The scenario topic and host-routed Compose project were removed; no matching containers, volumes, or networks remain. Manifest and current coverage docs report 20/37 PASS and 17 pending. Full local gates have not been rerun after P9; broad P18-V01, MAN-01..05 owner inputs, remaining local cases, and remote Docker CI remain open.
+
+## P19 REQ-001 request/reply — 2026-10-25
+
+- Added the Java 5.5.1 and Rust request/reply probes and runner in commits `b6ee477c`, `4992fb38`, `5c565d09`, `11e61fe3`, and `fc138652`. Early clean runs showed Java's responder receiving the Java request on the shared topic, then attempting to reply after that requester's client channel had closed. Language-specific consumer groups alone did not isolate the requests.
+- Changed the runner to provision a distinct scenario-owned request topic for each direction, capture the exact request seen by each responder, validate both request/reply tuples, and delete both topics. Harness fix: `1dd012ea` (`Isolate request reply validation directions`).
+- Clean-source `REQ-001-request-reply-success` passed at `20261025T102825Z` on `1dd012ea0d2f0b2e7e3f27abc451784e935453d6`: Java requester/Rust responder on `compat_phase0_request_java`, then Rust requester/Java responder on `compat_phase0_request_rust`. Both requesters received exactly one reply with matching body, correlation ID, reply-to, 15-second TTL, and `reply` message type. Both responder logs record the paired request and successful send. Metadata reports `source_code_dirty=false`, `exit_status=0`, and 85 seconds.
+- Retained the five earlier clean-but-failed run directories as diagnostics; they do not appear as manifest PASS evidence. The passing run deleted both topics and removed its Compose containers, volume, and network. A post-cleanup Docker listing showed no resources with the project name.
+- Focused checks passed: Cargo format, locked Rust live-client build, strict Clippy, Maven compile, shell syntax, manifest validation for 37 rows, and `git diff --check`. The fail-closed inventory now lists 16 unimplemented IDs and starts no Docker resources.
+- Updated REQ-001 manifest evidence and the current compatibility, server, release, and owner-handoff coverage counts to 21/37 PASS and 16 pending. Full `integration-tests/run-local.sh --all` remains due after further runners; broad P18-V01, MAN-01..05 owner inputs, and remote Docker CI remain open.
+
+## REQ-001 evidence contract correction — 2026-10-25
+
+- The first clean run `20261025T102825Z` passed its live assertions and cleanup, but the repository manifest validator rejected its result marker because it used the abbreviated `REQ-001` label rather than the complete manifest ID. The manifest PASS pointer was reset, and this run is retained as diagnostic evidence.
+- Corrected the result marker in `bb77548634ac623bd621a1afbb87a4558163c6c5` (`Use manifest scenario ID in request reply evidence`) and reran the case cleanly. `20261025T103216Z` passed with `source_code_dirty=false`, `exit_status=0`, and 85 seconds. `python3 tests/differential/compare.py --validate-manifest` now validates all 37 rows; no matching Compose containers, volumes, or networks remain.
+- The manifest and current docs point at `20261025T103216Z`. Coverage remains 21/37 PASS, 16 pending; no broad local gate has run after this commit, and no production or owner environment was accessed.
+
+## P19 PROD-005 producer timeout — 2026-10-25
+
+- Added a local delayed-response TCP proxy plus Java and Rust direct Broker send probes for the manifest's 100 ms timeout case. Implementation: `6ea10c28`; runner fixes provisioned the isolated readback consumer group (`2f754c29`) and validated sequential queue starts 0 then 1 (`77afd66e`).
+- Retained two failed diagnostic runs: the first correctly observed both send timeouts and two Broker commits but exposed an unprovisioned readback group; the next verified matching pulls and exposed an incorrect assertion that both serialized sends start at offset 0.
+- Clean-source `PROD-005-send-timeout` passed at `20261025T104539Z` on `77afd66edd59a2257d1c5772d68e86262bbd148e`: the proxy delayed both direct Broker responses 600 ms, Java timed out at 104 ms, Rust at 102 ms, and each send was committed exactly once. Broker max offset was 2; Java and Rust pull records matched with both expected bodies present once. Metadata records `source_code_dirty=false`, exit status 0, and 76 seconds.
+- The scenario topic and two-Broker Compose project, containers, network, and volumes were removed; a project-filtered Docker container query returned no rows. `python3 tests/differential/compare.py --validate-manifest` validates all 37 rows. The runner inventory now has 22/37 PASS and 15 pending. Full `integration-tests/run-local.sh --all` remains due after more runners; broad P18-V01, MAN-01..05 owner inputs, and remote Docker CI remain open. No production or owner environment was accessed.
+
+## P19 P5-V02 producer RPC variants — 2026-10-25
+
+- Added live Java 5.5.1 and Rust raw producer probes for send V1/V2, batch, reply V1/V2 and end-transaction. Implementation commits: `324f56d3`, `033f2eb7`, `dad738e1`, `7d60978f`, `b77f8f53`, and `e00e8c4f`.
+- Retained failed diagnostic runs while establishing the reply path: the initial reply failed because no client channel was registered; producer-only heartbeat registered the channel but synchronous reply sends waited for receiver completion. The final runner uses one-way mode for reply V1/V2, with a registered consumer group and client identity. It compares one-way outcomes and continues to use synchronous result checks for V1, V2 and batch.
+- Clean-source `P5-V02-producer` passed at `20261025T110552Z` on `e00e8c4f161509c392b6116a17a5968dd39a95e2`. Java and Rust both returned `SEND_OK` for the three stored sends and matched topic, queue and offset progression; both reply variants and `endTransactionOneway` returned one-way completion. Each run stored three messages. Metadata records `source_code_dirty=false`, `exit_status=0` and 66 seconds.
+- The scenario topic, reply group, and isolated basic-profile Compose resources were removed; no matching containers, volumes or networks remain. The manifest validator accepts all 37 rows. Coverage is 23/37 PASS with 14 pending; the P5 consumer and extension subcases still need runners. Full `integration-tests/run-local.sh --all`, broad P18-V01, MAN-01..05 owner inputs and remote Docker CI remain open. No production or owner environment was accessed.
+
+## P19 P5-V02 consumer RPC variants — 2026-10-25
+
+- Added the Java 5.5.1 and Rust raw consumer probes for pull, Lite pull, offset query/update, consumer-list, send-back and queue lock/unlock. Implementation commits: `67d56967` and `df61d2f7`; the latter decodes Java `PullResultExt` bytes before validating the raw pull result.
+- Retained the first two-Broker diagnostic run `20261025T111515Z`: both seeds succeeded, but the Java oracle checked the empty `getMsgFoundList()` instead of decoding `PullResultExt.getMessageBinary()`. The correction is committed and the failed run is retained without PASS status.
+- Clean-source `P5-V02-consumer` passed at `20261025T111709Z` on `df61d2f784176a0841839be47c8c9f02183e5948`. Both probes matched ordinary and Lite pull (`FOUND`, two messages, min/max 0/2), update/query offset 1, consumer-list presence, send-back success, lock acquisition, and unlock completion. Metadata records `source_code_dirty=false`, exit status 0, and 76 seconds.
+- The scenario topic and group state were removed with the isolated two-Broker project. Project-filtered Docker container, network, and volume queries returned no rows. The manifest validator accepts all 37 scenarios; coverage is 24/37 PASS with 13 pending. Full `integration-tests/run-local.sh --all`, broad P18-V01, MAN-01..05 owner inputs and remote Docker CI remain open. No production or owner environment was accessed.
+
+## P19 P3-V04 local TLS and raw route — 2026-10-25
+
+- Added the Phase 3 local live probe and disposable TLS profile at `4a535bc7`. The first attempt stopped during certificate signing because macOS LibreSSL `-CAcreateserial` attempted to create `<HOME>.srl`; switched to an explicit serial in `f774f62b`. The next attempt found the low-level Java API did not initialize its NameServer list; fixed via `updateNameServerAddressList` in `7d75f84a`.
+- Live source review confirmed Java 5.5.1 creates its outbound `SslHandler` without a peer hostname. The Java probe therefore records acceptance of a CA-trusted wrong-host certificate, while Rust rejects it as required by the Phase 3 TLS plan; both clients accept the trusted CA and reject an untrusted CA. The inventory, Phase 3 English/Traditional Chinese plan, scenario assertions, local README, server results, compatibility summary, owner handoff, and release checklist now describe this observed difference.
+- Clean-source run `20261025T113910Z` passed on `d673e6ff6aefcd12831203a5b131c72a37c22678`, with `source_code_dirty=false`, `exit_status=0`, and 90 seconds. Java and Rust raw NameServer route results matched. Client TLS used an ephemeral local TLS-terminating proxy that forwarded RocketMQ traffic to the isolated plain 5.3.4 Docker Broker; it is not Broker-native TLS evidence. All Java/Rust clients reported zero pending requests, retained channels, and worker tasks.
+- The scenario deleted `compat_p3_tls` and removed its Compose containers, network, and volume. The archived synthetic CA/proxy private keys were deleted after the run; public certificates and TLS accept/reject logs remain. The three preceding failed attempts are retained as diagnostics; the manifest points only to the passing run.
+- Manifest validation passes for 37 scenarios; current status is 25 PASS and 12 pending (`P5-V02-extensions`, `P7-V03`, `P7-V04`, `P10-V03`, `P11-V03`, `P11-V04`, `P12-V03`, `P13-V02`, `P14-V03`, `P15-V03`, `P16-V02`, `P17-V02`). A full `run-local.sh --all` was not run because those cases still lack runners. No production or owner environment was accessed.
+
+## P19 P5-V02 extension RPC attempt — 2026-10-25
+
+- Added the Java 5.5.1 and Rust live probe entrypoints and runner for heartbeat, heartbeat V2, unregister, assignment, request-mode, Lite subscription, POP, Lite POP, ACK, batch ACK, and change-invisible-time. Implementation commit: `91b0bc56`.
+- The clean-source run `20261025T115801Z` reached Java heartbeat, heartbeat V2, assignment, and request-mode success, then stopped when `MQClientAPIExt.syncLiteSubscriptionAsync` received Broker 5.3.4 response code 3: `request type 200071 not supported`. The fail-fast run did not start Rust or seed messages and made no parity/PASS claim. It remains diagnostic evidence at `docs/compatibility/evidence/phase-19/P5-V02-extensions/20261025T115801Z/`; the manifest remains pending.
+- The runner deleted the parent and derived Lite topics and removed all isolated Compose resources. Project-filtered container, network, and volume queries returned no matches. Current coverage remains 25/37 PASS with 12 pending; other Phase 19 scenarios remain active work. No production, remote checkout, or owner environment was accessed.
+
+## P19 P13-V02 POP lifecycle first attempt — 2026-10-25
+
+- Added a Java 5.5.1 / Rust probe for queue 0/1 POP, expiry redelivery, changed visibility, replacement-receipt ACK, and malformed extra-info rejection. Implementation commit: `61d46867`.
+- The clean-source run `20261025T121016Z` seeded queue 0 and queue 1, but Java's first immediate POP returned `POLLING_NOT_FOUND`. The probe had not set POP request mode on each POP group; no lifecycle assertion passed and Rust consumption did not run. Evidence remains diagnostic at `docs/compatibility/evidence/phase-19/P13-V02/20261025T121016Z/`; manifest status remains pending.
+- The runner deleted `compat_p13_pop` and removed the isolated two-Broker project, network, and volumes. Live coverage remains 25/37 PASS with 12 pending; the first correction still set POP mode too late, so both diagnostic runs are retained and setup ordering will be moved before seeding. No production, remote checkout, or owner environment was accessed.
+
+## P19 P13-V02 POP mode-order retry — 2026-10-25
+
+- The clean-source run `20261025T121249Z` on `23a3131e` set POP request mode for each group immediately before the POP request, but Java still returned `POLLING_NOT_FOUND`. The groups were first switched to POP after the Java seed messages, so the Broker initialized their offsets after the seeded records. No lifecycle assertion passed and Rust consumption did not run. Evidence: `docs/compatibility/evidence/phase-19/P13-V02/20261025T121249Z/`.
+- The runner deleted the topic and removed the two-Broker Compose containers, network, and volumes. The manifest remains pending; coverage is still 25/37 PASS with 12 pending. Next attempt will set both languages' POP modes before Java seeds the messages.
+
+## P19 P13-V02 pre-seed POP mode attempt — 2026-10-25
+
+- The clean-source run `20261025T121555Z` on `dcee59c3` set Java and Rust POP request modes for all lifecycle groups before Java seeded queue 0/1. Java still received `POLLING_NOT_FOUND` on the first POP; no lifecycle assertion passed and Rust consumption did not run. Evidence is retained at `docs/compatibility/evidence/phase-19/P13-V02/20261025T121555Z/`.
+- The scenario topic and isolated two-Broker project, network, and volumes were removed. P13 remains pending; coverage remains 25/37 PASS with 12 pending. Further investigation needs to capture the actual send result and POP response fields before another full lifecycle attempt. No production, remote checkout, or owner environment was accessed.
+
+## P19 P13-V02 seed queue verification attempt — 2026-10-25
+
+- The clean-source run `20261025T122129Z` on `9d196db1` stopped during Java seeding before POP. The probe requested `broker-a:0`, but the Broker returned `SEND_OK` for `broker-a:1`; the max offset of requested queue 0 remained 0. The guard rejected the mismatched queue, so no POP/ACK lifecycle assertion passed and Rust consumption did not run. Evidence is retained at `docs/compatibility/evidence/phase-19/P13-V02/20261025T122129Z/`.
+- The runner removed the scenario topic, both Brokers, the isolated network, and both volumes. P13 remains pending and coverage remains 25/37 PASS with 12 pending. The next runner revision will seed through the Java route-aware queue selector and verify the returned queue IDs and offsets before starting lifecycle checks. No production, remote checkout, or owner environment was accessed.
+
+## P19 P13-V02 route-aware seed retry — 2026-10-25
+
+- Clean-source run `20261025T122748Z` on `e2c71402` switched seeding to Java's route-aware queue selector and rewrote the Docker-only Broker address in the local producer route to the host-mapped endpoint. Queue 0 succeeded with `SEND_OK`, queue ID 0, offset 0, and max offset 1. Queue 1 also returned `SEND_OK` on queue ID 1 at offset 0, but the immediate max-offset query still returned 0, so the seed guard stopped before POP. No P13 lifecycle assertion passed and Rust consumption did not run. Evidence is under `docs/compatibility/evidence/phase-19/P13-V02/20261025T122748Z/`.
+- The runner removed the scenario topic and isolated Compose resources. P13 remains pending and coverage remains 25/37 PASS with 12 pending. The next seed revision will wait briefly for Broker max-offset visibility to converge after `SEND_OK` before starting lifecycle checks. No production, remote checkout, or owner environment was accessed.
+
+## P19 P13-V02 verified-seed POP retry — 2026-10-25
+
+- Clean-source run `20261025T123103Z` on `f81b9c79` passed Java seeding on queues 0 and 1, each with `SEND_OK`, offset 0, and max offset 1. The first Java POP still returned `POLLING_NOT_FOUND`; no lifecycle assertion passed and Rust consumption did not run. Evidence is under `docs/compatibility/evidence/phase-19/P13-V02/20261025T123103Z/`.
+- The run was cleaned up. POP mode is already prepared before seeding, so the next probe will remove the duplicate mode change inside each POP operation and explicitly set `initMode=0` for both clients. P13 remains pending; coverage remains 25/37 PASS with 12 pending. No production, remote checkout, or owner environment was accessed.
+
+## P19 P13-V02 POP request-mode cleanup retry — 2026-10-25
+
+- Clean-source run `20261025T123522Z` on `6a240da4` passed both Java seed checks (`SEND_OK`, queue offsets 0, max offsets 1), and the POP probe explicitly sent `initMode=0` without repeating request-mode setup. Java still returned `POLLING_NOT_FOUND` for queue 0; no lifecycle assertion passed and Rust consumption did not run. Evidence is under `docs/compatibility/evidence/phase-19/P13-V02/20261025T123522Z/`.
+- The isolated resources were removed. The next diagnostic will capture queue min/max and the POP group's committed offset around the first request to locate the remaining mismatch. P13 remains pending; coverage remains 25/37 PASS with 12 pending. No production, remote checkout, or owner environment was accessed.
+
+## P19 P13-V02 POP offset capture — 2026-10-25
+
+- Clean-source run `20261025T123824Z` on `6837d847` passed both Java seed checks. Around the first POP request, Java recorded queue 0 min/max offsets `0/1`, init mode 0, and group offset 1 both before and after the request. POP returned `POLLING_NOT_FOUND`; no lifecycle assertion passed and Rust consumption did not run. The committed offset is already past the only seeded message before POP. Evidence is under `docs/compatibility/evidence/phase-19/P13-V02/20261025T123824Z/`.
+- The isolated resources were removed. Next, record group offsets immediately after mode preparation and after each seed to identify when the offset advances. P13 remains pending; coverage remains 25/37 PASS with 12 pending. No production, remote checkout, or owner environment was accessed.
+
+## P19 P13-V02 POP offset transition retry — 2026-10-25
+
+- Clean-source run `20261025T124251Z` on `1333586f` recorded `NOT_FOUND` for all six groups' queue 0 offsets after mode preparation and after each seed. At the first Java POP call, the group offset was 1 while queue min/max were `0/1`; POP returned `POLLING_NOT_FOUND`. No lifecycle assertion passed and Rust consumption did not run. Evidence is under `docs/compatibility/evidence/phase-19/P13-V02/20261025T124251Z/`.
+- The runner removed the isolated resources. The next runner will explicitly initialize each scenario group's queue offsets to 0 after seeding, verify them, and filter diagnostic rows from the parity comparison. P13 remains pending; coverage remains 25/37 PASS with 12 pending. No production, remote checkout, or owner environment was accessed.
+
+## P19 P13-V02 POP offset reset retry — 2026-10-25 (`d68d8f12`)
+
+- Added an explicit post-seed offset update for both queues of all six Java/Rust POP groups and verified every update as offset 0. The parser excludes extra diagnostic rows from parity comparison.
+- Clean-source run `20261025T124657Z` passed seed routing, max-offset visibility, and all twelve offset-reset checks. The separate Java consume probe observed committed offset 1 before its first POP while queue min/max were `0/1`; POP returned `POLLING_NOT_FOUND`, no lifecycle assertion passed, and Rust consumption did not run. The exact transition after reset is still unlocalized. Evidence: `docs/compatibility/evidence/phase-19/P13-V02/20261025T124657Z/`.
+- The runner deleted the scenario topic and removed its isolated two-Broker containers, network, and volumes. P13 remains pending; coverage remains 25/37 PASS with 12 Phase 19 scenarios pending. No production, remote checkout, or owner environment was accessed.
+
+## P19 P13-V02 first delivery and expiry redelivery trace — 2026-10-25 (`9568a2bb`)
+
+- Added offset snapshots at API startup, before/after the queue min/max queries, and before each POP; the runner now captures Broker stdout logs before teardown.
+- Clean-source run `20261025T125153Z` showed Java's first POP request began at offset 0 and returned the seeded message. Offset 1 appeared before the following expiry-redelivery request, which returned `POLLING_NOT_FOUND`. The earlier offset diagnostics were emitted by a failing POP only; they did not identify whether it was the first or second lifecycle request. This corrects the prior interpretation that the initial delivery began at offset 1. Evidence: `docs/compatibility/evidence/phase-19/P13-V02/20261025T125153Z/`.
+- The runner removed the scenario topic and isolated two-Broker containers, network, and volumes. No lifecycle assertion passed, Rust consumption did not run, and P13 remains pending at 25/37 PASS with 12 Phase 19 cases pending.
+
+## P19 P13-V02 Java lifecycle and Rust receipt mapping — 2026-10-25 (`89f481e7`)
+
+- Increased Java/Rust expiry wait to 6 seconds. Clean-source run `20261025T125713Z` passed all Java lifecycle checks: expiry redelivery, ACK, visibility change, replacement receipt, mixed queues, malformed receipt rejection, and the expected aggregate outcome rows.
+- Rust received the seeded message, but the live probe called raw `MQClientApi.pop_message` and expected a message property `POP_CK` that Java's `MQClientAPIExt` synthesizes from response-header offset metadata. It stopped before Rust lifecycle assertions. The Rust live probe now maps the same response header into a receipt and message property.
+- The run removed the scenario topic and isolated containers, network, and volumes. P13 remains pending; coverage remains 25/37 with 12 scenarios pending.
+
+
+## P19 P13-V02 POP lifecycle pass — 2026-10-25
+
+- Clean-source run `20261025T130156Z` on
+  `99d2dc68484ab8de43da86b997dc20dc49267c3c` passed Java/Rust POP delivery,
+  expiry redelivery, ACK, visibility change, replacement receipt ACK, mixed
+  queue mapping, and malformed receipt rejection. `source_code_dirty=false`,
+  exit status 0, duration 114 seconds. Archived evidence:
+  `docs/compatibility/evidence/phase-19/P13-V02/20261025T130156Z/`.
+- The runner deleted the scenario topic and removed the isolated two-Broker
+  containers, network, and volumes. Filtered Docker container, network, and
+  volume queries returned no matches.
+- The manifest now records P13-V02 PASS. Live coverage is 26/37 with 11
+  pending: `P5-V02-extensions`, `P7-V03`, `P7-V04`, `P10-V03`, `P11-V03`,
+  `P11-V04`, `P12-V03`, `P14-V03`, `P15-V03`, `P16-V02`, and `P17-V02`.
+  `P5-V02-extensions` remains blocked by Broker 5.3.4 rejecting Lite
+  subscription request 200071. No production, remote checkout, push, or remote
+  CI was accessed.
+
+## P19 P5-V02-extensions response comparison — 2026-10-25
+
+- Updated the Java/Rust probes to record 5.3.4's response code 3 for unsupported Lite subscription request 200071 and Lite POP request 200070, then continue the independent standard POP, ACK, batch ACK, and visibility-change checks. The Rust standard POP probe now decorates `POP_CK` from the response header like Java `MQClientAPIExt`.
+- `20261025T131017Z` matched Java/Rust prepare responses and standard POP, then stopped at Java's unsupported Lite POP before Rust consume. `20261025T131349Z` matched both unsupported Lite responses and Java completed ACK/batch ACK/change; Rust stopped because its live probe omitted response-header receipt decoration. Both failures cleaned their topics and Compose resources; full evidence is archived under `docs/compatibility/evidence/phase-19/P5-V02-extensions/`.
+- `20261025T131708Z` passed all P5 extension assertions, matching both unsupported Lite requests and successful heartbeat, heartbeat V2, assignment, request-mode, standard POP, ACK, batch ACK, and visibility-change outcomes. The archived run has `source_code_dirty=true`; it remains diagnostic until the clean-source replay. The manifest row was restored to PENDING_PHASE_19 for that replay.
+- The passing run deleted the parent and derived Lite topics and removed its containers, network, and volume. No production or remote environment was accessed.
+
+
+## P19 P5-V02-extensions clean-source pass — 2026-10-25
+
+- Clean-source run `20261025T132049Z` on
+  `d93c978e04c3619d3c8fe6e1c0d82c4de05f050b` passed. Java and Rust matched
+  heartbeat, heartbeat V2, assignment, request-mode, standard POP, ACK,
+  batch ACK, and visibility-change results. Both received Broker code 3 for
+  unsupported Lite subscription request 200071 and Lite POP request 200070.
+  `source_code_dirty=false`, exit status 0, duration 149 seconds. Evidence:
+  `docs/compatibility/evidence/phase-19/P5-V02-extensions/20261025T132049Z/`.
+- The runner deleted the parent and derived Lite topics and removed the
+  isolated Compose containers, network, and volume. Live coverage is 27/37;
+  10 cases without runners remain pending. P5-V02-extensions proves the
+  matched 5.3.4 rejection path. The success path is still subject to the
+  supplementary-server evaluation because Apache 5.5.0 introduced Lite Mode.
+
+## P19-05 supplementary Lite profile implementation — 2026-10-25
+
+- Docker Hub lists official `apache/rocketmq:5.5.0`; `docker buildx imagetools inspect` resolved multi-platform index `sha256:7e8f6c9dbd9df742ed26ba69c00d4ad69e2f86a56f3ca7782ff8144dd0798132` (linux/arm64 manifest `sha256:2bf396167ec51a79f394a1aa3bc232c0a8bed8fbed53489e48c9a2d5af77fa25`). The image was pulled and local inspection reports `linux/arm64`. Official Apache release notes identify Lite Mode as introduced in 5.5.0.
+- Added a separately named/pinned Compose file and an opt-in local supplementary runner that compares Java 5.5.1/Rust Lite subscription registration and Lite POP success while preserving the mandatory 5.3.4 manifest row. It isolates ports/resources and removes the scenario topics and all Compose volumes on exit.
+- Shell syntax and Compose configuration validation pass. The live 5.5.0 success path has not yet run; this entry records only the verified image/profile setup and the next local execution attempt. No production, remote checkout, push, or remote CI was accessed.
+
+## P19-05 supplementary runner portability correction — 2026-10-25
+
+- The first supplementary runner invocation stopped before creating evidence or Docker resources because macOS Bash 3.2 does not support the `${var,,}` lowercase expansion. Changed run-ID normalization to portable `tr`; shell syntax and whitespace checks pass. No scenario result is claimed.
+
+## P19-05 supplementary readiness retry — 2026-10-25
+
+- Run `20261025T133006Z` started the pinned official 5.5.0 NameServer and Broker; Broker logs report `broker[broker-a, broker:10911] boot success`. The first `clusterList` ran before NameServer registration completed and returned only its header. No Lite operation ran. The trap removed the Compose containers, network, and volume; filtered resource checks returned no project resources.
+- Added up to 90 seconds of bounded `clusterList` polling before checking actual version `V5_5_0`. Shell syntax and whitespace checks pass; the clean retry follows this infrastructure correction.
+
+## P19-05 supplementary Lite body-seed correction — 2026-10-25
+
+- Run `20261025T133109Z` confirmed Broker `V5_5_0`, and both Java and Rust prepare probes matched successful heartbeat, assignment, request-mode, and Lite subscription registration. Parent and Lite seed sends also returned `SEND_OK`. Java's POP guard then rejected the parent seed body because the supplementary script used a new body while the shared probe expects `p5-extension-seed`; Lite POP did not run. The cleanup removed the topics and isolated Compose resources. Updated the supplementary parent seed to the probe's expected value; the next clean run will also verify the Lite POP body.
+
+## P19-05 supplementary Lite request-model correction — 2026-10-25
+
+- Run `20261025T133412Z` matched Java/Rust successful Lite subscription registration and seeded both parent and internal LMQ messages, but Lite POP on the internal `%LMQ%...%entries` name returned Broker code 29. Inspection of the unmodified 5.5.0 source shows Lite POP takes the parent topic and requires that parent topic's message type be `LITE`; Lite publishing supplies `MessageConst.PROPERTY_LITE_TOPIC` on a send to the parent, which the Broker maps to `%LMQ%$<parent>$<lite>`.
+- Added a Java `send-lite` fixture path that follows this Broker contract, set the supplementary parent topic type to LITE, and added Java/Rust focused Lite POP probes that use the parent topic. The 5.3.4 baseline runner and manifest remain unchanged. `cargo fmt --all`, scoped offline `cargo check`, offline Maven compile, shell syntax, and supplementary Compose config validation pass. A new clean-source run is next.
+
+## P19-05 supplementary Lite group binding correction — 2026-10-25
+
+- Run `20261025T134033Z` reached Lite POP on the LITE parent after Java and Rust each matched successful subscription registration, but Broker response code 29 reported `subscription bind topic not match` for the Lite group. Apache 5.5.0 `PopLiteMessageProcessor` requires `SubscriptionGroupConfig.liteBindTopic` to equal the request parent topic; the first supplementary setup created ordinary groups without that attribute.
+- Updated the disposable `updateSubGroup` commands to set `+lite.bind.topic=<parent>` on each language's Lite group. The supplementary message now seeds before Java/Rust subscription registration so registration sees the active derived Lite queue. The runner again preserves the 5.3.4 row and cleans only its isolated resources.
+
+## P19-05 supplementary LMQ store configuration — 2026-10-25
+
+- Run `20261025T134349Z` passed the group bind check, and both languages again matched Lite subscription registration. Lite POP returned `POLLING_NOT_FOUND` because the stored Lite message had no active LMQ dispatch queue. Apache 5.5.0 `MessageStoreConfig.enableLmq` defaults to false, so the supplementary Broker was not writing Lite LMQ consume queues.
+- Added a separate `broker-lite-5.5.0.conf` with `enableLmq=true` and mounted it only in the supplementary Compose profile. The mandatory 5.3.4 Broker configuration remains unchanged. Shell syntax, Compose configuration, and whitespace checks pass before the next run.
+
+## P19-05 supplementary Lite POP dispatch correction — 2026-10-25
+
+- Run `20261025T134650Z` passed Lite registration and accepted the Lite seed, but Java Lite POP returned `POLLING_NOT_FOUND`. The attempt seeded before either client registered, used zero poll time, and had `enableMultiDispatch` unset. Evidence is under `docs/compatibility/evidence/phase-19/supplementary-lite-5.5.0/20261025T134650Z/`.
+- Enabled `enableMultiDispatch` in the isolated 5.5.0 Broker config, moved the seed after both Java and Rust Lite subscriptions, and set a bounded 10-second Lite POP poll time in both probes. The 5.3.4 runner and manifest row remain unchanged.
+
+## P19-05 supplementary Lite success-path pass — 2026-10-25 (`3eb70c19`)
+
+- Clean-source run `20261025T135033Z` on
+  `3eb70c192a885ea831cdc496ca24399a182552b5` passed against the official
+  unmodified 5.5.0 image (index digest
+  `sha256:7e8f6c9dbd9df742ed26ba69c00d4ad69e2f86a56f3ca7782ff8144dd0798132`).
+  Java 5.5.1 and Rust matched heartbeat, heartbeat V2, assignment, request-mode,
+  Lite subscription, Lite POP `FOUND`, and the seeded message body. The
+  supplementary Broker config enabled LMQ and multi-dispatch. Archived evidence:
+  `docs/compatibility/evidence/phase-19/supplementary-lite-5.5.0/20261025T135033Z/`.
+- Exit status 0, duration 100 seconds, `source_code_dirty=false`. The runner
+  removed the derived Lite and parent topics, containers, network, and volume;
+  filtered Docker queries found no remaining project resources. The required
+  5.3.4 manifest row remains unchanged, with 10 runnerless Phase 19 cases
+  pending. Supplementary success does not establish production support.
+
+## P19-04 host-routed two-Broker profile setup — 2026-10-25
+
+- Added the separately named `two-broker-host` profile using the pinned
+  unmodified 5.3.4 image, distinct host loopback listeners at 50911 and 50921,
+  separate Broker volumes, and the existing host NameServer port mapping.
+  Setup health checks passed for both Broker containers and NameServer
+  registration showed both Broker names.
+- Compose config validation and Bash syntax checks passed. A disposable setup
+  smoke test used NameServer port 49876 and project
+  `rocketmq-classic-p19-two-broker-host-check`; `cleanup.sh` removed its
+  containers, network, and both volumes, and filtered Docker queries returned
+  no remaining project resources. Host-client scenario execution is pending.
+
+## P19-04 P7-V04 producer lifecycle runner — 2026-10-25
+
+- Added Java/Rust live probes and a `two-broker-host` differential runner for
+  three start/shutdown cycles with 20 successful sends per cycle. Each cycle
+  checks zero pending requests, connections, and owned task groups. The
+  scenario creates four queues on each Broker, because both host-routed
+  addresses must appear in the topic route.
+- Initial attempts `20261025T140537Z`, `20261025T140730Z`, and
+  `20261025T140938Z` are archived under
+  `docs/compatibility/evidence/phase-19/P7-V04/`. They identified unsupported
+  `mqadmin deleteTopic -b`, cluster-wide topic cleanup that could not reach a
+  peer Broker's loopback advertisement, and an event-loop termination check
+  that ran before the bounded shutdown wait. Added direct per-Broker topic
+  deletion through the pinned Java API and waited for Netty executor shutdown.
+  All three attempts removed their isolated Compose resources.
+- Diagnostic run `20261025T141128Z` passed Java and Rust for all three cycles;
+  each reported 20 sends and zero retained resources. Topic deletion succeeded
+  directly on `127.0.0.1:50911` and `127.0.0.1:50921`, and cleanup removed
+  both Broker volumes, the NameServer, and the project network. Because this
+  replay had `source_code_dirty=true`, it is not manifest evidence. P7-V04
+  remains `PENDING_PHASE_19` until the committed clean-source replay.
+- Shell syntax, `cargo fmt`, integration binary build, offline Maven compile,
+  differential manifest validation, and `git diff --check` passed. The
+  fail-closed coverage check now identifies nine cases without runners; the
+  complete local gate remains pending.
+
+## P19-04 P7-V04 clean-source pass — 2026-10-25 (`816e2e10`)
+
+- Clean-source run `20261025T141436Z` on
+  `816e2e10a30408aa4303b923a99892e6be4b06c5` passed against the pinned
+  unmodified 5.3.4 image. Java 5.5.1 and Rust each sent 20 messages in three
+  producer start/shutdown cycles. Every cycle reported zero pending requests,
+  connections, and owned task groups. Evidence:
+  `docs/compatibility/evidence/phase-19/P7-V04/20261025T141436Z/`.
+- `source_code_dirty=false`, exit status 0, duration 88 seconds. The runner
+  deleted the topic directly from both host-routed Brokers, then removed the
+  isolated containers, NameServer, volumes, and network. Filtered Docker
+  queries returned no project resources. The manifest now records P7-V04
+  PASS; live coverage is 28/37, with nine cases still missing runners.
+- `python3 tests/differential/compare.py --validate-manifest`, Bash syntax,
+  formatting, and whitespace checks pass. `run-local.sh --all` and final
+  Phase 19 acceptance remain pending the rest of the local matrix and manual
+  owner evidence.
+
+## P19-04 P15-V03 bidirectional timeout runner — 2026-10-25
+
+- Added Java 5.5.1 and Rust probes for synchronous no-responder timeout, callback timeout, delayed responders, and pending-correlation inspection. The manifest now runs P15-V03 on the host-routed two-Broker 5.3.4 profile, with isolated request topics, bounded timeout/late-reply windows, and per-Broker topic/group setup.
+- First diagnostic `20261025T142644Z` passed bidirectional success and no-responder timeout, then failed closed because the delayed Rust responder did not receive Java's request. Evidence is archived under `docs/compatibility/evidence/phase-19/P15-V03/20261025T142644Z/`; its responder-group setup used cluster-wide `mqadmin updateSubGroup -c`, which could not reach the peer Broker's loopback advertisement.
+- Changed P15 group setup to create each responder group directly on both Brokers with `mqadmin updateSubGroup -b`. Verified the 5.3.4 `mqadmin` command supports `-b` from the pinned image help output.
+- Diagnostic `20261025T143206Z` passed P15-V03 against the pinned unmodified 5.3.4 image. Both requester/responder directions delivered correlated replies; Java and Rust no-responder requests timed out and removed their correlations; each opposite-language delayed responder sent a reply after timeout while the requester retained exactly one timeout callback and no pending correlation. Evidence is archived under `docs/compatibility/evidence/phase-19/P15-V03/20261025T143206Z/` (`source_code_dirty=true`, exit 0, duration 271 seconds), so it is diagnostic only.
+- The runner deleted all six scenario-owned topics from both Brokers and removed the containers, NameServer, volumes and network. Filtered Docker queries found no remaining resources for the project.
+- Maven Java compile, Cargo live-client build, Cargo formatting, Bash syntax, manifest validation, and `git diff --check` pass. `run.sh --check-all` now rejects only the eight cases still lacking runners. A clean-source P15 replay remains required after the implementation commit.
+
+## P19-04 P15-V03 clean-source pass — 2026-10-25 (`4eeac3a3`)
+
+- Clean-source run `20261025T143716Z` on committed revision
+  `4eeac3a32a417bd3f2dc5c4d031db9eb0f5f9c02` passed against the pinned
+  unmodified RocketMQ 5.3.4 image. Java 5.5.1 and Rust matched bidirectional
+  request/reply, both no-responder timeout paths, and both late replies sent
+  after the 4.5-second request deadline. Each late timeout retained exactly
+  one timeout callback and no pending correlation. Evidence:
+  `docs/compatibility/evidence/phase-19/P15-V03/20261025T143716Z/`.
+- `source_code_dirty=false`, exit status 0, duration 280 seconds. The runner
+  removed six scenario topics from both Brokers, then removed the isolated
+  NameServer, Brokers, volumes and network. Filtered Docker queries found no
+  project resources.
+- Updated manifest row to PASS and current compatibility/server/runner
+  summaries to 29/37, with eight cases still lacking runners. The complete
+  local gate, broad P18-V01/P19-V03/P19-V04 audit and owner manual checks
+  remain open.
+- `cargo fmt --all -- --check`, integration binary build, strict integration
+  binary Clippy (`-D warnings`), pinned Maven compile, Bash syntax, differential
+  manifest validation and `git diff --check` pass. The fail-closed inventory
+  remains expected to stop at the eight runnerless cases.
+
+## P19-04 P7-V03 retry and deadline runner — 2026-10-25
+
+- Added Java 5.5.1 and Rust high-level Producer probes that prefetch a writable route from both Brokers, gate the send, and record every send-hook attempt, Broker name, outcome, body, and unique message ID.
+- Added deterministic retry coverage using Broker `NO_PERMISSION` response code 16, explicitly registered as retryable in each client, and a delayed-response case with a 900 ms Producer deadline against a 1,800 ms disposable TCP proxy delay. Both Brokers are read-only only during the retry check; the runner restores their write permission before deadline probes and teardown.
+- Added a `two-broker-host` published-port override for this case so local proxies bind the advertised Broker ports while forwarding to the disposable Broker ports. The existing host profile defaults are unchanged.
+- Updated P7-V03 manifest inputs, runner dispatch, evidence commands, and integration-test documentation. The phase plan files remain unchanged. Live Broker verification and clean-source evidence are pending.
+- `cargo fmt --all -- --check`, strict integration-binary Clippy (`-D warnings`), pinned Maven compile, `bash -n`, proxy Python compilation, manifest validation, Docker Compose config validation (including the P7 port override), and `git diff --check` pass. Initial checks caught a Clippy collapsible-replace warning and Java compiler API/package errors; those were corrected before this entry.
+
+## P19-04 P7-V03 first clean replay diagnostic — 2026-10-25
+
+- Clean replay `20261025T145612Z` on revision `a80019e15646769ac8a65ffa60d1e75186b455a0` failed before a send attempt. Setting brokerPermission=4 before the Producer fetched its route caused both Java and Rust clients to see no writable Message Queue. The attempted `mqadmin deleteTopic -b` cleanup also failed because this pinned command supports only cluster deletion.
+- Evidence is retained at `docs/compatibility/evidence/phase-19/P7-V03/20261025T145612Z/` (`source_code_dirty=false`, exit 1, duration 79 seconds). The Compose cleanup removed both Brokers, the NameServer, volumes, and network; filtered Docker queries returned no project resources.
+- Updated the runner so each client fetches both writable routes first, then the runner toggles both disposable Brokers read-only while that client sends and restores write permission before starting the next client. P7 topic cleanup now uses the host-routed proxies and the established Java delete-topic probe; proxies stay alive until topic cleanup is complete.
+- A second clean-source replay is pending after the corrective runner commit.
+
+## P19-04 P7-V03 second clean replay diagnostic — 2026-10-25
+
+- Clean replay `20261025T150001Z` on revision `336ec0560212821e64b26869f16ef11ef680b5e1` failed during retry setup. Broker-wide permission changes refreshed the NameServer route before Java's send and returned `No route info`; Rust retained its route but Broker 5.3.4 accepted the write, so that setting did not produce `NO_PERMISSION` at message send.
+- Evidence is retained at `docs/compatibility/evidence/phase-19/P7-V03/20261025T150001Z/` (`source_code_dirty=false`, exit 1, duration 121 seconds). Compose teardown removed both Brokers, NameServer, volumes, and network; filtered Docker queries returned no project resources.
+- Replaced the permission mutation with a bounded transparent-proxy protocol injection: for each retry run, one send request per Broker is consumed and answered with a valid Remoting response code 16 without forwarding to the Broker; the third attempt reaches the real Broker. The separate deadline check continues to delay a real Broker response. Topic cleanup stays on the live host-routed proxy path.
+- Maven compile, Rust format/strict Clippy, proxy Python compilation, Bash syntax, manifest validation, Compose override validation, and whitespace checks pass after the change. Clean-source replay is pending.
+
+## P19-04 P7-V03 retry-injection correction — 2026-10-25
+
+- The second clean replay confirmed Broker permission changes were unsuitable for a deterministic send error: Java lost its route and Rust's Broker accepted the send. The runner no longer changes Broker permissions; that earlier diagnostic and its commands remain preserved verbatim.
+- The current proxy tracks the request `opaque` for a send-only deadline delay, so background heartbeat responses cannot consume the 1,800 ms delay. The archived command template now records both proxy flags and the synthetic response setup.
+- The 15:00:01 failed replay evidence has been retained for the retry attempt and proxy logs. The next committed implementation revision will be clean-replayed before any pass status is recorded.
+
+## P19-04 P7-V03 clean-source retry and deadline pass — 2026-10-25 (`0656dabc`)
+
+- Clean-source run `20261025T150708Z` on committed revision `0656dabc02247ac0965b24b3d5d27a360b32ca1f` passed against the pinned unmodified RocketMQ 5.3.4 image. Both Java 5.5.1 and Rust received injected code-16 `NO_PERMISSION` responses from both Brokers, retried on the other Broker, then succeeded on attempt three with the original body and one stable unique ID.
+- Each client then timed out after one send attempt at about 900 ms while the proxy delayed the matching real Broker response by 1,800 ms. Evidence is retained under `docs/compatibility/evidence/phase-19/P7-V03/20261025T150708Z/`; metadata records `source_code_dirty=false`, exit 0, and 91 seconds.
+- The runner deleted `compat_p7_retry` from both Brokers and removed the isolated containers, NameServer, volumes, and network. Filtered Docker container/volume/network queries returned no project resources.
+- Updated the manifest and current compatibility/server/release summaries to 30/37 passing, with seven runnerless scenarios remaining. The full local gate, P18-V01/P19-V03/P19-V04 audits, and owner manual checks remain open.
+- The post-pass manifest validator reports 37 scenarios, 30 PASS, and seven PENDING_PHASE_19 (`P10-V03`, `P11-V03`, `P11-V04`, `P12-V03`, `P14-V03`, `P16-V02`, `P17-V02`). `run.sh --check-all` failed closed with those seven IDs before starting Docker; the full local gate remains pending implementation of their runners.
+
+## P19-05 P10-V03 first clean replay diagnostic — 2026-10-25
+
+- Clean-source run `20261025T152018Z` on revision `3760d22c5e273b186b74626d95bafe2f7cc7c4f1` failed before provisioning. The P10 execution sequence was accidentally placed in the command-template branch, so Java attempted its seed before the isolated Compose project started and could not connect to `127.0.0.1:19876`.
+- Evidence is retained under `docs/compatibility/evidence/phase-19/P10-V03/20261025T152018Z/`; `source_code_dirty=false`, exit status 1, and the manifest remains pending. Filtered Docker container, volume, and network queries returned no resources for the exact project name.
+- Moved the execution sequence into the post-provision live-scenario branch. The corrective runner revision must be clean-source replayed before recording P10-V03 as passed.
+
+## P19-05 P10-V03 second clean replay diagnostic — 2026-10-25
+
+- Clean-source run `20261025T152109Z` on revision `73f135c105...?` provisioned both Brokers, created the one-queue topic and retry-limited group, then failed before publishing a message. The plain `two-broker` profile registers Docker-internal Broker hostnames, which are not reachable by host-run Java and Rust probes.
+- The run trap also hit Bash `nounset` while expanding the empty P7 proxy PID array and stopped before Compose teardown. The isolated project was manually removed with the repository cleanup script; exact-project container, volume, and network filters then returned empty. The archived evidence records the clean source revision, commands, setup logs, failed Java probe, and exit status.
+- The runner now uses the host-routed two-Broker Compose profile internally for P10 while retaining the manifest's `two-broker` topology, configures each Broker directly, and safely handles an empty proxy PID array. The corrective runner revision must be clean-source replayed.
+
+- RLOG correction: the revision placeholder in the preceding P10-V03 second-replay bullet is `73f135c15e8627d7a16b673cfa95746aa7afcb80`.
+
+## P19-05 P10-V03 third clean replay diagnostic — 2026-10-25
+
+- Clean-source run `20261025T152543Z` on revision `74b5b41b846c323449e2ee02fc5674679e4493d9` passed provisioning, Java queue-0 seeding, Rust fixed assignment, success/partial acknowledgement, partial retry at counts 0/1, failure callbacks at counts 0/1, and the configured DLQ transition. The DLQ message retained its body and key.
+- The sole failing assertion expected the DLQ copy's `reconsumeTimes` to equal retryMaxTimes (1). RocketMQ 5.3.4 stores it as 2 after incrementing the terminal send-back, while listener attempts correctly remain `[0,1]`. Evidence is preserved at `docs/compatibility/evidence/phase-19/P10-V03/20261025T152543Z/`, with `source_code_dirty=false`, exit 1, and Compose teardown complete; filtered project resource queries were empty.
+- Updated the Rust probe, archived command/metadata expectations, and runner assertion to require DLQ `reconsumeTimes=retryMaxTimes+1`. A final clean-source replay is pending.
+
+- Evidence archival follow-up: the P10-V03 runner's `.log` files were ignored by the repository-wide `*.log` rule and were not included in the initial diagnostic commit. The failed-run directories have now been path-redacted and those setup, compile, build, topic/group, Broker, topic-cleanup, and Compose-cleanup logs are being force-added so the diagnostic artifacts are complete.
+
+## P19-05 P10-V03 clean-source Push retry and DLQ pass — 2026-10-25
+
+- Clean-source run `20261025T153016Z` on committed revision `d3a0778bf47a4bd20b4a5129911318cd194ff742` passed against the pinned, unmodified RocketMQ 5.3.4 image. Java 5.5.1 seeded the one-queue topic; Rust Push verified success, partial acknowledgement, retry of the partial message, and failure callbacks at listener counts 0/1. The configured `%DLQ%compat_p10_push` message retained body `p10-failure-dlq` and key `p10-failure-dlq-key`; Broker `reconsumeTimes` was 2 for group retry maximum 1.
+- Evidence is archived at `docs/compatibility/evidence/phase-19/P10-V03/20261025T153016Z/`. Metadata records `source_code_dirty=false`, exit status 0, duration 124 seconds, the pinned image digest, and the host-routed Compose profile used to make the two Brokers reachable to host clients.
+- The runner deleted `compat_p10_retry` from both Brokers and removed the isolated containers, NameServer, volumes, and network. Filtered Docker container/volume/network queries found no project resources. `run.sh --check-all` failed closed before Docker startup with only six expected pending cases: `P11-V03`, `P11-V04`, `P12-V03`, `P14-V03`, `P16-V02`, and `P17-V02`.
+- Updated the manifest to 31/37 live PASS and refreshed the server, Java compatibility, Phase 10 matrix, and release checklist summaries. Phase 19 acceptance and full local gates remain open.
+
+## P19-05 P11-V03 first clean replay diagnostic — 2026-10-25
+
+- Clean-source run `20261025T154222Z` on revision `c305adb4f578f538cb47b8a5c067d35ea02d3238` provisioned the pinned 5.3.4 two-Broker host-routed profile. Java acquired all eight `compat_p11_mixed` queues. After Rust joined, each client held four disjoint scenario-topic queues, but its local running-info table also exposed one Broker-managed `%RETRY%compat_p11_mixed` queue. The checker compared every process-queue entry against only the scenario topic and timed out at the join phase.
+- Evidence is retained at `docs/compatibility/evidence/phase-19/P11-V03/20261025T154222Z/` (`source_code_dirty=false`, exit 1, duration 176 seconds). The diagnostic includes Java/Rust ownership snapshots, Broker logs, the timeout result, and complete Compose teardown. Filtered container/volume/network queries for project `rocketmq-classic-p19-p11-v03-20261025t154222z` returned empty.
+- The observed scenario-topic queues were split four per client without overlap. The next implementation revision will filter local snapshots to `compat_p11_mixed`, excluding internal retry-topic ownership before testing the eight-queue convergence condition. Manifest status remains pending until a corrected clean-source replay passes.
+
+## P19-05 P11-V03 clean-source mixed-group convergence pass — 2026-10-25
+
+- Clean-source run `20261025T154631Z` on revision `7d03c66189d2de34d9d523ff35b8e6b302cc5087` passed against the pinned unmodified RocketMQ 5.3.4 image. Java first owned all eight `compat_p11_mixed` queues. After Rust joined, the clients converged to four queues each; one early snapshot showed transient overlap of four queues, then four stable samples showed complete disjoint ownership. After Java left, four stable samples showed Rust owned all eight.
+- The runner filters Broker-managed retry-topic entries from the scenario-topic ownership check and allows transient assignment overlap/redelivery during convergence. Evidence is at `docs/compatibility/evidence/phase-19/P11-V03/20261025T154631Z/`; `source_code_dirty=false`, exit status 0, duration 93 seconds.
+- The runner removed `compat_p11_mixed` from both Brokers and tore down the isolated containers, NameServer, volumes, and network. Filtered exact-project Docker container/volume/network queries were empty. `run.sh --check-all` still fails closed before Docker startup with the five expected remaining cases: `P11-V04`, `P12-V03`, `P14-V03`, `P16-V02`, and `P17-V02`.
+- Updated the manifest and current server, Java compatibility, Phase 11 matrix, integration-test README, and release checklist counts to 32/37 live PASS with five cases pending. Phase 19 acceptance and full local gates remain open.
+
+## P19-05 P11-V04 clean-source bidirectional Push pass — 2026-10-25
+
+- Implemented the P11-V04 runner in commit `a7066e9f`: Java producer to Rust
+  Push on Broker A and Rust producer to Java Push on Broker B; each consumer
+  retries once, both clients query persisted offsets, and each Push client
+  completes three start/shutdown cycles with lifecycle assertions.
+- Clean-source run `20261025T155944Z` on committed revision
+  `a7066e9fb6fd0739700046e6106f8c7ee4ef1516` passed against the pinned,
+  unmodified RocketMQ 5.3.4 image (`source_code_dirty=false`, exit 0, 168s).
+  Java/Rust offset queries matched at 1 on both Brokers. Java scheduled
+  executors terminated; Rust runtime state stopped, its factory table emptied,
+  and pending requests, connections, and owned remoting tasks were zero.
+- Evidence is archived at
+  `docs/compatibility/evidence/phase-19/P11-V04/20261025T155944Z/`. The runner
+  deleted the scenario topic and retry topic from both Brokers, then removed
+  the isolated containers, NameServer, volumes, and network. Filtered project
+  container/volume/network queries were empty.
+- Updated the manifest and current compatibility summaries to 33/37 live PASS.
+  `run.sh --check-all` should fail closed before Docker with only
+  `P12-V03`, `P14-V03`, `P16-V02`, and `P17-V02` remaining.
+
+## P19-05 P12-V03 runner implementation — 2026-10-25
+
+- Added a host-routed two-Broker orderly-consumer scenario with one queue per Broker, explicit starting offsets, and Java-seeded slow/following message pairs. Java's two callbacks remain gated while Rust joins and takes a transferred queue; the runner checks lock ownership, per-queue redelivery/order, offsets before and after handoff, callback release, both client shutdowns, and fresh lock/unlock success on both Brokers.
+- Added P12 runner registration and fail-closed manifest input checks, isolated topic/group creation and cleanup, a Java 5.5.1 orderly probe, and a Rust orderly probe. The scenario uses a bounded 1-second unlock-delay property and retains the pinned unmodified RocketMQ 5.3.4 image.
+- Static checks pass: Maven Java compile, Rust integration live-client build, Rust fmt check, strict integration-client Clippy, Bash syntax, Python checker compile and file-state checks, and `git diff --check`.
+- `run.sh --check-all` recognizes P12-V03 and fails closed before Docker with only P14-V03, P16-V02, and P17-V02 still lacking runners. Clean-source P12 replay is pending after the implementation commit.
+
+## P19-05 P12-V03 first clean replay diagnostic — 2026-10-25
+
+- Clean-source run `20261025T161816Z` on revision `264a7863a8532758f6c32b8cd22ce568497b37a7` provisioned the pinned 5.3.4 host-routed two-Broker profile, created the topic/group on both Brokers, initialized offsets, and seeded all four ordered messages. It stopped before Rust joined because the Java consumer invocation omitted the probe's required `consumer` subcommand; Maven reported the probe usage and exited.
+- Evidence is retained at `docs/compatibility/evidence/phase-19/P12-V03/20261025T161816Z/` with `source_code_dirty=false`, exit status 1, and 130 seconds. The runner successfully deleted the consumer group from both Brokers, deleted the scenario topic, and removed the exact Compose project's containers, volumes and network; filtered Docker queries were empty.
+- P12-V03 remains pending. Correct the Java argument and repeat the clean-source replay; this diagnostic does not count as a scenario result.
+
+## P19-05 P12-V03 Java probe invocation correction — 2026-10-25
+
+- The first replay's evidence is committed in `7cbff856`; the `deleteSubGroup` cleanup command succeeded on both Brokers and the Compose cleanup removed all project resources. The runner now passes the Java probe's required `consumer` operation before the nameserver and file-gate arguments. A new clean-source replay is required; the manifest remains pending.
+
+## P19-05 P12-V03 second clean replay shutdown diagnostic — 2026-10-25
+
+- Clean-source run `20261025T162123Z` on committed revision `3d49930c5501599879e1de5774152ca885af6cf2` provisioned both pinned 5.3.4 Brokers and completed the mixed orderly handoff. Java initially owned both queues with callbacks held; Rust received `p12-slow-a` at offset 0 and `p12-next-a` at offset 1 while Java's callback was still in flight, and Broker A persisted offset 2. Rust exited, then the released Java callbacks completed and the probe wrote its `STOPPED` marker.
+- The Java Maven process remained alive for more than four minutes after that marker. Its thread dump shows Maven `ExecJavaMojo.joinNonDaemonThreads` waiting for `ConsumeMessageScheduledThread_1`, parked on the orderly consumer's scheduled executor delayed-work queue after public `consumer.shutdown()` returned. The runner-owned Java probe was terminated to unblock its trap; the runner deleted the scenario group from both Brokers, deleted the topic, and removed the exact disposable Compose project's containers, volumes and network. Filtered exact-project Docker queries were empty.
+- Evidence is retained at `docs/compatibility/evidence/phase-19/P12-V03/20261025T162123Z/`, with `source_code_dirty=false`, exit status 1, duration 382 seconds, output markers, the Java thread dump, and teardown logs. Handoff and offset checks completed, but Java process shutdown did not converge, so `P12-V03` remains pending and is not counted as a pass.
+
+## P19-05 P14-V03 transaction runner implementation — 2026-10-25
+
+- Added P14-V03 preflight registration and a two-Broker host-routed runner covering Java commit to Rust pull, Rust commit to Java pull, Java/Rust rollback invisibility with unchanged normal-queue max offsets, and Unknown resolution through actual Broker check callbacks in both directions.
+- Added Java and Rust live transaction probe modes that report the selected Broker/queue and wait up to 25 seconds for an Unknown check. Added a named Rust direct-pull mode. The isolated P14 Broker configs set `transactionCheckInterval=2000`; the shared host-routed configs remain unchanged for other scenarios.
+- Static verification passes: Java 5.5.1 compile; Rust live-client build, formatting, and strict Clippy; Bash syntax; P14 Compose interpolation/config validation; and `run.sh --check-all` preflight, which refused before Docker with only the not-yet-implemented `P16-V02` and `P17-V02`. P14 clean-source replay is pending after the implementation commit; the manifest remains pending.
+
+## P19-05 P14-V03 first clean replay diagnostic — 2026-10-25
+
+- Clean-source run `20261025T163706Z` on revision `86e082bb0bbef533c5495543d8eaba611af998a7` provisioned the isolated two-Broker host-routed profile with `transactionCheckInterval=2000 ms`. Java/Rust commit messages were visible to the opposite-language pull probes; Java/Rust rollback bodies were absent, and both normal queue max offsets remained unchanged at 1.
+- Java Unknown resolved through an actual Broker check in 6,985 ms and its body became visible to Rust. Rust's check callback returned COMMIT once in 1,786 ms, but Java's pull saw only the earlier Rust commit. Before teardown, Broker A's internal transaction log showed no op record for `p14-rust-unknown-key`; its half message was rechecked 15 times, the producer channel became empty after Rust shutdown, and Broker 5.3.4 moved the unresolved half message to `TRANS_CHECK_MAXTIME_TOPIC`.
+- The runner exited 1 after the bounded visibility retries. Evidence is retained at `docs/compatibility/evidence/phase-19/P14-V03/20261025T163706Z/` (`source_code_dirty=false`, exit status 1, duration 316 seconds). Group and topic deletion succeeded on both Brokers; the exact Compose containers, volumes and network were removed and filtered Docker queries were empty. The manifest remains pending.
+- Added a compact Broker-log diagnostic to the evidence. Before another replay, the runner will preserve separate commit/rollback/Unknown producer outputs and capture the two Brokers' internal transaction logs; Rust end-transaction send completion is under investigation.
+
+## P19-05 P14-V03 second replay diagnostic instrumentation — 2026-10-25
+
+- Added a Rust end-transaction hook probe for the local transaction decision and the Broker-check decision, with Broker address, message ID, transaction ID, and `fromTransactionCheck` state. The P14 runner now requires those hook markers for Rust commit, rollback, and both stages of Unknown.
+- Kept Java and Rust commit/rollback/Unknown producer output in separate TSV/stderr files, preserved each before/after Broker max-offset query separately, and captured each Broker container's internal `transaction.log` before teardown.
+- Static checks pass: Maven Java compile; Rust live-client build, format check, and strict Clippy; Bash syntax and `git diff --check`; and P14 two-Broker Compose interpolation. `run.sh --check-all` still fails closed before Docker with only P16-V02 and P17-V02 unimplemented.
+- Next action: commit the diagnostic instrumentation and rerun P14-V03 against a fresh disposable Compose project. P14 remains pending until the cross-language Unknown commit is visible and cleanup completes.
+
+## P19-05 P14-V03 second replay validator diagnostic — 2026-10-25
+
+- Clean-source replay `20261025T164647Z` used committed revision `d281923d233eb9d8d40950bf72270ccc3e48fa00` (`source_code_dirty=false`) and completed Java/Rust commit visibility, both rollback checks, and Java Unknown visibility. The Rust Unknown producer reached both end-transaction hooks on Broker A. Its callback marker was `COMMIT`, while the hook correctly emitted the enum name `COMMIT_MESSAGE`; the runner asserted the wrong spelling and exited before the final Java pull.
+- Broker A's archived transaction log confirms a `fromTransactionCheck=true`, commit operation for Rust Unknown. The run lasted 136 seconds; group and topic cleanup succeeded on both Brokers, and exact-project containers, volumes, and network were removed.
+- Evidence is retained at `docs/compatibility/evidence/phase-19/P14-V03/20261025T164647Z/`. Updated the hook validator to expect `COMMIT_MESSAGE`, require exactly the local Unknown and check-commit hooks, and verify both hook addresses match the selected Broker. P14 remains pending until a clean replay completes the opposite-language pull and cleanup.
+
+## P19-05 P14-V03 clean replay — 2026-10-25
+
+- Clean-source run `20261025T164955Z` on committed revision `fd5db542c17e29f3513b5b057f38cfaffb0efb5f` passed P14-V03 against the pinned Apache RocketMQ 5.3.4 image and Java client 5.5.1 (`source_code_dirty=false`, exit 0, 145 seconds). Java and Rust commit messages were visible to opposite-language pulls; both rollback messages stayed absent and each selected Broker's normal queue max offset was unchanged; Unknown was committed after a bounded Broker check in both producer directions and read back cross-language.
+- Group and topic deletion succeeded. Exact-project Docker queries returned no containers, volumes, or network after teardown. Evidence is archived at `docs/compatibility/evidence/phase-19/P14-V03/20261025T164955Z/`.
+- The manifest now records 34/37 PASS, with only P12-V03, P16-V02, and P17-V02 pending. Updated Phase 14, Java compatibility, and 5.3.4 results summaries. Continue with P16-V02 then P17-V02; P12 remains pending because its public Java shutdown left a non-daemon scheduler thread after handoff assertions passed.
+
+## P19-05 P16-V02 implementation and local platform diagnostic — 2026-10-25
+
+- Added a tls-auth Compose profile with a per-run synthetic ACL user, Java 5.5.1 and Rust live heartbeat probes, a body-tampering remoting proxy, and a mutual-TLS Broker proxy. The probes check signature acceptance, wrong-secret/tampered-body rejection, trust and hostname behavior, client-certificate enforcement, and zero retained client resources. No auth credentials are written to evidence; ephemeral private keys and the temporary Broker config are removed during teardown.
+- Static checks passed: Maven Java compile, Rust live-client build, rustfmt check, strict integration-client Clippy, Bash syntax, Python proxy compilation, `git diff --check`, and tls-auth Compose config validation. Commits: `1929d526` (P16 probes/profile/runner), `74af0e0a` (explicit CA serial path for LibreSSL), and `17be9fdd` (LibreSSL-compatible certificate evidence).
+- Two pre-Broker clean-source diagnostics are retained at `docs/compatibility/evidence/phase-19/P16-V02/20261025T170406Z/` and `20261025T170459Z/`: the first exposed LibreSSL's default CA serial path, and the second exposed unsupported `openssl x509 -ext` flags. Both runner issues were corrected and committed.
+- Clean-source run `20261025T170531Z` reached the pinned RocketMQ 5.3.4 Broker, but ACL initialization exited 255 before client probes because `LocalAuthenticationMetadataProvider` could not find `librocksdbjni-linux-aarch64.so`. The image resolved as linux/arm64 on this host; a platform override probe confirmed the pinned image does not provide linux/amd64. The cause is recorded in the run evidence. Compose removed the exact project containers, volume, and network; exact-project Docker queries were empty. The pinned image was not altered or replaced, and P16-V02 remains pending rather than counted as PASS.
+- Continue with P17-V02, which does not depend on the ACL metadata provider. P12-V03 also remains pending because Java's public consumer shutdown left a non-daemon scheduler thread after its orderly handoff assertions passed.
+
+## P19-05 P17-V02 multi-Broker admin query pass — 2026-10-25
+
+- Added a Java 5.5.1 seed/query probe, a Rust query probe, a per-Broker response proxy, bounded-range/failure assertions, and the P17-V02 runner. Implementation commits: `d790c40f` (runner and probes), `c6986c6d` (normalize omitted Broker names), and `aff298c3` (terminal mapping and proxy-log assertions).
+- Static checks passed: Maven Java compile, Rust live-client build, `cargo fmt --all -- --check`, strict integration-client Clippy, Bash syntax, Python proxy/checker compilation, two-Broker-host Compose config, `git diff --check`, and `tests/differential/run.sh --check-all` (37 scenarios registered with local runners; no Docker started by this preflight).
+- Diagnostic run `20261025T171713Z` showed matching query bodies/timestamps, but Java represented the omitted Broker name as `null` and Rust as an empty string. The normalizer was updated to treat both as absent; cleanup removed the exact Compose project. Diagnostic run `20261025T171923Z` completed all live probes and showed both clients map terminal failures to `NO_MESSAGE` response code 208. Its first runner check used an incorrect expected code and proxy label; after correcting those assertions, verification against its captured outputs passed. Both diagnostic runs remain non-PASS records because their runner exit status was 1.
+- Clean-source run `20261025T172205Z` on `aff298c39e17aa1f00ed3b021a87e1318587593c` passed against the pinned 5.3.4 image and Java client 5.5.1 (`source_code_dirty=false`, exit 0, 112 seconds). Duplicate-key and bounded-time results matched. Broker B query failure preserved the uniquely seeded Broker A result; failures from both Brokers mapped to `NO_MESSAGE` (208) in Java and Rust. Proxy logs recorded two injected errors on Broker A and four on Broker B.
+- The runner deleted `compat_p17_admin_query` from both Brokers and removed the isolated containers, NameServer, volumes, network, and local proxies. Filtered exact-project Docker container/volume/network queries were empty. Evidence: `docs/compatibility/evidence/phase-19/P17-V02/20261025T172205Z/`.
+- The manifest now records 35/37 PASS. `P12-V03` remains pending because Java's process retained a non-daemon scheduler after handoff assertions; `P16-V02` remains pending because ACL initialization on the local ARM64 image lacks `librocksdbjni-linux-aarch64.so`. `run-local.sh --all`, remote CI, owner validation, and final Phase 19 acceptance remain open. No plan file was changed.
+
+## P19-05 P12-V03 Java probe shutdown repair — 2026-10-25
+
+- The retained P12 evidence showed all orderly handoff markers and the Java `java-exited` marker were written, but Maven `exec:java` remained in `joinNonDaemonThreads` on RocketMQ's idle `ConsumeMessageScheduledThread_1`. The client public `consumer.shutdown()` had returned before Maven hung.
+- Updated only the short-lived Java oracle probe: after its consumer command returns successfully, it exits the Maven JVM with status 0. Exceptional paths still propagate without calling `System.exit`; no RocketMQ client or Broker code/image was changed.
+- `mvn -q -f compat/java-reference/pom.xml -DskipTests compile` passed under Maven 3.10.0 / OpenJDK 27, and `git diff --check` passed. Live P12 replay remains pending to confirm this resolves the runner wait and preserves teardown.
+
+## P19-05 P12-V03 clean replay — 2026-10-25
+
+- Clean-source run `20261025T173114Z` on committed revision `de4212ffed4013b91f2fc3d694c6c4148eeee295` passed with Java 5.5.1 and the pinned unmodified RocketMQ 5.3.4 image (`source_code_dirty=false`, exit 0, 141 seconds). The two Brokers had Java-held orderly callbacks while Rust acquired the transferred locks; Rust processed redelivered messages and successors and advanced the offsets to 2 before Java returned. Neither late Java completion regressed the final offsets. Both clients shut down; both queues became lockable and releasable.
+- Scenario-owned topic and consumer groups were deleted, then exact-project Compose containers, volumes, and network were removed. Filtered Docker queries returned no resources. Evidence is archived at `docs/compatibility/evidence/phase-19/P12-V03/20261025T173114Z/`.
+- The manifest now records 36/37 PASS. `P16-V02` remains pending because the pinned Linux ARM64 Broker distribution omits the RocksDB JNI native library required by the ACL metadata provider. Continue evaluating the plan-approved verified Apache 5.3.4 binary-distribution profile; do not alter the pinned image or count a startup failure as a pass.
+
+## P19-05 P16-V02 verified 5.3.4 distribution profile — 2026-10-25
+
+- The pinned image cannot run the ACL-enabled Broker on linux/arm64 because its RocksDB JNI JAR lacks `librocksdbjni-linux-aarch64.so`; the published Apache 5.3.4 binary distribution's `rocketmq-rocksdb-1.0.2.jar` has `librocksdbjni-linux64.so` but no Linux ARM64 library. Docker amd64 emulation passed a Java 8 runtime probe.
+- Downloaded the official Apache `rocketmq-all-5.3.4-bin-release.zip` and published `.sha512` file. The actual archive SHA-512 and published value matched `88508d5480421ce1582e56aa2e3b6e28ea6b88418cf618fd79a78f996a7ae853ee1ea98780377235ed396ce2bc82b4f3d88a838c72076760466702d881bfc6ae`.
+- Added a P16-only local image builder from that unmodified release archive. It pins the amd64 Eclipse Temurin 8 base-image child digest, verifies the release checksum before extraction, and packages the distro with the matching RocketMQ entrypoint. The P16 Compose Broker uses the built linux/amd64 image; its NameServer remains the required pinned Apache 5.3.4 image. `setup.sh` rejects the old failing ARM64 image for `tls-auth`.
+- Shell syntax checks, `git diff --check`, and `docker compose --profile tls-auth config --quiet` passed. The first image build passed and the Docker/JDK emulation probe returned OpenJDK 8u504. P16-V02 live auth/TLS assertions and cleanup have not yet run; do not count the profile as passing.
+- Diagnostic run `20261025T174220Z` built the image successfully but stopped before Compose setup because the builder wrote its checksum summary to stdout, so the caller captured multiple lines as the image reference. No client probes or Docker resources ran. The builder now reserves stdout for the image tag; an isolated rebuild confirmed its stdout contains only `rocketmq-classic-p19-official-5.3.4-amd64:88508d548042`. The diagnostic evidence is archived but not counted.
+- Diagnostic run `20261025T174323Z` reached Compose but the custom Broker exited before health because Apache's unmodified Linux `runbroker.sh` derives `JAVA_HOME` from `javac`; the first wrapper used the JRE-only Temurin image. A temporary exact-project replay captured the cause, then removed all resources and synthetic credentials. The base is now pinned to the Temurin 8 JDK amd64 child digest, and the P16 cleanup trap archives NameServer/Broker logs before teardown.
+- A rebuild with Temurin OpenJDK 8u504 JDK verified `/opt/java/openjdk/bin/javac` is available in the linux/amd64 image. Shell syntax and `git diff --check` passed. The P16 failure-log archiver redacts ephemeral access and secret keys before writing evidence. The clean live profile must be rerun with this committed toolchain before changing P16 status.
+
+## P19-05 P16-V02 clean-source ACL and TLS pass — 2026-10-25
+
+- Clean-source run `20261025T174649Z` on committed revision `ba9480cff5f607f105c5df6a9578eeff089fa19c` passed against Java 5.5.1 and the official Apache RocketMQ 5.3.4 release (`source_code_dirty=false`, exit 0, 106 seconds). Java and Rust accepted valid ACL signatures, rejected wrong secrets and tampered request bodies, and passed the mutual-TLS trust/hostname/client-certificate checks with the same Java-specific wrong-host behavior.
+- The NameServer used pinned image digest `sha256:d57ee4...`; the ACL Broker used a local linux/amd64 container containing the unmodified Apache 5.3.4 binary distribution, verified against the official SHA-512 `88508d5480421ce1582e56aa2e3b6e28ea6b88418cf618fd79a78f996a7ae853ee1ea98780377235ed396ce2bc82b4f3d88a838c72076760466702d881bfc6ae`. The container used pinned Temurin 8u504 JDK child digest `sha256:a0c061...` under Docker amd64 emulation.
+- Synthetic auth credentials and private keys were removed; the isolated project volume, containers, and network were removed. Broker logs were archived with both random auth fields redacted. Exact-project Docker queries found no resources. Evidence: `docs/compatibility/evidence/phase-19/P16-V02/20261025T174649Z/`.
+- All 37 registered local live scenarios now have PASS evidence. The aggregate run-local gate, final requirement-by-requirement API/settings/flow audit, and owner manual evidence remain outstanding; continue with `integration-tests/run-local.sh --all` before drawing a Phase 19 acceptance conclusion.
+
+## P19-03 aggregate gate diagnostic and differential self-test correction — 2026-10-25
+
+- Current-revision aggregate attempt `docs/compatibility/evidence/phase-19/run-local/20261025T175039Z/` ran on `1850d7892b7e126f85618b2c2198cf8475186878` and took 837 seconds before stopping. Formatting, diff hygiene, default and all-features workspace tests, all-target check, strict Clippy, and Java `mvn verify` passed.
+- `differential-self-test` failed because the self-test unconditionally expected Phase 6 live case `P6-V04` to remain `PENDING_PHASE_19` although its live evidence is now PASS. Updated that assertion to accept either valid manifest status. Standalone self-test, manifest validation (37 scenarios), and `git diff --check` then passed.
+- This attempt stopped before the remaining server-free checks and live Docker replay. Rerun the full aggregate gate from the committed correction; no Phase 19 acceptance conclusion is made from this partial run.
+
+## P19-03 live runner and evidence reconciliation diagnostics — 2026-10-25
+
+- Corrected-revision aggregate attempt `docs/compatibility/evidence/phase-19/run-local/20261025T180649Z/` passed every server-free gate and reported the live runner as successful, then failed final evidence reconciliation for all 37 rows. The checker searched only nested `*/result.txt`, but manifest evidence paths name the specific run directory and store `result.txt` directly; a targeted check using direct paths reconciled all 37 existing PASS records.
+- Reviewing `live-scenarios.log` revealed that `tests/differential/run.sh --all` actually invoked only the first scenario. Its child runner inherited the outer loop's manifest input on stdin, so the child command consumed the remaining rows. Only `ROUTE-001-get-existing-topic` ran in this aggregate attempt; do not claim the other 36 were replayed by it.
+- Updated final reconciliation to accept direct run evidence and nested evidence directories. Redirected each child runner's stdin from `/dev/null` so the parent iterates over every selected manifest row. Shell syntax, diff hygiene, and a targeted 37-row evidence reconciliation pass. Rerun the full gate and inspect the live log for all 37 scenario IDs before acceptance.
+
+
+## Final aggregate, current-tree API delta, and MAN-05 disposition — 2026-10-25
+
+- Full command: ROCKETMQ_CLASSIC_TEST_ENV=local-disposable bash
+  integration-tests/run-local.sh --all. Result PASS at source code revision
+  1e909440b39720e814a1db9d79d92bbc6d733713. The archived steps.tsv contains
+  23 PASS rows; all 37 manifest scenarios ran and final scenario-evidence
+  reconciliation passed. Aggregate evidence:
+  docs/compatibility/evidence/phase-19/run-local/20261025T203947Z/. P17-V02
+  metadata independently records source_code_dirty=false at the same revision.
+- The scenario manifest now contains 37 PASS rows. The latest P6-V04 run is
+  20261025T213618Z; P17-V02 is 20261025T220154Z. Earlier failed/diagnostic
+  evidence remains archived and is not selected by the manifest.
+- Post-P18-closure current-tree review found only two production crate deltas:
+  PushConsumer in-flight subscription filtering / response-code-25 heartbeat
+  retry, and RemotingLifecycleCounts / lifecycle_counts diagnostics. The retry
+  timing difference from Java 5.5.1 is documented in KNOWN_DIFFERENCES.md; the
+  diagnostic extension is classified in the Remoting public API inventory.
+  The source-backed MAN-05 audit concludes N/A for extra feature-specific
+  owner validation. MAN-01 through MAN-04 remain blocked on owner-only network,
+  security, HA, and workload inputs. No owner environment was accessed.
+- Docker container, volume, and network queries returned no names with the
+  rocketmq-classic-p19- prefix. Removed nine generated private-key copies
+  accidentally retained in P3-V04 evidence directories; the public test
+  certificates and execution records remain.
+- Updated integration-tests/README.md, owner-validation.md,
+  KNOWN_DIFFERENCES.md, PHASE_3_REMOTING_INVENTORY.md,
+  PHASE_6_REQUIREMENT_AUDIT.md, SERVER_5_3_4_RESULTS.md, and the release
+  checklist. Added docs/compatibility/evidence/owner/MAN-05/
+  current-tree-audit-20261025.md. No plan files changed.

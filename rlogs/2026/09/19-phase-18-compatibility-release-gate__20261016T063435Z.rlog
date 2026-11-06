@@ -1,0 +1,22 @@
+# P18-V01 Request/Reply public message type — 2026-10-16 06:34 UTC
+
+- Pinned Java 5.5.1 `request-reply.json` shows that all six Producer `request`
+  overloads, `RequestCallback.onSuccess`, and `RequestResponseFuture` response
+  methods use base `Message`. Rust previously required or returned
+  `MessageExt` at these public boundaries.
+- Changed the public Producer request/callback and `RequestResponseFuture`
+  response APIs to `Message`. Inbound decode and correlation still use
+  `MessageExt`; the completion boundary upcasts to `Message`. Added explicit
+  owned and borrowed upcasts and facade API coverage.
+- Code commit: `c6d852df`.
+- Passed on this revision: default and all-feature `cargo test --workspace`
+  with `--locked`; strict workspace all-target/all-feature Clippy; `cargo fmt
+  --all -- --check`; and `git diff --check`.
+- Updated the Phase 15 request/reply matrix, Phase 6 requirement audit, and
+  release checklist. These docs record only closure of this type mismatch.
+- Still open: broad P18-V01 bidirectional source/API/input/error/control-flow
+  and reverse-export audit; the remaining current-revision P18-V02 gates;
+  current-revision GitHub Ubuntu/P18-V04 evidence; Phase 19 local Docker/Broker
+  automation and scenarios; `docs/owner-validation.md`; and release
+  version/registry preflight. Owner-run live Broker, deployment, and production
+  checks remain manual Phase 19 validation.

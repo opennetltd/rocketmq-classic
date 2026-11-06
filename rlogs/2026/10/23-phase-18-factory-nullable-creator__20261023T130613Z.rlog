@@ -1,0 +1,46 @@
+# Phase 18 factory nullable seven-argument constructor compatibility
+
+- Recorded: 2026-10-23 13:06:13 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Starting revision: `0d6d9b79`
+- Implemented revision: `8f30b6fb`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: nullable seven-argument `MQClientAPIFactory` overload and remoting creator
+
+## Finding and change
+
+The pinned seven-argument constructor accepts a nullable
+`ObjectCreator<RemotingClient>`. `MQClientAPIImpl` calls a supplied creator
+with the Netty config and channel listener; when the creator is null it builds
+the standard Netty client. Both paths still derive the instance name from
+`namePrefix + "N_" + index`, so a null prefix yields `nullN_0`.
+
+Core now exposes `new_nullable_with_remoting_client_creator`, which carries
+nullable config, prefix, scheduler, and optional creator inputs through the
+same factory build path. The Java fixture invokes the seven-argument
+constructor with a custom creator and records one invocation plus `nullN_0`.
+The Core regression checks the custom creator and the null-creator default
+path. Updated fixture SHA-256:
+`c0beea285db85680c2c5f68d5786a37dae9f54948e99ccbc2ba5aeef26226a25`.
+
+## Verification
+
+- Focused nullable-prefix injected/default creator Core regression — passed.
+- `cargo test -p rocketmq-classic-core --test factory_system_properties --locked` — passed.
+- `cargo test --offline --workspace --locked` — passed, including doctests.
+- `cargo test --offline --workspace --all-features --locked` — passed, including doctests.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — passed.
+- `mvn -q -o -f compat/java-reference/pom.xml verify` — passed; 37 differential scenarios and invoked fixtures, including the seven-argument creator case.
+- Differential comparator self-test and 37-scenario manifest validation — passed.
+- Workspace metadata/dependency/license checks and all seven product package-list checks — passed.
+- Race/leak smoke — 17 cases × 3; fuzz smoke — 163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes, and 192 message decodes.
+- Release examples, fixed-input offline benchmark, Core Windows GNU all-target/all-feature cross-check, workspace Rustdoc JSON, formatting, and diff checks — passed. The Rustdoc inventory counts Common 439, Consumer 460, Core 747, Producer 362, Protocol 1,524, and Remoting 337 public names.
+
+## Acceptance boundary
+
+This closes the nullable seven-argument factory constructor path only. Broad
+P18-V01 source/API/settings/input/error/control-flow/reverse-export
+reconciliation remains PARTIAL. Current-revision remote Ubuntu CI and native
+Windows runtime evidence remain pending. Phase 19 Broker/Docker validation was
+not run. No push or remote CI was performed. The four user-owned Phase 19
+worktree paths remained untouched and unstaged.

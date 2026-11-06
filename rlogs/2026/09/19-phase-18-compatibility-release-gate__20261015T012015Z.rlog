@@ -1,0 +1,24 @@
+# Phase 18 MessageConst reserved-set mutability — 20261015T012015Z
+
+- Pinned Java 5.5.1 exposes `MessageConst.STRING_HASH_SET` as a public mutable `HashSet<String>`, and `Message.putUserProperty` reads its live contents. The Rust public constant was an immutable slice, so caller mutations were impossible. The 54 initial reserved property names match the pinned Java initializer exactly.
+- Replaced the immutable slice with a public `LazyLock<RwLock<HashSet<String>>>`. User-property validation reads the current set. The invoked Java fixture adds a dynamic reserved name and removes `KEYS`, verifies both validation outcomes, then restores the Java set; the Rust fixture does the equivalent and restores the Rust set.
+- Updated Phase 6/8 API maps, requirement audit, release checklist and the regenerated message fixture. Fixture SHA-256: `2ec8cd462b925af5f31fe73a9d4c9103c50bc7d39169cc119c8305342b73d56c`.
+- PASS: `cargo test -p rocketmq-classic-common --all-features --locked` (21 unit tests, 8 integration tests, 11 doctests); `cargo clippy -p rocketmq-classic-common --all-targets --all-features --locked -- -D warnings`; `mvn -o -q -f compat/java-reference/pom.xml verify` (37 scenarios, fixture drift and Java/Rust cross-decodes); `cargo fmt --all -- --check`; `git diff --check`.
+- This closes the mutable reserved-set behavior only. Broad P18-V01 API/input/reverse-export reconciliation remains open. Full final-revision P18-V02 gates, current-revision GitHub Ubuntu evidence, and Phase 19 Docker/Broker scenarios remain outstanding. No plan file changed.
+
+## Current-revision P18-V02 rerun — 2026-10-15, `133d4f54`
+
+- PASS: `cargo test --workspace --locked` and `cargo test --workspace --all-features --locked` (all crate unit/integration targets and doctests).
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `mvn -o -q -f compat/java-reference/pom.xml verify` (37 scenarios, fixture drift and Java/Rust cross-decodes); differential comparator self-test and 37-scenario manifest.
+- PASS: fuzz smoke (104 frame seeds, 10 message seeds, 1,824 mutations); deterministic race/leak smoke (16 cases × 3); release examples; offline benchmark compilation.
+- PASS: workspace metadata/license/dependency audit, locked Cargo metadata, and seven `cargo package --workspace --list --locked --allow-dirty` listings.
+- The full server-free P18-V02 matrix passes on `133d4f54`. P18-V01 broad source/API/input/error/flow/inherited-surface and reverse-export audit remains open, as do current-revision GitHub Ubuntu address-profile evidence and Phase 19 Docker/Broker scenarios. No plan changed; no push, release, or tag action taken.
+
+## Message priority accessor parity — 2026-10-15
+
+- Pinned Java 5.5.1 `Message` exposes `setPriority(int)` and `getPriority()`. Rust `Message` had no equivalent pair.
+- Added `Message::priority` and `Message::set_priority`. The getter uses Java-compatible signed decimal parsing and returns `-1` for missing/malformed/overflow input; the setter rejects negative values with `MessagePropertyError::NegativePriority` and the Java exception text without changing the prior property.
+- Expanded invoked `messagePublicApi` outcomes for absent-property initialization, zero/positive/negative values, exact negative-input error text, malformed/whitespace inputs, signed i32 bounds, overflow, and Arabic-Indic digits. Fixture SHA-256: `2c4fbfe3727bacddc82d08e2f68fc23e6e5891a115f1c770578fab6f133b1522`.
+- PASS: `cargo test -p rocketmq-classic-common --all-features --locked` (21 unit tests, 8 integration tests, 11 doctests); strict Common Clippy; format/diff checks; offline Maven `verify` (37 scenarios, fixture drift, Java/Rust cross-decodes).
+- This closes one Common public-method/input slice only. Broad P18-V01 reconciliation remains open, and P18-V02 must be rerun on the eventual final revision after remaining code corrections.

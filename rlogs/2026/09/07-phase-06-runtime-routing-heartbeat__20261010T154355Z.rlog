@@ -1,0 +1,9 @@
+# Phase 6 execution session — 2026-10-10T15:43Z
+
+- Continued route lookup boundary reconciliation on `07-phase-06-runtime-routing-heartbeat`; the requested Java source checkout is absent here, so the oracle uses pinned RocketMQ 5.5.1 artifacts.
+- Direct Java runtime calls with topic `""` show it is a valid route-table key. The runtime refreshes that empty topic once, resolves a Broker, returns the fixture consumer IDs, then reuses the route for query-assignment and forwards the empty topic.
+- Java oracle/fixture commit `dd9f15ff` precedes Rust loopback regression `cb7ce626`. `empty_topic_uses_normal_route_refresh_and_broker_lookup_flow` checks the NameServer route header `topic=""`, the Broker consumer-list request, the assignment body, and both decoded results. No production behavior change was needed.
+- `fixtures/runtime/lookup.json` SHA-256: `fe7d8781b68bfa52408aea98aa6c903b86dbd100e6a724841de891d19db1ef92`.
+- Validation passed: focused loopback regression and strict core Clippy; full `cargo test --workspace --all-targets --locked` with local socket access; strict workspace all-target/all-feature Clippy; pinned offline Maven verify (22 scenarios, runtime fixture drift and Java cross-decodes); comparator self-test and manifest validation (22 scenarios); formatting and diff checks.
+- Updated the Phase 6 API map and requirement audit. Full Phase 6 source/API/input/platform reconciliation remains open; P6-V04 stays `PENDING_PHASE_19`.
+- Documentation/log commit: pending.

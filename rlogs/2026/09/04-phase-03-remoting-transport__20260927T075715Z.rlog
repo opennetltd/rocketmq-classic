@@ -1,0 +1,12 @@
+# Phase 3 remoting transport session — 2026-09-27T07:57:15Z
+
+- Decision: per user direction, adopted the concise Rust-native surface only; Rust oneway may expose more transport completion than Java, but does not wait for Broker response. Local socket-write success is not Broker receipt/storage.
+- Reviewed Java 5.5.1 `NettyRemotingClient.invokeOneway` and `NettyRemotingAbstract.invokeOnewayImpl`: API obtains channel future before return; listener does before-hook and admission/write; write-future failure is logged, listener admission/synchronous-write exceptions occur outside original caller. Confirmed inbound `writeResponse` uses `channel.writeAndFlush` and sets no fixed activity deadline.
+- Changed `RemotingClient::invoke_oneway` to return an owned future reporting connect/admission/write result while operation remains client-owned if result future is dropped. Added loopback coverage for connection failure, admission timeout, saturated socket write timeout, and successful local send.
+- Removed the fixed 30s deadline from inbound response writes; client-originated writes still use their operation deadline. Added a blocked-write test confirming response-style writes remain pending until shutdown.
+- Updated parity inventory, Java compatibility summary, and ADR to reflect behavior and evidence.
+- Focused tests: remoting lib 42 passed; transport 74 passed. Full workspace test initially had a pre-existing/flaky ordering failure in `p3_async_second_go_away_callback_retains_original_request`; isolated rerun passed, and subsequent full workspace test passed (11 common + 9 protocol + 1 fixture + 42 remoting lib + 4 codec + 74 transport; doc tests 0).
+- Validation passed: `cargo clippy --workspace --all-targets --offline -- -D warnings`; `cargo fmt --all --check`; `python3 scripts/check-workspace-metadata.py`; `python3 tests/differential/compare.py --self-test`; `git diff --check`.
+- Phase 3 not accepted; other PARTIAL/Rust-only public API review and plan criteria remain. No commit made in this session yet.
+
+- Added another public-path oneway connection-failure test; adjusted assertion to accept the mapped transport error category while requiring failure. Added a success assertion proving returned operation reports local send completion. Final full workspace validation rerun passed: 11 common + 9 protocol + 1 fixture + 42 remoting unit + 4 codec + 75 transport; doc tests 0; Clippy/fmt/metadata/differential self-test/diff-check passed.

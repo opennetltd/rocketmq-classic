@@ -1,0 +1,48 @@
+# Project parity review remediation — 2026-10-27
+
+- Plan: `plan/2026/10/02-project-parity-review.md` and its existing Traditional Chinese companion; reviewed against Java client 5.5.1.
+- Branch: `fix/parity-review-2026-10-27`, created from `a91e91bcdcfe92b01a351c56c7ce0dd4ff393e96`.
+- User constraint: review plans may be committed; keep all files under `plan/2026/10/02-project-parity-review-evidence/` out of commits.
+- Repository instructions: no applicable `AGENTS.md` found in this repository. Applied the `coding` skill's phased workflow and append-only execution log.
+
+## Phase 1 — message integrity and Lite initial offsets
+
+- Changed compatibility decoder defaults to unbounded limits, retaining explicit internal limits for callers that opt into them. This preserves all valid Java-sized records and batches instead of returning a successful truncated prefix.
+- Added a Common regression for 24 compressed 3 MiB records and one compressed 65 MiB body; added PullAPIWrapper coverage asserting the 24 messages remain delivered with the Broker's `nextBeginOffset` unchanged.
+- Corrected Lite initial-offset selection for stored valid, missing, and unavailable offsets, retry-topic LAST/TIMESTAMP cases, and negative SEARCH_OFFSET results.
+- Added Lite policy-matrix coverage for the supported LAST, FIRST, and TIMESTAMP modes, retry/regular topics, and invalid timestamps.
+- The first Lite matrix run incorrectly marked stored offset `0` as missing; Java uses exactly `-1` for missing. Corrected the case inputs and reran successfully.
+- Focused checks passed: common decoder oversized-compressed-batch regression; PullAPIWrapper 24-record delivery regression; Lite initial-offset matrix; external Java/Rust probe. The probe now reports one 65 MiB compressed message decoded and delivered, and all 24 3 MiB messages delivered with `next_begin_offset=24`; Java reported the same counts and body sizes. Probe output retained at `/tmp/rocketmq-parity-review-remediated-phase1.json`.
+- `cargo fmt --all` and `git diff --check` passed. Commit: pending.
+
+## Phase 2 — POP control flow and lifecycle
+
+- POP orderly batches now stop before listener invocation, consume hooks, ACK, or visibility updates, matching the pinned Java `ConsumeRequest.run` path. An offline Java invocation confirmed zero orderly listener calls and an unchanged wait-ACK count; Rust regression checks the listener, hooks, and side-effect counters.
+- POP and direct-consume listener tasks now use the existing `AbortOnDrop` ownership pattern. The POP shutdown regression waits for a blocked listener's drop signal, releases its barrier after shutdown, and verifies no late side effect; direct-consume cancellation has the same drop-sentinel check.
+- POP shutdown now polls all worker handles against one service deadline, aborts remaining workers together, and observes the cancellation phase against one second shared deadline. Paused-time coverage verifies 1 and 20 pending workers stay within the same two-phase 200 ms budget.
+- To complete R01 call-site coverage, added Lite fetched-offset acceptance, compressed POP response, and compressed Admin query regressions; each verifies all 24 valid 3 MiB messages remain available.
+- One initial POP lifecycle assertion expected the wait-ACK counter to be zero after cancellation. Inspection showed Java/Rust counters track outstanding messages until ACK, so the test now verifies the count remains outstanding while the listener is dropped and no callback can produce a late ACK.
+- `cargo test -p rocketmq-classic-consumer --locked` passed (277 unit tests plus all package integration tests and doctests). Focused Core compressed-query test passed. The updated Java/Rust offline probe passed and reported `java_pop_orderly_listener_calls=0, wait_ack_count=1`; output retained at `/tmp/rocketmq-parity-review-remediated-phase2.json`.
+- `cargo fmt --all` passed. Commit: pending.
+
+## Phase 3 — live settings, retry timing, and nullable groups
+
+- Pull now stores the suspend-header, suspended-consumer, and default-pull timeout values in atomics on the facade. Default pull calls, suspended pull deadlines, Broker suspend headers, and startup validation read those live values. Added public getters/setters while leaving construction-time `config()` as a snapshot.
+- Lite now retains live consumer group, consume-from policy, and timestamp values. Offset selection reads the live policy and timestamp when a queue is initialized. Lite captures `pullTimeDelayMillsWhenException` when the facade is constructed; ordinary pull failures use that delay and a typed Broker `FLOW_CONTROL` response uses the shared Java-compatible 20 ms delay.
+- Pull and Lite configs now have explicit `new_nullable`, nullable getter, and nullable setter APIs while preserving existing non-null constructors/setters. Lite and Pull facades expose nullable group accessors/setters; startup keeps null distinct from empty and validates null, empty, default, and namespaced valid groups at the Java-equivalent boundary.
+- Added external facade API coverage, live offset-policy/timestamp coverage, Pull timeout mutation coverage, group validation/lifecycle cases, and paused-time retry tests for 4,500 ms, 1,000 ms, and 20 ms branches plus cancellation and immediate successful batch acceptance.
+- `cargo test -p rocketmq-classic-consumer --locked` passed: 287 unit tests, all package integration tests (including the new externally callable facade test), and 12 doctests. `cargo fmt --all -- --check` and `git diff --check` passed.
+- Commits recorded after the earlier phase entries: Phase 1 `db941d9f` (`Fix message decode and Lite offset parity`); Phase 2 `c0960129` (`Fix POP lifecycle parity and batch delivery coverage`). Evidence remains untracked and excluded from both commits.
+- Phase 3 commit: pending.
+
+## Phase 4 — current status reconciliation and targeted live verification
+
+- Phase 3 source commit: `7e0e9955` (`Restore live Pull and Lite consumer settings`). The branch still points at this code revision while the Phase 4 documentation changes are prepared.
+- Replayed three affected Java 5.5.1/Rust consumer scenarios against the pinned, unmodified RocketMQ 5.3.4 image at source revision `7e0e9955f591f773c0f4b2f816951cf57dfd7580`. Every run recorded `source_code_dirty=false`, `exit_status=0`, and exited successfully after topic/group and Compose cleanup:
+  - `P9-V03`, run `20261027T070105Z`, 115 seconds: matched all four Pull statuses, suggested Broker, boundary RPCs, and persisted offset resume. Evidence: `plan/2026/10/02-project-parity-review-evidence/live/P9-V03/20261027T070105Z/`. `metadata.txt` SHA-256 `3601c8287710e381bf9c72a9c1497bdf3905bd0f48560de9bb00e30224ea82d6`; `result.txt` SHA-256 `001745ded37c562758f85b565fb4cc4a6e33229cf18c441cbd488592a84dc4b5`.
+  - `P5-V02-consumer`, run `20261027T070306Z`, 76 seconds: matched Pull/Lite Pull, offset, consumer-list, send-back, lock and unlock RPC outcomes. Evidence: `plan/2026/10/02-project-parity-review-evidence/live/P5-V02-consumer/20261027T070306Z/`. `metadata.txt` SHA-256 `0d74e89a3c2cbe2651ebcb3579c64631ac4b959818fbcc7f1e51406e4a26cc64`; `result.txt` SHA-256 `f5e69c04df4875b8623fde81348f904e071b5eafac159679a2003a10c9471789`.
+  - `P13-V02`, run `20261027T070426Z`, 118 seconds: matched POP delivery, expiry redelivery, ACK, visibility update, replacement receipt, mixed queue mapping and malformed receipt rejection. Evidence: `plan/2026/10/02-project-parity-review-evidence/live/P13-V02/20261027T070426Z/`. `metadata.txt` SHA-256 `449ae9b5cf8b819ce23b15d1f5d68c0370b509dffad486a8aefe4dd349bdcbf9`; `result.txt` SHA-256 `1815e44ec2be6912e3448879ba09aedc1cf3aa5664e6e1d3e3f2723b8a151fe2`.
+- After each live case, Docker queries for `rocketmq-classic-p19-` containers, volumes and networks returned no resources. Raw output was copied from `/tmp` into the local evidence directory above; no evidence files are staged or included in commits.
+- Reconciled README, current compatibility status, Known Differences, Phase 9 and Phase 13 matrices, and release checklist. They distinguish the historical `413f735a` complete 23/23 + 37/37 aggregate from the three current-revision scenario passes; the full 37-scenario matrix remains explicitly unrerun on `7e0e9955`. TLS guidance states chain and certificate-validity verification without peer hostname/endpoint identification.
+- Current source revision checks passed: `cargo test --workspace --locked`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `mvn -o -f compat/java-reference/pom.xml verify`; `python3 scripts/check-workspace-metadata.py`; `cargo fmt --all -- --check`; and `git diff --check`. The consumer package run also passed 287 unit tests, every package integration suite, and 12 doctests. Final diff/format and metadata checks passed again after documentation edits.
+- The current local three-scenario evidence does not change owner items MAN-01 through MAN-04 or claim final compatibility/release approval. Phase 4 documentation and this appended record are included together in the documentation changeset; local evidence remains excluded.

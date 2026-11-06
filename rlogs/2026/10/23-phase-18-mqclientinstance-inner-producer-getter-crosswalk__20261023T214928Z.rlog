@@ -1,0 +1,41 @@
+# Phase 18 MQClientInstance internal producer getter crosswalk
+
+- Recorded: 2026-10-23 21:49:28 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Starting revision: `368adc9c`
+- Pinned Java source: `rocketmq-all-5.5.1` tag, `2ed890cd27b047cc124638aa3c80e391dde942b8`
+- Scope: `MQClientInstance.getDefaultMQProducer()` source/API disposition
+
+## Source audit
+
+Pinned `MQClientInstance.java` declares the public getter at line 1509 and
+constructs that producer with group `CLIENT_INNER_PRODUCER`. The in-tree Java
+calls found by `git grep` are retry/send-back sends in:
+
+- `ConsumeMessageOrderlyService.java:393`
+- `ConsumeMessagePopOrderlyService.java:307`
+- `DefaultMQPullConsumerImpl.java:679`
+- `DefaultMQPushConsumerImpl.java:801`
+
+The factory separately starts and shuts down the same internal producer's
+implementation. `DefaultMQProducerImpl.getDefaultMQProducer()` is a different
+getter and remains separately mapped to the Rust `Producer` owner's borrowed
+accessors.
+
+`MQClientInstance` is under `client.impl.factory`. Rust does not expose the
+mutable internal producer wrapper as a user facade. Its in-tree send behavior
+maps to the Consumer owner path (Pull delegates to the shared Push retry
+helper), and the internal group/lifecycle registration maps to Core's runtime
+control actor. The crosswalk records this as an implementation-accessor
+disposition without claiming wrapper identity parity.
+
+Pinned `MQClientInstance.java` SHA-256:
+`55619893df475f32332d4a49787ac4a8add0d881de76922d528ba6eb7f3e267d`.
+
+## Verification and boundary
+
+- Source callsites were inspected with `git grep` at the pinned tag.
+- Documentation diff whitespace check passes; no code or Java fixture changed, so tests were not rerun.
+- The default retry-topic flow is covered by `b45bf5df` and its audit record.
+- This records the internal getter's callsite disposition only. Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export reconciliation remains PARTIAL, including the optional `sendLatencyEnable=true` fault selector.
+- No plan was edited, no push or remote CI was run, and user-owned Phase 19 workspace paths were not staged.

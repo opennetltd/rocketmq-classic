@@ -1,0 +1,52 @@
+# Phase 18 MessageExt body override follow-up — 2026-10-21T18:41:00Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `81d67a5e` (`feat(common): dispatch MessageExt subtype bodies`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `9b67a09bc850192e2856bc908c10a6dfa6590db3f924b32fe62b6e97edcc510f`.
+
+## Source audit and change
+
+- Java `ProcessQueue.putMessage` reads virtual `MessageExt.getBody()` to
+  calculate cached bytes. Rust previously resolved this inherited method
+  through the base `Message` value even when a caller-defined subtype supplied
+  an override.
+- Added `MessageExtSubtype` hooks for `getBody` and `setBody`. `MessageExt`
+  returns an opaque live read view for the stored base body or a runtime subtype
+  snapshot for the override; nullable reads preserve Java null. The concrete
+  read-view type is hidden behind `impl Trait`, so this does not add a public
+  concrete type to the facade.
+- The invoked Java fixture now records custom body length in direct-consume
+  callbacks and exercises the subtype through `ProcessQueue.putMessage`.
+  Rust compares callback length, retained byte size and setter count. All 27
+  direct-consume cases and the ProcessQueue fixture comparison pass.
+- Updated the Phase 6, Phase 10 and Phase 18 crosswalks and release checklist.
+  Mutable custom body-array aliasing and other inherited virtual methods remain
+  open.
+
+## Verification
+
+- PASS: `cargo test --workspace --locked --quiet`.
+- PASS: `cargo test --workspace --all-features --locked --quiet`.
+- PASS: strict workspace Clippy with all targets/features and `-D warnings`;
+  `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: focused Common and Consumer package tests, including the
+  `runtime_direct_consume` Java/Rust fixture comparison. Consumer package
+  tests include 247 library tests and all package integration tests.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify`: 37 scenarios, 83
+  typed headers, 16 typed bodies and Rust/Java cross-decodes. The runtime
+  consumer fixture verifies 9 Running Info, 27 direct-consume and 15 reset
+  cases. Existing JDK Unsafe/reflection warnings were emitted.
+- Supplemental differential, stress, fuzz, examples, benchmark, metadata,
+  package-content and time-zone gates have not yet been refreshed on this new
+  code revision.
+
+## Remaining status
+
+This closes body getter/setter dispatch for the audited flows only. Mutable
+custom body-array aliasing, other inherited `Message`/`MessageExt` overrides,
+and broad P18-V01 source/API/settings/input/error/control-flow/reverse-export
+work remain open. Current GitHub Ubuntu and native Windows P18-V04 runtime
+evidence is absent. Phase 19 Broker/Docker validation remains separate. No
+push, remote CI, Broker or Docker run was performed. Pre-existing Phase 19
+worktree paths were left untouched and unstaged.

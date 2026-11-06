@@ -1,0 +1,38 @@
+# Phase 18 current-tree supplemental server-free gates
+
+- Recorded: 2026-10-24 09:02 UTC
+- Branch: phase/18-phase-18-compatibility-closure
+- Code/test revision: 924466d6
+- Documentation head before this record: 67fced48
+- Pinned Java source: RocketMQ 5.5.1, efa1be59d6fc747ad220f036c86030f05f0419f9
+- Host: macOS 26.6.1, AArch64, Apple M5 Max, 18 logical CPUs
+- Rust: rustc 1.85.0 (4d91de4e4 2025-02-17)
+
+## Verification
+
+- `CARGO_NET_OFFLINE=true bash tests/stress/run-offline-smoke.sh` — passed
+  all 20 deterministic race/leak cases × 3 repetitions.
+- `cargo run --offline -p rocketmq-classic-remoting --example fuzz_smoke
+  --locked` — passed 163 frame seeds, 11 message seeds, 2,784 bounded
+  mutations, 564 frame decodes and 192 message decodes.
+- `cargo test --workspace --locked` — passed all default-feature package tests
+  and doctests on this code/test revision.
+- `cargo bench --offline --locked -p rocketmq-classic --bench offline` —
+  passed. Timing and allocation observations are appended to
+  `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+- The full all-feature workspace tests/doctests, strict workspace Clippy,
+  release examples, Windows GNU all-target/all-feature check and strict Clippy
+  (compile-only), pinned offline Maven `verify`, differential comparator and
+  manifest, formatting and diff checks passed earlier on code/test revision
+  `924466d6`, as recorded in
+  `rlogs/2026/10/24-phase-18-count-inner-negative-rewind__20261024T085047Z.rlog`.
+
+## Scope
+
+This refreshes server-free P18-V02 evidence for the current decoder code. Broad
+P18-V01 source/API/settings/input/error/control-flow and reverse-export review
+remains PARTIAL. Zero-size and cyclic inner-message cursor behavior retain the
+bounded Rust error disposition recorded in `KNOWN_DIFFERENCES.md`. Native
+Windows runtime and current-revision remote Ubuntu CI remain unverified;
+Phase 19 Broker/Docker evidence remains separate. No push or remote CI was run.
+The four protected Phase 19 worktree paths remain untouched and unstaged.

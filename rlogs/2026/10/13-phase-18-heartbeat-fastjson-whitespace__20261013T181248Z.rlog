@@ -1,0 +1,11 @@
+# Phase 18 Heartbeat Fastjson whitespace parity — 2026-10-13T18:12:48Z
+
+- Base revision: `5364cd19` on `phase/19-phase-18-compatibility-release-gate`. The Java RocketMQ checkout at `/Users/bruce.tsai/Projects/3rd/rocketmq` remained read-only.
+- Environment: macOS ARM64, Darwin 25.6.0, Rust 1.85.0.
+- Extended `RuntimeHeartbeatFixtures` with 810 invoked Java inputs: 54 ASCII/Unicode whitespace code points in 15 JSON token, delimiter, key, and value positions. Heartbeat DTO input corpus is 1086 cases. Pinned Fastjson accepts every probed U+0000–U+001F raw string key/value case; Rust now converts unescaped raw C0 characters inside strings to JSON Unicode escapes without changing the decoded value. The normalizer also preserves observed nonbreaking-space position rules and trailing U+001A behavior.
+- Fixture SHA-256: `7ee5f23d02df0033c914e6ea772f133dc29013e1061444a4490ea18e63bdaf6f`.
+- PASS: common and protocol crate suites; focused `preserves_raw_control_characters_inside_fastjson_strings`; `heartbeat_dto_inputs_match_invoked_java_fastjson` (1086 cases).
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, fixture drift checks, Java/Rust cross-decodes).
+- PASS: `cargo test --workspace --all-features --locked`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`; differential comparator self-test; 37-scenario manifest validation.
+- Updated the Phase 6 Heartbeat audit, current Phase 6 requirement summary, and Phase 18 release checklist. Plans were not changed.
+- P18-V01 remains open: this bounded Fastjson input scope does not complete the broad Java source/API/input and Rust reverse-export behavior audit. Ubuntu CI, Windows/BSD/real IPv6-only-host runtime evidence, registry-compatible release versions/dependencies, and Phase 19 Broker/Docker scenarios remain outstanding. No Broker or Docker was used.

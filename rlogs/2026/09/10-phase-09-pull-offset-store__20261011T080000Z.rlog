@@ -1,0 +1,27 @@
+Phase 9 execution started 2026-10-11 UTC.
+Started from Phase 8 commit b44ab944 on a clean worktree.
+Plan and coding-general instructions reviewed; implementation inventory and Java 5.5.1 source audit in progress.
+
+P9-01 — offset transition contract:
+- Added the public object-safe `OffsetStore` async boundary, `ReadOffsetType`, typed `OffsetRead::{Found, NotFound}`, and shared per-queue state with atomic update/freeze behavior.
+- The shared table keeps lock scopes synchronous and short; it snapshots owned offset values and recovers poisoned locks without panicking. A typed lookup error remains separate from Java's `-1` missing sentinel via `OffsetRead::java_value`.
+- Added tests for memory absence, topic snapshots, stale increase-only writes, reset behavior, freeze ordering, reloading, removing a frozen entry, and update/freeze concurrency.
+- `cargo test -p rocketmq-classic-consumer --lib --locked`: PASS (9 tests). An initial test assertion expected an existing reinserted row to be absent; corrected the assertion order and reran successfully.
+- `cargo fmt --all` completed; formatting check and complete workspace lint/test gates remain scheduled for phase closeout.
+
+P9-02 — remote Broker offset store:
+- Added `RemoteBrokerOffsetStore` with memory, Broker-only, and memory-first reads; master lookup followed by route refresh/fallback; query result caching; sync/oneway update support; and snapshot-based `persist_all` cleanup. Failed individual persistence does not delete selected offsets.
+- Mapped Broker `QUERY_NOT_FOUND` to `Ok(None)` in the core RPC API, preserving the distinction between an absent offset and transport/RPC errors. Added optional `brokerName` encoding to both query and update headers.
+- Added controlled NameServer/Broker integration cases for a route refresh with slave fallback, successful query and oneway persistence, typed missing offsets, and retaining selected memory offsets while clearing stale queues after a persistence failure.
+- The first locked integration build identified a stale lockfile after adding test dependencies; an unlocked offline build then exposed `serde_json` used by the library but only listed as a dev dependency. Moved `serde_json` to regular dependencies and refreshed `Cargo.lock` offline.
+- PASS: `cargo test -p rocketmq-classic-consumer --test offset_remote --locked --offline` (3 tests); `cargo test -p rocketmq-classic-consumer --lib --locked --offline` (9 tests); `cargo test -p rocketmq-classic-core --test consumer --locked --offline` (7 tests); `cargo test -p rocketmq-classic-core --test rpc_invoked_java_fixtures --locked --offline` (1 test).
+- `cargo fmt --all` and `git diff --check` pass. The P9-02 build reported `OffsetTable::replace` as unused before the P9-03 loader began using it.
+- Commit: `b97b2377 feat(consumer): implement remote broker offset store`.
+
+P9-03 — local crash-safe offset persistence:
+- Added the default Java-compatible `{root}/{clientId}/{group}/offsets.json` layout, honoring the `rocketmq.client.localOffsetStoreDir` environment property when set and an explicit-root constructor for controlled use. Client/group path components reject empty/dot traversal and percent-encode separators and reserved bytes.
+- Captured the exact pinned Java 5.5.1 `OffsetSerializeWrapper.toJson(true)` output in `fixtures/offset/local-offset-store.json`; the Java Fastjson map uses unquoted object-valued keys. Generated in an isolated pinned-source archive with `mvn -pl client -am -Dcheckstyle.skip=true -Dspotbugs.skip=true -Dtest=LocalOffsetSerializationOracleTest -Dsurefire.failIfNoSpecifiedTests=false test` on Zulu 21.0.12.1 (one JUnit test passed). The Rust reader parses that shape and round-trips exact signed 64-bit values. Provenance records source commit, generation method, layout and SHA-256.
+- Added load, memory/store/memory-first reads, selected-queue persist, merge-with-existing-table, backup fallback, and recoverable corruption errors. Writes use unique same-directory temp files, `sync_all`, last-valid backup replacement, atomic primary replacement, and directory sync where supported. Unix uses advisory `flock`; Windows uses `LockFileEx` and `MoveFileExW`; a process-local registry also rejects duplicate in-process owners.
+- Fault injection before/after temp creation/sync, backup temp sync/install, primary install and directory sync always recovered the old or new complete snapshot. Additional checks cover primary recovery from `.bak`, two corrupt generations, traversal encoding, writer exclusion, fixture restart, selected-queue persistence and exact `i64` values.
+- PASS: `cargo test -p rocketmq-classic-consumer --lib --locked --offline` (16 tests); `cargo test -p rocketmq-classic-consumer --test offsets --locked --offline` (4 tests); `cargo fmt --all`.
+- A Windows target check was attempted, but dependency build scripts require the missing `x86_64-w64-mingw32-gcc`; Windows-target compilation remains unverified in this environment.

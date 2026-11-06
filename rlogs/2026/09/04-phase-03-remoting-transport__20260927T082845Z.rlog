@@ -1,0 +1,7 @@
+# Phase 3 remoting transport session — 2026-09-27T08:28:45Z
+
+- Resumed Phase 3 parity review; phase gate remains closed and P3-V04 stays pending Phase 19.
+- Verified the event-queue restoration: Rust uses bounded Tokio channel capacity 10001 and `try_send`, matching Java's `currentSize <= 10000` admission rule. Updated stale ADR and Java compatibility wording that incorrectly described the channel-event queue as unbounded; clarified owned-request pipeline and remaining hook/executor/reconnect gaps.
+- Reviewed Rust-only API dispositions, removed context-pipeline/address helper references, current NameServer scan/update notes, outbound queue language, and both English/Traditional Chinese Phase 3 plans. Plan acceptance checks remain unchecked; P3-07 queue wording in both languages follows Java unbounded executor behavior.
+- Validation on current bounded-event-queue tree: `cargo test --workspace --offline` passed (11 common, 9 protocol, 1 fixture, 45 remoting unit, 4 codec, 74 transport; doc tests 0); `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --offline -- -D warnings`, `python3 scripts/check-workspace-metadata.py`, `python3 tests/differential/compare.py --self-test`, and `git diff --check` passed.
+- No phase acceptance claim and no Phase 4 work. Remaining inventory `PARTIAL` entries (NameServer scan/reconnect scheduling, event/executor lifecycle, Java exception taxonomy/remarks, TLS snapshot-vs-Java property reload) still need source-based disposition and criteria review. Changes are not committed yet.

@@ -1,0 +1,22 @@
+# Phase 18 `exportPopRecord` RPC slice — 2026-10-21T06:26:47Z
+
+- Continued the pinned RocketMQ Java 5.5.1 compatibility audit at source
+  commit `efa1be59d6fc747ad220f036c86030f05f0419f9`. Added the Core mapping for
+  `MQClientAPIImpl.exportPopRecord(String,long)`, request code 200056, which is
+  named `POP_ROLLBACK` in the request-code registry.
+- The method sends an empty request envelope, uses the supplied Broker address
+  even when VIP mode is enabled, and reports non-success replies. The Rust
+  `MQClientApi::export_pop_record` mapping preserves those behaviors.
+- Invoked Java fixtures and a VIP-enabled Rust loopback compare the public
+  signature, address, request code/header/body and success/error results.
+  Producer core fixture SHA-256:
+  `d94fd1f95eba2caf6ce77e312cd53a4109be74048b23db5ad694a2c5b7109242`.
+- Validation passed: Core all-feature locked suite (183 unit tests, all
+  integration targets and 16 doctests); strict all-target/all-feature Clippy
+  for Common, Core, Producer and facade; Producer pinned fixture comparison;
+  Maven `verify` (37 scenarios, 67 typed-header frames, 15 typed-body fixtures
+  and Java/Rust cross-decodes); formatting and `git diff --check`.
+- Phase 18 plan file was not edited. Broad P18-V01, current-tree P18-V02,
+  P18-V03 package/provenance review and P18-V04 environment evidence remain
+  open. No remote CI or Phase 19 Broker/Docker validation ran. Existing Phase
+  19 worktree paths remain unstaged and untouched.

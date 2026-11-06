@@ -1,0 +1,27 @@
+# Phase 18 unit topic-list RPC slice — 2026-10-21T05:59:00Z
+
+- Continued the pinned RocketMQ Java 5.5.1 audit at source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`. Added Core mappings for
+  `MQClientAPIImpl.getUnitTopicList(boolean,long)`,
+  `getHasUnitSubTopicList(boolean,long)`, and
+  `getHasUnitSubUnUnitTopicList(boolean,long)`, using NameServer requests 311,
+  312 and 313 with no custom header or body.
+- All three methods filter `%RETRY%` topics from the returned `TopicList` only
+  when `isUnitMode` is false. Added invoked Java fixtures and a Rust
+  differential covering both boolean values, each request code/envelope,
+  response errors and missing-body cases. Java throws `MQClientException` code
+  0 when `SUCCESS` has no body; Rust returns structured `MalformedResponse`.
+  Producer core fixture SHA-256:
+  `bb5a19cb131f922828ff5effb8eb52ac4a0d95e8bae2863775214da4d6664e5b`.
+- Validation passed: focused unit-topic-list differential; Core all-feature
+  locked suite (181 unit tests, all integration targets and 16 doctests);
+  strict all-target/all-feature Clippy for Common, Core, Producer and facade;
+  Producer pinned Java fixture comparison; pinned Java Maven `verify` (37
+  scenarios, 67 typed-header frames, 15 typed-body fixtures and Java/Rust
+  cross-decodes); formatting and `git diff --check`.
+- Updated the Phase 6 API map and requirement audit, Java compatibility summary,
+  Phase 7 fixture digest progression, release checklist and this record. The
+  Phase 18 plan was not edited. Broad P18-V01, current-tree P18-V02,
+  P18-V03 package/provenance review, and P18-V04 environment evidence remain
+  open. No remote CI or Phase 19 Broker/Docker validation ran.
+- Existing Phase 19 worktree paths remain untouched and unstaged.

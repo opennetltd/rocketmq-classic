@@ -1,0 +1,11 @@
+Session: 2026-10-10T01:55:52Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Java invoked code 40 oracle (`adbfa4c6`): the inbound fixture now constructs a real 5.5.1 `MQClientInstance`, creates `ClientRemotingProcessor`, and dispatches NOTIFY_CONSUMER_IDS_CHANGED through an `EmbeddedChannel` context. It observes the actual `ServiceThread.hasNotified` atomic permit before/after the call. With consumerGroup present and absent, Java reports false→true and a null response. Fixture SHA-256: `81ebd0267107a1c01efff218e3d06dd659b5afc4c0aaf061466c60006ef62f51`.
+
+The native paused-time inbound test reads both Java cases, confirms their response/wakeup outcomes, and checks each request wakes two distinct registered consumer groups. Loopback coverage confirms no wire response. Production fix remains the separate `17ecacc3` commit.
+
+Verification passed: `cargo test -p rocketmq-classic-core --lib runtime::inbound::tests --locked` (9 passed); `cargo test -p rocketmq-classic-core --test inbound --locked` (2 passed with local socket access); pinned offline `mvn -o -q -Dmaven.repo.local=/private/tmp/p6-maven-repository -Drocketmq.log.root=/private/tmp/p6-rocketmq-logs -f compat/java-reference/pom.xml verify` (exit 0, all runtime fixtures, 22 scenarios and Java cross-decodes); core all-target/all-feature Clippy; and format/diff checks. The full workspace test suite, strict workspace Clippy, differential comparator self-test and manifest22 validation also passed after the production correction; the new Rust fixture-backed test passed in the focused library run.
+
+This supplies direct Java evidence for the code 40 behavior gap and closes that runtime boundary only. Full Phase 6 source/API/input and reverse-export reconciliation remains open; non-macOS/real IPv6-only evidence remains open; P6-V04 remains `PENDING_PHASE_19`. Maven used the existing artifact repository copied to `/private/tmp`; all Maven log output was directed under `/private/tmp`. No Java checkout, live Broker, deployment state, or home Maven cache was modified.

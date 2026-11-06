@@ -1,0 +1,34 @@
+# Phase 18 response-header identity and API inventory
+
+- Recorded: 2026-10-23 14:59:13 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source revision: `e555c725`
+- Java reference: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Change
+
+The response-header Java identity/API fixture previously covered 16 types,
+while Rust defines 22. Added the six missing Java 5.5.1 types:
+`AddWritePermOfBrokerResponseHeader`,
+`ChangeInvisibleTimeResponseHeader`,
+`GetAllSubscriptionGroupResponseHeader`,
+`GetAllTopicConfigResponseHeader`, `GetKVConfigResponseHeader`, and
+`WipeWritePermOfBrokerResponseHeader`. The Java class mapping records the
+NameServer package and KV capitalization explicitly. Rust tests now require
+22 identity and API inventory entries and verify the corresponding class
+names and accessor mappings. No Rust production behavior changed.
+
+Fixture SHA-256:
+`4e17f64398e2ae742f1fae55841e365eb7aed89b3f6aaad7eb191e8d282dd8ae`.
+
+## Verification
+
+- `cargo test --offline --locked -p rocketmq-classic-protocol` — passed: 160 unit tests, integration targets, and 166 doctests.
+- `cargo clippy --offline --locked -p rocketmq-classic-protocol --all-targets --all-features -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- `mvn -q -o -f compat/java-reference/pom.xml verify` — passed: 37 scenarios, fixture drift verification, 11 message fixtures, 106 typed headers, and 19 typed bodies cross-decoded.
+
+This closes the response-header identity/API inventory omission only; broad
+P18-V01 remains PARTIAL. Native Windows runtime and current-revision remote
+Ubuntu CI remain open. Phase 19 remains out of scope. No push or remote CI was
+run, and the four existing user-owned Phase 19 paths were not edited or staged.

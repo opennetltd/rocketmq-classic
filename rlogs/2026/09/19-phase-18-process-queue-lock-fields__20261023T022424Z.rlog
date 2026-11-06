@@ -1,0 +1,32 @@
+# Phase 18 ProcessQueue public lock fields — 2026-10-23T02:24:24Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Finding and implementation
+
+Pinned Java `ProcessQueue` declares public static `REBALANCE_LOCK_MAX_LIVE_TIME`
+and `REBALANCE_LOCK_INTERVAL`; the earlier Rust mapping used both internally
+but omitted public accessors. Added Rust associated accessors for each value.
+Their shared cache now initializes as a pair on first ProcessQueue access, and
+the same pair drives orderly lock scheduling and `is_lock_expired`. This
+matches Java's class initialization boundary. Property parsing uses the
+existing Java-compatible `Long.parseLong` parser, including Unicode decimal
+digits, and returns a Rust error from the accessors for malformed inputs.
+
+Updated the Phase 12 setting table, Phase 18 queue API crosswalk, and Phase 6
+reverse-export inventory. The pinned fixture regression compares both public
+values; the source crosswalk regression requires both accessors to remain
+documented.
+
+## Checks
+
+- `cargo test --offline -p rocketmq-classic-consumer --test orderly --locked` — 1 passed.
+- `cargo test --offline -p rocketmq-classic-consumer --test facade_api_surface every_process_queue_rust_only_surface_has_java_disposition --locked` — 1 passed.
+- `cargo test --offline -p rocketmq-classic-consumer --all-targets --all-features --locked` — 260 library tests and 74 integration tests passed.
+- `cargo clippy --offline -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+This closes the two public lock-field mapping rows only. Broad P18-V01
+reconciliation remains PARTIAL; current-revision remote Ubuntu CI, native
+Windows runtime, and Phase 19 Broker/Docker evidence remain open.

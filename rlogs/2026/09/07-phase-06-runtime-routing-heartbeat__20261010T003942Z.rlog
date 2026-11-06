@@ -1,0 +1,7 @@
+Session: 2026-10-10T00:39:42Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Pinned ServiceThread inspection confirmed inherited `getJoinTime()` always returns 90,000ms for both `RebalanceService` and `PullMessageService`. Added public `runtime::SERVICE_THREAD_JOIN_TIME_MILLIS` and checked both invoked Java fixture rows against it. Focused native test `cargo test -p rocketmq-classic-core --test runtime inherited_service_thread_oracle_records_java_thread_controls --locked`, `cargo fmt --all -- --check`, strict all-target/all-feature Clippy, and `git diff --check` pass. Implementation/test commit `5ce83461`; API-map and requirement-audit commit `0ccfcaf4`.
+
+This constant records Java's fixed value; it does not provide per-worker getters, JDK thread join mechanics, interrupt control, daemon behavior, or `makeStop()`. Phase 6 source/API/input/reverse-export reconciliation remains open, platform enumeration gaps remain unverified, and P6-V04 stays `PENDING_PHASE_19`.

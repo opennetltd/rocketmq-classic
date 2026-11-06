@@ -1,0 +1,13 @@
+Execution session: 2026-10-10T15:07:13Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Initial state: `f01a663e` after adding nullable raw-route read, query, and refresh entry points. The Java oracle and native behavior commits were already present; the Phase 6 API map and requirement audit needed final verification evidence.
+
+Selected slice: pin null-topic behavior for `getAnExistTopicRouteData`, `queryTopicRouteData`, and `updateTopicRouteInfoFromNameServer`. Actual Java 5.5.1 calls show cached read/query throw before refresh. Refresh passes null through to NameServer: a missing route returns false, while a returned route hits Java's null-key route map failure. Rust maps the latter failure to a typed route error and preserves the no-route false result. The loopback differential checks two requests with no encoded topic field and covers both response branches. Oracle commit `14d67704`; Rust/test commit `f01a663e`; `fixtures/runtime/route.json` SHA-256 `d0053d63f30af9f67dbe6f576560e1d77ddeb3a61d6d3d893e9ca441a099ab45`.
+
+Validation: focused loopback test `null_topic_route_lookups_match_invoked_java_control_flow` and strict core Clippy passed. Full `cargo test --workspace --all-targets --locked` and strict all-target/all-feature Clippy passed. Pinned offline Maven verify passed (22 scenarios, route fixture drift and Rust-to-Java cross-decodes). Comparator self-test and manifest validation passed (22 scenarios); formatting and diff checks passed.
+
+Documentation update: `PHASE_6_API_CONFIG_MAP.md` records the nullable read/query/refresh entry points and response-dependent null topic behavior. `PHASE_6_REQUIREMENT_AUDIT.md` records the pinned Java outcomes, loopback evidence, fixture digest, and gates. This closes these null-topic route lookup branches only; full Phase 6 reconciliation remains open and P6-V04 stays `PENDING_PHASE_19`.
+
+Documentation/log commit: pending.

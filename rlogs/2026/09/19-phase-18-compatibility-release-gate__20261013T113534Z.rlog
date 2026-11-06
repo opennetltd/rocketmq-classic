@@ -1,0 +1,12 @@
+# Phase 18 execution session — 2026-10-13T11:35:34Z
+
+- Continued P18-V01's raw Pull offset-entrypoint audit against the pinned Java 5.5.1 source. Java `DefaultMQPullConsumer.fetchConsumeOffset` namespaces its input before delegating; the raw implementation method checks running state and forwards the queue unchanged. `updateConsumeOffsetToBroker` forwards queue, offset, and oneway directly to `OffsetStore` without a running-state check.
+- Added `PullConsumer::fetch_consume_offset_raw` for the direct implementation path. Kept `fetch_consume_offset` on facade namespace semantics. Changed `update_consume_offset_to_broker` to pass the exact queue and use an already configured offset store without requiring startup, while returning typed lifecycle errors when no store exists.
+- Extended the invoked Java accessor fixture with a recording `OffsetStore`; it now proves raw update-before-start, raw fetch queue/mode, and facade fetch namespace/mode. Added a Rust differential test and updated the Phase 9 method matrix and release checklist.
+- Initial focused Rust compilation found the test recorder did not handle `ReadFromMemory`; added the missing mode before verification.
+- PASS: focused `pull_raw_offset_entrypoints_match_java_queue_and_lifecycle_boundaries`.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (175 unit tests and all consumer integration targets).
+- PASS: `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and invoked accessor fixture verification).
+- PASS: `cargo fmt --all`; final `cargo fmt --all -- --check` and `git diff --check` are required before commit.
+- No live Broker or Docker was used. The raw offset rows are closed offline; `consumerRunningInfo`, mutable implementation-state accessors, broader Phase 6 reconciliation, and P18-V01 remain open.

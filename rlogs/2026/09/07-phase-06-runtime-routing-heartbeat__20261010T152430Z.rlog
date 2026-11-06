@@ -1,0 +1,7 @@
+# Phase 6 execution session — 2026-10-10T15:24Z
+
+- Follow-up source-map review found one stale current-state paragraph in `PHASE_6_API_CONFIG_MAP.md`: `GetConsumerListByGroupResponseBody` was still described as storing an owned `Vec` in the protocol DTO.
+- Inspected the implementation: the DTO stores `Option<SharedValue<Vec<Option<String>>>>` and its getter/setter preserve the Java List alias. `MQClientApi::get_consumer_list_by_group_nullable` snapshots that handle into the established owned RPC result.
+- Corrected the reverse API map and linked the 23-case Fastjson/input evidence to ADR-0018 and the direct alias evidence to ADR-0061. No implementation or fixture changed; no full test rerun was needed for this documentation correction.
+- `git diff --check` passes. Full Phase 6 source/API/input reconciliation remains open; P6-V04 stays `PENDING_PHASE_19`.
+- Documentation/log commit: pending.

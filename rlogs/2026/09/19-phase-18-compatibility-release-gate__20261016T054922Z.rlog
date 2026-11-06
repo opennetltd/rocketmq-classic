@@ -1,0 +1,18 @@
+Phase 18 final-revision server-free gate rerun (2026-10-16 05:49 UTC)
+
+- Tested source revision: `4d49cd7e` (`docs(compat): map channel handle write variants`), macOS ARM64.
+- Passed default and all-feature locked workspace tests; strict all-target/all-feature workspace Clippy; `cargo fmt --all -- --check`; `git diff --check`.
+- Passed the Asia/Taipei Unique ID fixture, differential comparator self-test, and validation of all 37 scenario-manifest entries.
+- Passed pinned Java 5.5.1 `mvn -q -f compat/java-reference/pom.xml verify`, including 37 scenarios, fixture drift checks, and Java/Rust cross-decodes.
+- Passed offline deterministic race/leak smoke (16 cases × 3), fuzz smoke (105 frame seeds, 11 message seeds, 1,856 bounded mutations), release example build, and offline benchmark compilation.
+- Passed workspace metadata/license/dependency checks, full locked Cargo metadata (7 workspace packages, 215 total packages, 208 registry packages with license metadata), and all seven `cargo package --workspace --list --locked --allow-dirty` listings with LICENSE/NOTICE.
+- No current-revision GitHub Ubuntu run exists for `4d49cd7e`. The latest listed branch run is for older `cc79eb6e` and failed in `stack::tests::jstack_includes_current_and_other_named_threads` because Linux stack capture found no unused unblocked default-ignore signal.
+- Remaining: broad bidirectional P18-V01 Java/Rust API and settings audit (including generic Netty handler-context disposition); current-revision GitHub Ubuntu/P18-V04 evidence; Phase 19 Docker/Broker runner and scenario execution; `docs/owner-validation.md`; pre-publication version/registry checks. Owner deployment and production evidence remain Phase 19 manual work.
+- Updated `docs/release-checklist.md`; plan files and Java reference source remain unchanged.
+
+P18-V01 Remoting request-context disposition (2026-10-16 05:56 UTC)
+
+- Read the pinned `NettyRequestProcessor`, `RequestPipeline`, and `NettyRemotingAbstract.buildProcessRequestHandler` source. The request path uses the channel for peer metadata and response writes, then forwards the same context through the application pipeline and processor callbacks.
+- `mvn -f compat/java-reference/pom.xml dependency:tree -Dincludes=io.netty:netty-transport` resolves Netty `netty-transport` 4.1.130.Final. `javap` inspected `ChannelHandlerContext`, `ChannelInboundInvoker`, and `ChannelOutboundInvoker`; the broader event-loop, handler metadata, allocator, attribute, raw socket, arbitrary-object write, and promise APIs are Netty framework methods rather than RocketMQ request operations.
+- The Rust-native mapping remains `RequestContext`/`ChannelHandle` for channel identity/state/close and typed `RemotingCommand` writes, `RequestExecutor` for processor dispatch, and ordered `RequestPipeline` stages. Existing context/pipeline/executor regressions pass; focused reruns passed `p18_request_context_preserves_channel_identity_through_pipeline_and_processor`, `request_context_exposes_channel_state_and_closes_its_channel`, `p18_channel_handle_writes_commands_and_closes_its_connection`, `p3_request_pipeline_pipe_runs_new_stage_before_existing_stage`, and `p3_processor_specific_and_default_executors_route_or_reject_tasks`.
+- Updated the Phase 3 inventory, ADR-0001, and release checklist with the method-group disposition. This resolves only the generic Netty context boundary under the user's Rust-native component requirement; broad P18-V01 Java/Rust source/API/input/error/control-flow and reverse-export reconciliation remains open. No plan or Java reference files changed.

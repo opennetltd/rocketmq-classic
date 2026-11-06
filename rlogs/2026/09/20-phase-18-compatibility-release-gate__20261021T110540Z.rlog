@@ -1,0 +1,23 @@
+# Phase 18 compatibility release gate — 2026-10-21 11:05:40 UTC
+
+## Bounded audit correction
+
+The request-code inventory listed the Java 5.5.1 request constants and recent
+RPC slices in the release checklist, but its implementation table omitted
+request 205 (`WIPE_WRITE_PERM_OF_BROKER`), 327
+(`ADD_WRITE_PERM_OF_BROKER`), 354 (`CHECK_ROCKSDB_CQ_WRITE_PROGRESS`), 355
+(`EXPORT_ROCKSDB_CONFIG_TO_JSON`), and 908 (`RESET_MASTER_FLUSH_OFFSET`).
+Added their pinned Java method signatures, typed request/result model notes,
+and RPC behavior to `docs/compatibility/REQUEST_CODES.md`. The export method
+signature was checked against the invoked Java fixture as
+`exportRocksDBConfigToJson(String, List<ConfigType>, long)`.
+
+`git diff --check` passed. The documentation correction was committed
+independently as `cb1d6dc1` (`docs(compat): record remaining phase 18 RPC
+mappings`). The four pre-existing Phase 19 paths remain unstaged and
+untouched.
+
+This closes only the five missing request-code mapping rows. Broad P18-V01,
+current-revision P18-V02/P18-V03, current Ubuntu/native Windows P18-V04, and
+the remaining Phase 19 live scenarios are still open pending the final audit
+and gates.

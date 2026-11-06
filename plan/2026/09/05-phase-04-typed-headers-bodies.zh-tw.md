@@ -68,9 +68,11 @@ fixtures/remoting/
 
 先寫對應失敗測試／Oracle fixture，再依序實作；以下 case 必須成為可執行檢查，而非人工勾選。以下檢查不依賴 Docker 或 live Broker，使用 Java fixture、可控時鐘及 scripted peer；共通命令與證據規則見執行索引。
 
-- [ ] **P4-V01** — 每個 header 皆有 Java→Rust fixture 與 Rust→Java decode assertion，包含 response header。
-- [ ] **P4-V02** — unknown ext field 在 typed 修改後仍保留；所有 invalid/missing required field 在 protocol boundary 失敗。
-- [ ] **P4-V03** — V1/V2 等價 send header 正規化結果相同；JSON body 保留 collection 與 omission 語意。
+- [x] **P4-V01** — 每個 header 皆有 Java→Rust fixture 與 Rust→Java decode assertion，包含 response header。
+- [x] **P4-V02** — unknown ext field 在 typed 修改後仍保留；所有 invalid/missing required field 在 protocol boundary 失敗。
+- [x] **P4-V03** — V1/V2 等價 send header 正規化結果相同；JSON body 保留 collection 與 omission 語意。
+
+驗收證據：[Phase 4 相容性矩陣](../../../docs/compatibility/REQUEST_CODES.md)記錄完整 header inventory、38 個由 Java 解碼的 Rust header frame、14 個語意 body frame，以及 ACK Lite 的來源判定。[Phase 4 收尾紀錄](../10/01-phase-04-compatibility-closure.zh-tw.md#7-完成紀錄)與 append-only [執行紀錄](../../../rlogs/2026/09/05-phase-04-typed-headers-bodies__20261004T021500Z.rlog)記錄 pinned fixture provenance 與通過的命令結果。此處驗收 Phase 4 typed wire-model gate，不代表後續 RPC 或 live Broker 覆蓋已完成。
 
 ### 5.1 實作完成後的本機命令
 

@@ -1,0 +1,39 @@
+# Phase 18 factory NameServer provider callbacks per client
+
+- Recorded: 2026-10-23 10:00:45 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Implementation revision: `88a9578e`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: `MQClientAPIFactory` TopAddressing callback registration and dispatch
+
+## Finding and change
+
+Pinned `MQClientAPIImpl` constructs a `DefaultTopAddressing` per API instance
+and registers itself as that instance's `NameServerUpdateCallback` before the
+factory's initial domain fetch. Rust previously registered one factory-wide
+callback during builder setup and broadcast provider callback events to all
+clients. Rust now registers a slot-indexed callback before each active slot's
+initial fetch. Provider callback updates and return values remain local to
+that slot. The explicit factory `on_name_server_address_change` API still
+updates every active slot; a zero-client start registers no callbacks.
+
+The regression `factory_registers_and_dispatches_name_server_callbacks_per_client`
+checks that builder setup does not register early, two active slots each
+register once, callback updates and nullable returns are isolated by slot, and
+a zero-client start registers none.
+
+## Verification
+
+- `cargo test --offline -p rocketmq-classic-core --lib --all-features --locked` — passed, 240 tests.
+- Focused `factory_registers_and_dispatches_name_server_callbacks_per_client` test — passed.
+- `cargo clippy --offline -p rocketmq-classic-core --all-targets --all-features --locked -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+## Acceptance boundary
+
+This closes the per-client provider callback ownership slice only. Broad
+P18-V01 source/API/settings/input/error/control-flow/reverse-export
+reconciliation remains open. Native Windows runtime, current-revision remote
+Ubuntu CI, and Phase 19 Broker/Docker evidence remain pending. No push or
+remote CI was run; existing Phase 19 worktree files remain untouched and
+unstaged.

@@ -1,0 +1,48 @@
+# Phase 18 Remoting NameServer live-list slice — 2026-10-15T16:07:55Z
+
+## Source review
+
+- Pinned Java 5.5.1 `NettyRemotingClient.updateNameServerAddressList` shuffles
+  the caller's `List` in place, stores that same list reference, and ignores
+  empty update lists. `getNameServerAddressList` returns the nullable backing
+  list directly; subsequent selection and scans read that same object.
+- Rust previously stored a plain `Vec<String>` and returned a cloned `Option`,
+  conflating unset and caller-cleared states and offering no live-list mutation
+  path. The established lock-scoped collection representation is used here.
+
+## Implementation
+
+- Code commit: `a5ef99ae fix(remoting): preserve live nameserver list semantics`.
+- Store NameServer addresses as `Option<Vec<String>>`; keep `None` distinct from
+  `Some(empty)` and make the snapshot getter preserve that distinction.
+- Add `with_name_server_address_list` for lock-scoped mutation of the live list.
+  Selection and availability scans now read the nullable list consistently;
+  clearing it makes a later NameServer invocation observe the empty state.
+- Add `p18_nameserver_getter_exposes_live_nullable_list_with_lock_scope` for
+  unset state, live clear, empty update, operation behavior, and replacement.
+- Update the Phase 3 inventory with NameServer live-list, `ResponseFuture`, and
+  `ChannelHandle` mappings. No plan or Java source was modified.
+
+## Verification
+
+- `cargo test -p rocketmq-classic-remoting --all-features --locked p18_nameserver_getter_exposes_live_nullable_list_with_lock_scope`: passed.
+- `cargo test -p rocketmq-classic-remoting --all-features --locked`: passed;
+  96 unit, 6 codec, 1 fuzz regression, 5 security, 100 transport, 5 doctests.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed before the final
+  documentation-only update; rerun after documentation is complete.
+
+## Status
+
+- The NameServer live-list discrepancy and stale callback/channel inventory
+  entries are closed for their bounded rows only. Broad P18-V01, current-final-
+  revision full-workspace P18-V02, GitHub Ubuntu/P18-V04 evidence, Phase 19
+  local Docker/Broker automation, and release version/registry resolution
+  remain open. Owner-run deployment/live Broker checks remain manual.
+- No push, tag, publication, deployment, or live Broker action was performed.
+
+## Documentation follow-up
+
+- Updated `docs/release-checklist.md` and re-ran `cargo fmt --all -- --check`
+  plus `git diff --check` after the documentation edits; both passed.
+- Documentation commit remains separate from code commit `a5ef99ae`.

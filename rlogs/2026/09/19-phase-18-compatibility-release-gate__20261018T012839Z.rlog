@@ -1,0 +1,62 @@
+# Phase 18 compatibility continuation — 2026-10-18 01:28:39 UTC
+
+## Scope and decision
+
+- Continued P18-V01 after discovering Java 5.5.1 `MqClientAdmin` has 19 public
+  methods without a complete Java/Rust crosswalk.
+- Implemented the first bounded method slice, `queryTopicsByConsumer`, while
+  leaving the P18-V01 audit open. Pinned Java source commit:
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- Preserved the existing Phase 19 worktree changes in `integration-tests/`,
+  `tests/differential/`, and its local validation log; they were not staged.
+
+## Implementation
+
+- Added `QueryTopicsByConsumerRequestHeader` with nullable `group` and inherited
+  `ns`, `nsd`, `bname`, and `oway` fields. Java's `checkFields()` is a no-op
+  despite the `group` annotation.
+- Added `TopicList` with Java-compatible empty-set default, explicit-null
+  preservation, mutable Set aliasing through its getter, and nullable
+  `brokerAddr`.
+- Added `MQClientApi::query_topics_by_consumer`, which sends request code 343,
+  classifies Broker response status, and decodes `TopicList` on success.
+- Added invoked Java request-header decode-mode and typed-frame fixtures, plus a
+  Java `TopicList` public-method/default/null/alias/JSON fixture consumed by a
+  Rust unit test.
+- Code commit: `07865bde feat(admin): add query topics by consumer RPC`.
+
+## Validation
+
+Environment: macOS 26.6.1 aarch64, Rust/Cargo 1.85.0, Maven 3.10.0, Java 27.
+
+- `cargo test -p rocketmq-classic-remoting --lib query_admin_header_reflection_modes_match_invoked_java_551 --locked` — passed (1 test).
+- `cargo test -p rocketmq-classic-protocol --lib topic_list_matches_java_default_null_and_alias_semantics --locked` — passed (1 test).
+- `cargo test -p rocketmq-classic-core --lib query_topics_by_consumer_sends_java_header_and_decodes_topic_list --locked` — first attempt failed because the test remoting client had not been started (`Transport(NotStarted)`). The test now starts and shuts down the client; rerun passed (1 test).
+- `mvn -q -f compat/java-reference/pom.xml verify` — passed all 37 scenarios, fixture drift checks, 57 Java/Rust typed-header cross-decodes, and 14 typed-body cross-decodes. The new Java TopicList fixture verified.
+- `cargo clippy -p rocketmq-classic-protocol -p rocketmq-classic-remoting -p rocketmq-classic-core --all-targets --all-features --locked -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+## Remaining work
+
+- P18-V01 remains open: the per-method `queryTopicsByConsumer` error response
+  branch still needs a direct scripted regression; the other 18 `MqClientAdmin`
+  methods and the broader Java/Rust source, settings, overload, error/flow, and
+  reverse-export audit remain unreconciled.
+- The complete current-revision P18-V02 workspace rerun has not been performed
+  after commit `07865bde`.
+- Current-revision Ubuntu/native Windows evidence for P18-V04 and final P18-V03
+  package/provenance review remain open.
+- No Broker was contacted. Phase 19 live scenarios, profiles, pre-publication
+  checks, and owner-specific manual handoff remain separate obligations.
+
+## Follow-up: Broker error path — 2026-10-18
+
+- Added a scripted `TOPIC_NOT_EXIST` response regression for
+  `query_topics_by_consumer`; it asserts request code, response code, peer
+  address, and remark. Code commit: `59c0d8fa`.
+- `cargo test -p rocketmq-classic-core --lib query_topics_by_consumer_preserves_broker_error --locked` passed (1 test).
+- Strict all-target/all-feature Core Clippy, `cargo fmt --all -- --check`, and
+  `git diff --check` passed.
+- The method's success and Broker-error paths now have scripted coverage. The
+  other 18 `MqClientAdmin` methods, broad P18-V01 audit, complete latest-revision
+  P18-V02 run, P18-V03 final review, and P18-V04 platform evidence remain open.

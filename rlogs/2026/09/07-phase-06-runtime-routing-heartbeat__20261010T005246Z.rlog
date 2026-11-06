@@ -1,0 +1,7 @@
+Session: 2026-10-10T00:52:46Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Refined the MessageQueue API map for the erased `Comparable.compareTo(Object)` bridge. Pinned 5.5.1 `javap -c -p` shows its `checkcast MessageQueue` followed by the typed overload; a wrong runtime type therefore raises `ClassCastException`, while Rust's `java_compare_to(&Self)` statically excludes the input. Documentation commit `08bad076`; `git diff --check` passes. Existing direct typed-comparison cases remain the behavior oracle; this update records the Java bridge boundary and adds no production behavior.
+
+Whole Phase 6 source/API/input/reverse-export reconciliation remains active, and P6-V04 stays `PENDING_PHASE_19`.

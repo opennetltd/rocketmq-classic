@@ -1,0 +1,47 @@
+# Phase 18 compatibility release gate — 2026-10-22 01:05:42 UTC
+
+Base revision: `7db528a6`. This entry records the `getBrokerHAStatus` request
+907 implementation and its local compatibility checks.
+
+## Current local checks
+
+- `cargo fmt --all` passed.
+- `mvn -f compat/java-reference/pom.xml verify` passed, including 37 scenario
+  cases, 88 Java-decoded Rust typed headers, and 16 typed body fixtures. An
+  earlier run stopped at the stale typed-header count of 86; the count was
+  corrected to 88 in commit `9a2b6989`, and the complete verification then
+  passed.
+- `cargo test -p rocketmq-classic-protocol -p rocketmq-classic-core --locked`
+  passed all unit, integration, and documentation tests.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+  passed.
+- `cargo diff --check` passed.
+- SHA-256 of `fixtures/producer/core.json`:
+  `59e43115a4754d2bb332e24d3fe167472fbb97fe3ff96956eb6c1606b6de7a10`.
+
+## Compatibility changes
+
+Pinned `MQClientAPIImpl.getBrokerHAStatus(String,long)` now maps to
+`MQClientApi::get_broker_ha_status` for request 907. Rust sends no header or
+request body, uses the supplied Broker address without VIP conversion, and
+preserves the caller timeout. New `HaRuntimeInfo` and nested connection/client
+DTOs match Java primitive defaults, nullable nested fields, list/object
+initializers, mutable shared references, and Fastjson field names. The invoked
+Java fixture and Rust loopback test cover populated/default bodies, a success
+without a body, a Broker error, and exact request-envelope behavior.
+
+The full local Rust run also exposed stale fixture-count assertions. The tests
+now expect six broker-maintenance cases, five topic-list cases, and 44 request
+header identity entries; the correction-header Java alias is mapped explicitly.
+The direct API audit has three of its initial 18 candidates closed and 15 open.
+
+## Evidence still open
+
+The wider P18-V01 settings, inputs, errors, control flows and reverse-export
+audit remains open. Current-revision GitHub Ubuntu/native-Windows P18-V04
+results are unavailable under the no-remote-CI constraint. No Docker or Broker
+was used. The four pre-existing Phase 19 worktree paths remain untouched and
+unstaged.
+
+Log correction: the whitespace check command was `git diff --check` (not
+`cargo diff --check`); it passed.

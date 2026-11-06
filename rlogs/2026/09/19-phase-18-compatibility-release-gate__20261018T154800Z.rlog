@@ -1,0 +1,55 @@
+# Phase 18 current-worktree gate refresh — 2026-10-18T15:48:00Z
+
+- Branch: `phase/18-phase-18-compatibility-closure`; revision:
+  `117ae342` (`test(consumer): use consume span accessors`). The Java oracle
+  `/Users/bruce.tsai/Projects/3rd/rocketmq` remained read-only at
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- The Consumer test that formerly read private `QueueTimeSpan` fields now uses
+  its public queue and delay accessors. This was committed separately as
+  `117ae342`; existing uncommitted Phase 19 runner/README work was not staged.
+- `cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked`: PASS, including integration
+  targets and doctests.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D
+  warnings` and `cargo check --workspace --all-targets --all-features --locked`:
+  PASS.
+- `mvn -f compat/java-reference/pom.xml verify`: PASS (37 scenarios, fixture
+  checks, 66 typed-header and 15 typed-body cross-decodes). The run emitted
+  existing JDK `Unsafe` and reflective-final-field warnings.
+- `python3 tests/differential/compare.py --self-test` and
+  `--validate-manifest`: PASS; 37 scenarios.
+- `bash tests/stress/run-offline-smoke.sh`: PASS, 16 deterministic race/leak
+  cases × 3 repetitions.
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`:
+  PASS, 120 frame seeds, 11 message seeds, 2,096 mutations, 164 frame decodes,
+  and 120 message decodes.
+- `cargo build -p rocketmq-classic --examples --release --locked` and
+  `cargo bench --workspace --no-run --locked`: PASS. The offline benchmark
+  passed on macOS ARM64 Apple M5 Max with Rust 1.85.0. Observed ns/iteration:
+  frame encode/decode 2,353.0; Zstd message decode 1,145.1; Producer request
+  construction 1,178.5; 128-entry route lookup 14.4; loopback pending
+  completion 65,594.1. Allocation observations are printed by the harness;
+  timings are observations, not thresholds.
+- `cargo package --workspace --list --locked --allow-dirty` and
+  `scripts/check-workspace-metadata.py`: PASS; all seven product package
+  listings contain `LICENSE` and `NOTICE`. Locked Cargo metadata reports eight
+  workspace packages at `0.1.0`; their `publish=[]` metadata remains disabled
+  pending later release acceptance. This does not establish registry
+  dependency availability.
+- Four Core Unique ID tests pass under both `TZ=UTC` and `TZ=Asia/Taipei`.
+  The first two invocations omitted `--lib`, so Cargo also started filtered
+  integration targets; they were interrupted with exit 130 and rerun narrowly
+  with `--lib`, where all four tests passed in each timezone. No assertion
+  failure occurred.
+- `cargo fmt --all -- --check` and `git diff --check`: PASS.
+- Current-worktree P18-V02 server-free verification is complete. Broad P18-V01
+  Java/Rust source/API/settings/input/error/flow and reverse-export audit
+  remains open. All 19 source-backed `MqClientAdmin` RPC slices are present;
+  this corrects an earlier unchecked inventory note. Final P18-V03
+  provenance/version/registry preflight and current-revision Ubuntu/native
+  Windows P18-V04 evidence remain open. Phase 19 still lacks 30 local
+  Docker/Broker scenario runners, required profiles, and `run-local.sh --all`
+  reconciliation. MAN-01–04 remain owner-environment checks; MAN-05 awaits the
+  local matrix classification.
+- No plan, Java oracle, remote CI, Broker/Docker state, publication, release
+  tag, or push changed.

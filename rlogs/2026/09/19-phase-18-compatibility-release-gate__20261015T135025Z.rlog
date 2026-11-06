@@ -1,0 +1,32 @@
+# Phase 18 live Remoting worker-count setting parity — 2026-10-15T13:50:25Z
+
+- Read-only Java 5.5.1 source review confirmed `NettyRemotingClient.start()`
+  reads `NettyClientConfig.getClientWorkerThreads()` when it creates the
+  `DefaultEventExecutorGroup`. Values changed after client construction and
+  before start therefore affect the created worker group.
+- Rust now exposes a live atomic `RemotingClient` getter/setter, reads it at
+  `start()`, and validates zero/out-of-range worker counts before consuming
+  startup state. Added a Rust test for post-construction mutation, invalid
+  startup recovery and the created worker count. The Java live-config probe
+  changes the retained config after client construction and checks the worker
+  group created at start.
+- Code commit: `e7e5728a fix(remoting): read client worker count live`.
+- PASS: UTC default and all-feature workspace test suites; strict all-target /
+  all-feature workspace Clippy; Maven `verify` (37 scenarios, Java fixture
+  checks, live remoting config probe and Java/Rust cross-decodes); differential
+  comparator self-test and 37-scenario manifest validation; deterministic
+  race/leak smoke (16 cases × 3); fuzz smoke (104 frame seeds, 10 message
+  seeds, 1,824 mutations); release examples; offline benchmark compilation;
+  locked Cargo metadata; workspace metadata/license/dependency checks; seven
+  package listings; Asia/Taipei unique-ID differential; formatting and
+  `git diff --check`.
+- Full Remoting all-feature results: 86 unit, 6 codec, 1 fuzz regression,
+  5 security, 90 transport and 5 doctest cases passed.
+- This closes the `clientWorkerThreads` setting timing row only. Other
+  Java-mutable Remoting settings and broad P18-V01 source/API/settings/input/
+  error/flow and reverse-export reconciliation remain open. Current-revision
+  GitHub Ubuntu address-profile evidence/P18-V04, Phase 19 local Docker/Broker
+  automation, and pre-publication version/registry checks remain open. Owner-run
+  deployment/live Broker checks remain Phase 19 manual validation.
+- The Java reference repository was read-only. No plan changes, push, tag,
+  publication, or Broker validation was performed.

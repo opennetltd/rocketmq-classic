@@ -1,0 +1,1 @@
+{"java_client_version":"5.5.1","server_baseline_not_contacted":"5.3.4","scenario_id":"P5-RPC-SEND-0","request_code":10,"response_code":0,"response":true,"ext_fields":{"queueId":"2","msgId":"offset-msg-1","queueOffset":"99","transactionId":"tx-1"},"body_hex":"","frame_sha256":"4bbe0995e399e24dcf5e429ff0ecb90dd813803798ab66e6c77065fcd01214c5","java_outcome":"SEND_OK"}

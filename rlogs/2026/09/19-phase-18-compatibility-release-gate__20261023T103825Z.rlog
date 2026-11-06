@@ -1,0 +1,33 @@
+# Phase 18 factory zero-pool getClient parity
+
+- Recorded: 2026-10-23 10:38:25 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source revision before this change: `95c49f8c`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Finding and change
+
+Pinned Java `MQClientAPIFactory.getClient()` calls
+`ThreadLocalRandom.nextInt(clients.length)` when the array length is not one.
+For a started zero-client pool it throws `IllegalArgumentException`. Rust
+returns `MQClientApiFactoryError::EmptyClientArray`; the factory test now
+compares this typed outcome against the invoked Java exception fixture.
+
+`fixtures/runtime/api-factory.json` now also records
+`zeroClientGetClientError=IllegalArgumentException`. SHA-256:
+`fcbb745a4eab18d4fa8e5163fa69deeffa935375b660fde8e915c7dab9e2da38`.
+
+## Verification
+
+- `mvn -q -o -f compat/java-reference/pom.xml compile` — passed.
+- `mvn -q -o -f compat/java-reference/pom.xml dependency:build-classpath
+  -Dmdep.outputFile=/tmp/rocketmq-java-reference-phase18.cp
+  -Dmdep.includeScope=test` — passed (existing classpath reused).
+- Invoked `compat.RuntimeApiFactoryFixtures` to refresh the fixture and
+  reran with `--verify` — passed.
+- `cargo test --offline -p rocketmq-classic-core --lib --locked
+  api::factory::tests` — passed, 7 tests.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+Broad P18-V01 and the final full-workspace P18-V02 gate remain open. No remote
+CI or push was run; existing Phase 19 worktree paths were left untouched.

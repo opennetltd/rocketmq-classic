@@ -1,0 +1,7 @@
+# Phase 6 execution session — 2026-10-10T19:48Z
+
+- Continued raw route public API parity by probing nullable `Map.Entry.setValue`. Pinned Java entry handles throw `NullPointerException` when passed null and leave both the captured entry and mapping unchanged.
+- Added `TopicRouteEntryHandle::set_value_nullable`; its null case returns typed `InvalidRoute("null topic route value")` before mutation. The Java fixture and Rust differential compare the exception category and both retained references.
+- Code/oracle/test commit: `b4101e0b` (`Match nullable raw route entry setValue`). Route primitive count is 92; `fixtures/runtime/route.json` SHA-256 is `e6e229c060801b2507e99c85ee4716480c58403d334e2d3338a4abcd7130b789`.
+- Validation passed: focused route-table differential; full `cargo test --workspace --all-targets --locked`; strict all-target/all-feature Clippy; pinned offline `mvn -o verify` (22 scenarios, route fixture drift and Java cross-decodes); comparator self-test and 22-scenario manifest validation; formatting and diff checks.
+- Updated the API/config map, requirement audit, route audit, and this log. Full Phase 6 API/settings/source/input/platform reconciliation remains open; P6-V04 stays a Phase 19 handoff.

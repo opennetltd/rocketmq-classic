@@ -1,0 +1,25 @@
+# Phase 18 final benchmark refresh
+
+- Recorded: 2026-10-24 23:31:24 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Tracked code revision measured: `4b7d0f27cd88a4154f4a6d17c88f3b2b3451c140`
+- Command: `cargo bench --offline --locked -p rocketmq-classic --bench offline`
+- Environment: Darwin 25.6.0 AArch64, Apple M5 Max, 18 logical CPUs, release
+  profile, `rustc 1.85.0 (4d91de4e4 2025-02-17)`.
+
+## Measurements
+
+| Operation | Input | Iterations | Time per iteration | Allocation calls per iteration | Allocated bytes per iteration |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Remoting frame encode/decode | 427 encoded frame bytes | 20,000 | 3,575.4 ns | 62.00 (1,000 samples) | 6,787.0 (1,000 samples) |
+| Zstd message-record decode | 146 record bytes | 10,000 | 1,152.1 ns | 17.00 (1,000 samples) | 197,493.0 (1,000 samples) |
+| Producer send-request construction | 512-byte body | 20,000 | 1,176.2 ns | 54.00 (1,000 samples) | 3,665.0 (1,000 samples) |
+| Publish-address lookup | 10-byte key, 128 route entries | 100,000 | 14.1 ns | 0.00 (1,000 samples) | 0.0 (1,000 samples) |
+| Loopback pending-request completion | 128-byte body over local TCP | 500 | 78,032.1 ns | 125.00 (100 samples) | 12,873.0 (100 samples) |
+
+These are bounded machine-specific observations, not acceptance thresholds.
+Timing varies between runs; loopback completion includes local TCP and Tokio
+scheduling. Results were appended to
+`docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md` and the Phase 18
+release checklist.

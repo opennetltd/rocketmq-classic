@@ -1,0 +1,30 @@
+# Phase 18 compatibility release gate — 2026-10-21 11:16:54 UTC
+
+## Bounded verification correction
+
+The first `cargo test --workspace --locked` run failed in
+`query_admin_header_reflection_modes_match_invoked_java_551`: the shared
+Remoting differential fixture had newly added Java header cases that its
+Rust header-type dispatch did not yet cover. Added fast/reflection decode and
+re-encode comparisons for all seven concrete request/response header types:
+the Add/Wipe write-permission pairs, RocksDB CQ progress, RocksDB config
+export, and master flush offset.
+
+Validation after the correction:
+
+- The targeted Remoting decode-mode test passed.
+- `cargo test --workspace --locked` passed, including all workspace unit,
+  integration, and doctests (Protocol: 151 doctests; Remoting: 138 unit tests
+and 107 transport integration tests).
+- `cargo test --workspace --all-features --locked` passed with the same
+workspace doctests and all-feature test paths.
+- Strict all-target/all-feature locked workspace Clippy passed.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+
+The correction is committed independently as `da6345bb`
+(`test(remoting): cover recent admin header decode modes`). These results
+close only this discovered test-dispatch gap. The remaining current-revision
+P18-V02 commands, P18-V01 source/API/configuration reconciliation, current
+Ubuntu/native Windows P18-V04 evidence, and Phase 19 live handoff work remain
+open. The four pre-existing Phase 19 worktree paths remain unstaged and
+untouched.

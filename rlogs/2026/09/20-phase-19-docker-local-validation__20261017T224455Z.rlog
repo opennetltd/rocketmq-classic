@@ -1,0 +1,21 @@
+# Phase 19 local runner preflight — 2026-10-17T22:44:55Z
+
+- Rechecked the worktree on `phase/19-phase-18-compatibility-release-gate`,
+  HEAD `2874cf6b`. The differential runner and integration README have local
+  edits, and `integration-tests/run-local.sh` is new and untracked.
+- `bash -n tests/differential/run.sh integration-tests/run-local.sh` passed.
+- `ROCKETMQ_CLASSIC_TEST_ENV=local-disposable bash integration-tests/run-local.sh --all`
+  failed closed with exit 3 before Docker provisioning. It listed the 30
+  Phase 19 manifest scenarios without runners; no scenario was skipped or
+  counted as passed, and no Docker resource or evidence directory was created.
+- Phase 19 remains incomplete: seven of 37 live rows have passing evidence;
+  the remaining 30 and required non-basic profiles are open. Full `--all`
+  orchestration has therefore not run. The current runner edits remain
+  uncommitted.
+- The broad P18-V01 parity audit, current-revision Ubuntu/native Windows
+  P18-V04 CI evidence, and pre-publication registry dependency resolution
+  remain open. The latest heartbeat-header slice passed focused Rust checks
+  and Maven verify; a full-workspace P18-V02 rerun is still needed on the
+  current revision.
+- MAN-01–04 remain owner-environment checks; MAN-05 cannot be classified
+  until the local Phase 19 matrix is complete.

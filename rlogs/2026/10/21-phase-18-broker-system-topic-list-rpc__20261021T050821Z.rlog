@@ -1,0 +1,27 @@
+# Phase 18 Broker system-topic-list RPC slice — 2026-10-21T05:04:00Z
+
+- Continued the pinned Java 5.5.1 source audit at
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`. Added
+  `MQClientApi::get_system_topic_list_from_broker` for
+  `MQClientAPIImpl.getSystemTopicListFromBroker(String,long)`: request 305,
+  configured VIP address transform, no request header/body, `TopicList`
+  decoding, Broker error handling and the Java code-0 exception when a
+  `SUCCESS` response has no body.
+- Added an invoked Java signature/operation fixture and Rust scripted RPC
+  comparison for the request envelope, timeout, topic set and error response.
+  A VIP-enabled Core loopback verifies the configured two-port address offset.
+  Producer core fixture SHA-256:
+  `fbe6f70615e8004c26bdba90fdc824241415d19557b57853a6a563f24becbd32`.
+- Validation passed: Core all-feature locked suite (178 unit tests, all
+  integration targets and 16 doctests); strict all-target/all-feature Clippy
+  for Common, Core, Producer and facade; Producer pinned fixture comparison;
+  pinned Java Maven `verify` (37 scenarios, 67 typed-header frames, 15
+  typed-body fixtures and Java/Rust cross-decodes); formatting; and
+  `git diff --check`.
+- Updated the Phase 6 API map and requirement audit, Java compatibility
+  summary, Producer fixture digest progression, release checklist and this
+  record. The Phase 18 plan was not edited. Broad P18-V01, final current-tree
+  P18-V02, P18-V03 package/provenance review and current Ubuntu/native Windows
+  P18-V04 evidence remain open. The composite `getSystemTopicList` operation
+  remains to audit. No remote CI or Phase 19 Broker/Docker validation ran.
+- Phase 19 worktree files remain untouched and unstaged.

@@ -1,0 +1,25 @@
+# Phase 18 facade mapped-type availability — 2026-10-16T01:18:53Z
+
+- Reviewed the newly exposed main-facade types against the pinned Java 5.5.1
+  and the owning Phase 6, 7, 10, 13, 14, and 17 compatibility matrices.
+  Added root re-exports for consumer/producer service states and default-group
+  constants, orderly-listener future alias, POP result/status, end-transaction
+  hooks/context, query result, producer publish-info types and live table views,
+  and route DTO/alias types. Each has an owning Java mapping; the orderly future
+  alias is the Rust listener signature representation.
+- Added `crates/rocketmq-classic/tests/facade_public_types.rs`, which imports all
+  added root names and calls `Producer::service_state` and
+  `Producer::get_topic_publish_info_table`. Updated the Phase 6 audit, Phase 7
+  producer matrix, and release checklist with this bounded facade-reachability
+  result.
+- `cargo test -p rocketmq-classic --test facade_public_types --locked` — PASS
+  (1 test).
+- `cargo clippy -p rocketmq-classic --all-targets --all-features --locked --
+  -D warnings` — PASS.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+- This closes only root-crate import reachability for the listed mapped types.
+  Broad P18-V01 source/input/error/control-flow/reverse-export review, the full
+  current-revision P18-V02 rerun, current-revision Ubuntu/Linux evidence,
+  Phase 19 local Docker/Broker automation, and pre-publication registry/version
+  checks remain open. Owner-run deployment topology, credentials/CA, and
+  production checks remain manual Phase 19 items.

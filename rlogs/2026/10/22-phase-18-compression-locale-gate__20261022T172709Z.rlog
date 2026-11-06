@@ -1,0 +1,55 @@
+Phase 18 compression parser locale parity and current local gate — 2026-10-22 17:27 UTC
+
+Code revision: `c9a6f939`. Branch: `phase/18-phase-18-compatibility-closure`.
+Environment: macOS AArch64, Apple M5 Max, 18 logical CPUs, Rust 1.85.0.
+Pinned Java reference: RocketMQ client 5.5.1, commit
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Compatibility slice:
+- Pinned Java `CompressionType.of` trims the name and applies default-locale
+  `String.toUpperCase()`. Rust now follows Turkish/Azeri `i` and `ı` mappings.
+- The Java runtime fixture covers `zlib`, `zLiB`, `zlıb`, `ZLIB`, `lz4`, and
+  `zstd`; it records decoded values or exact runtime exception messages. The
+  Rust child test runs with `LC_ALL=tr_TR.UTF-8` and matches each outcome.
+- Runtime config fixture SHA-256:
+  `fee11a29d015148aa9a73a0a0bbbc79c997e27247f041bdbed6a6473c4927e0a`.
+
+PASS:
+- Focused Turkish-locale and existing CompressionType Java parity tests
+- `cargo test --workspace --locked`
+- `cargo test --workspace --all-features --locked`
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+- `cargo fmt --all -- --check`; `git diff --check`
+- Pinned Java `mvn -o -q -f compat/java-reference/pom.xml
+  -Dproducer.core.fixture.verify=true verify`: 37 scenarios, 36 route/VIP
+  cases, Java decoding of 106 typed headers and 19 typed bodies. Locale fixtures
+  restore Java global locale; no unrelated typed-header fixture drift appeared.
+- `python3 tests/differential/compare.py --self-test`
+- `python3 tests/differential/compare.py --validate-manifest`: 37 scenarios
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`:
+  163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes, and
+  112 message decodes
+- `bash tests/stress/run-offline-smoke.sh`: 16 deterministic race/leak cases
+  x 3 repetitions
+- `cargo build -p rocketmq-classic --examples --release --locked`
+- `cargo bench -p rocketmq-classic --bench offline --locked`
+- `cargo clippy -p rocketmq-classic --bench offline --all-features --locked
+  -- -D warnings`
+- Workspace metadata/dependency/license checks; locked Cargo metadata reports
+  8 workspace members and 216 packages. All seven product `cargo package
+  --list --locked` checks include `LICENSE` and `NOTICE`.
+- Four Core Unique ID tests under each of `TZ=UTC` and `TZ=Asia/Taipei`
+- Windows GNU Core all-target check and Consumer stack-capture test
+  `--no-run` cross-compilation
+
+The differential `tests/differential/run.sh --check-all` returned its documented
+status 3 because 30 manifest scenarios have no live runner; it started no Docker
+resources and did not mark any scenario as passed. This is a remaining Phase 19
+inventory gap, not a failure of the offline differential comparator checks.
+
+Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export
+reconciliation remains open. The locale audit also identified the public ACL
+`expandIP` helper for a separate malformed-input parity review. Current-revision
+remote Ubuntu CI and native Windows execution remain unverified. Phase 19
+Broker/Docker validation remains open. No push or external CI was run;
+protected Phase 19 worktree files remain unstaged.

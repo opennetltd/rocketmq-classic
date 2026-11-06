@@ -1,0 +1,14 @@
+# Phase 18 current-revision release gates — 2026-10-13T17:56:45Z
+
+- Revision: `8965cca2abda6b561d08e299666c59eb1f31754b` on `phase/19-phase-18-compatibility-release-gate`; Java source checkout `/Users/bruce.tsai/Projects/3rd/rocketmq` remained read-only.
+- PASS: `cargo test --workspace --all-features --locked` on macOS ARM64, Apple M5 Max, rustc 1.85.0. This rerun includes Push statistics ownership isolation and the remoting asynchronous callback-order regression at this revision.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 differential scenarios, fixture drift checks, Java/Rust cross-decodes and runtime fixture invocations).
+- PASS: `python3 tests/differential/compare.py --self-test`; `--validate-manifest` (37 scenarios); `python3 scripts/check-workspace-metadata.py`; `cargo metadata --format-version 1 --no-deps --locked`.
+- PASS: `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` — 104 frame seeds, 10 message seeds, 1,824 bounded mutations, 144 frame decodes and 107 message decodes.
+- PASS: `bash tests/stress/run-offline-smoke.sh` — 16 deterministic race/leak cases, three repetitions each.
+- PASS: `cargo build -p rocketmq-classic --examples --release --locked`.
+- PASS: `cargo bench -p rocketmq-classic --bench offline --locked` on macOS AArch64, Apple M5 Max (18 logical CPUs), rustc 1.85.0. Fixed-input observations: Remoting encode/decode 427 B, 20,000 iterations, 1,473.7 ns/op, 39 allocation calls and 4,612 B/op; Zstd message decode 146 B, 10,000 iterations, 1,105.5 ns/op, 20 calls and 197,407 B/op; send construction 512 B, 20,000 iterations, 976.5 ns/op, 43 calls and 3,247 B/op; route lookup with 128 entries, 100,000 iterations, 14.0 ns/op, zero allocations; local-TCP pending completion 128 B, 500 iterations, 64,377.3 ns/op, 77 calls and 9,234 B/op. A single run is an observation, not an acceptance threshold or stable comparison.
+- Corrected README and release-checklist statements that had become stale/internally contradictory; package content/dependency provenance review is complete, while registry-compatible release versions/dependency requirements remain undecided.
+- Outstanding: P18-V01 / broad Phase 6 Java source/API/input and Rust reverse-export behavior audit remains `PARTIAL`, including behavior evidence for overload inputs/defaults/validation/errors/live-configuration branches and Fastjson malformed-input scope. A current GitHub Ubuntu CI result is unavailable. Windows IP Helper, non-macOS BSD and real IPv6-only-host runtime evidence are absent. Release versions and registry-resolvable workspace dependency requirements remain undecided.
+- Phase 19 Broker/Docker scenarios remain pending in the scenario manifest. No Docker or live Broker was used in this session. This record does not claim full compatibility or release readiness.

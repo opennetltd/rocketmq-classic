@@ -1,0 +1,34 @@
+# Phase 18 current-tree server-free gate
+
+- Recorded: 2026-10-23 09:29:07 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Revision under verification: `e8066804`
+- Relevant code revision: `805619a9` (`MQClientAPIFactory` null/discovery parity)
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Environment: macOS 26.6.1, Apple M5 Max (AArch64, 18 logical CPUs), Rust 1.85.0
+
+## Verification
+
+- `cargo test --offline --workspace --locked` — passed.
+- `cargo test --offline --workspace --all-features --locked` — passed.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — passed.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — passed (exit code 0), including the invoked factory fixture and the remaining Java/Rust fixture decoders.
+- `python3 tests/differential/compare.py --self-test` and `python3 tests/differential/compare.py --validate-manifest` — passed; 37 scenarios validated.
+- `python3 scripts/check-workspace-metadata.py` and locked Cargo metadata — passed. `cargo package --locked --list` for all seven product packages includes `LICENSE` and `NOTICE`.
+- `cargo run --offline -p rocketmq-classic-remoting --example fuzz_smoke --locked` — passed: 163 frame seeds, 11 message seeds, 2,784 bounded mutations, 245 frame decodes, 192 message decodes.
+- `bash tests/stress/run-offline-smoke.sh` — passed all 17 deterministic race/leak cases × 3 repetitions.
+- `cargo build --offline -p rocketmq-classic --examples --release --locked` — passed.
+- `cargo bench --offline -p rocketmq-classic --bench offline --locked` — passed. The sample and allocation data are recorded in `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+- `cargo check --offline --workspace --all-targets --all-features --target x86_64-pc-windows-gnu --locked` — passed (cross-compilation only).
+- Current-tree Rustdoc JSON export inventory on source revision `668dfb1e` — passed: Common 439, Consumer 460, Core 740, Producer 362, Protocol 1,524, Remoting 337 distinct public names after excluding each crate-root marker.
+
+## Acceptance boundary
+
+This refresh closes the current local server-free P18-V02 evidence and the
+named package/documentation checks. Broad P18-V01 source/API/settings/input/
+error/control-flow/reverse-export reconciliation remains PARTIAL. Native
+Windows execution, current-revision remote Ubuntu CI, and Phase 19 Broker/Docker
+evidence remain open. No external CI, push, Broker/Docker action, publication,
+or release action was performed. Existing Phase 19 worktree paths remain
+untouched and unstaged.

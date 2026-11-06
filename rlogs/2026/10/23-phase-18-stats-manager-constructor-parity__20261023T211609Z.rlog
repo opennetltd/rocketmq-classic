@@ -1,0 +1,46 @@
+# Phase 18 ConsumerStatsManager constructor parity
+
+- Recorded: 2026-10-23 21:16:09 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Starting revision: `01b6989c`
+- Implemented revision: `3b9d9473`
+- Pinned Java source: RocketMQ 5.5.1, `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Scope: public scheduler-injected `ConsumerStatsManager` construction
+
+## Finding and change
+
+Java's public `ConsumerStatsManager(ScheduledExecutorService)` constructor
+registers six periodic jobs for each of its five `StatsItemSet`s. Rust's
+runtime-owned manager already had equivalent built-in jobs, but a separately
+constructed public manager had no scheduler-taking constructor and registered
+none.
+
+Rust now exposes
+`ConsumerStatsManager::with_scheduler(&RuntimeScheduler) -> Result<Arc<_>,
+RuntimeError>`. It registers the five sets' 10-second, 10-minute, and hourly
+samplers plus minute, hour, and day log callbacks on the supplied scheduler.
+The runtime-owned manager keeps using the runtime's own built-in queue.
+`consumer_stats_manager_constructor_registers_java_jobs_with_scheduler`
+verifies that constructing a standalone manager adds the expected 30 jobs.
+
+## Verification
+
+- Focused constructor scheduling test — passed (1 test).
+- `runtime::stats::tests` — passed (8 tests).
+- `cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked` — passed, including doctests.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` — passed.
+- Windows GNU all-target/all-feature workspace check and strict Clippy — passed.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — passed; 37 scenarios,
+  11 message fixtures, 106 typed headers, 19 typed bodies, and Java/Rust
+  cross-decodes.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+## Acceptance boundary
+
+The public Java constructor's scheduler-registration behavior now has a Rust
+mapping. Rust `new`/`Default` remains an unscheduled convenience. Broad P18-V01
+API/settings/input/error/control-flow and reverse-export reconciliation remains
+PARTIAL. Native Windows runtime and current-revision remote CI remain open. No
+plan was edited, no push or remote CI was run, and the four user-owned Phase 19
+paths remain untouched and unstaged.

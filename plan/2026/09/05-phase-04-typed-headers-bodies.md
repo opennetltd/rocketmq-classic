@@ -68,9 +68,11 @@ Generate positive and negative Java fixtures for every implemented header. Use t
 
 Write the failing check/oracle fixture before its implementation. The cases below must become runnable checks, not manual checklist-only claims. Run these checks without Docker or a live Broker; use Java fixtures, controlled clocks and scripted peers. Shared commands and evidence rules are in the execution index.
 
-- [ ] **P4-V01** — Each header has a Java→Rust fixture and a Rust→Java decoding assertion, including response headers.
-- [ ] **P4-V02** — Unknown ext fields survive typed modification; all invalid/missing required fields fail at the protocol boundary.
-- [ ] **P4-V03** — V1/V2 equivalent send headers normalize identically; JSON bodies preserve semantic collection and omission rules.
+- [x] **P4-V01** — Each header has a Java→Rust fixture and a Rust→Java decoding assertion, including response headers.
+- [x] **P4-V02** — Unknown ext fields survive typed modification; all invalid/missing required fields fail at the protocol boundary.
+- [x] **P4-V03** — V1/V2 equivalent send headers normalize identically; JSON bodies preserve semantic collection and omission rules.
+
+Acceptance evidence: the [Phase 4 compatibility matrix](../../../docs/compatibility/REQUEST_CODES.md) records the exhaustive header inventory, 38 Java-decoded Rust header frames, 14 semantic body frames, and the ACK Lite source disposition. The [Phase 4 closure record](../10/01-phase-04-compatibility-closure.md#7-completion-record) and append-only [execution log](../../../rlogs/2026/09/05-phase-04-typed-headers-bodies__20261004T021500Z.rlog) contain the pinned fixture provenance and passing command results. This accepts the Phase 4 typed wire-model gate; it does not claim later RPC or live Broker coverage.
 
 ### 5.1 Local commands after implementation
 

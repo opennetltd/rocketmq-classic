@@ -1,0 +1,37 @@
+# Phase 18 live callback executor setting parity — 2026-10-15T13:21:43Z
+
+- Read-only source review against RocketMQ Java 5.5.1 confirmed that
+  `NettyRemotingClient.getCallbackExecutor()` checks the retained mutable
+  `NettyClientConfig.disableCallbackExecutor` value on each call, and
+  `setCallbackExecutor()` stores the supplied executor even while the setting
+  is disabled. `NettyRemotingAbstract` obtains the executor at callback
+  completion time.
+- Rust now stores the disable setting in an atomic live adapter, reads it at
+  callback-executor getter/dispatch time, and always retains a supplied
+  executor while disabled. Added getter/setter methods and regressions for
+  live toggling, inline dispatch while disabled, and executor identity after
+  re-enabling. The Java live-config probe covers post-start config mutation
+  and executor retention.
+- Code commit: `9881c230 fix(remoting): read callback executor disable setting live`.
+- PASS: focused callback regressions; full Remoting crate tests (85 unit, 6
+  codec, 1 fuzz regression, 5 security, 89 transport, 5 doctest); strict
+  all-target/all-feature workspace Clippy; UTC default and all-feature
+  workspace test suites; Maven `verify` (37 scenarios, callback live-config
+  probe, Java/Rust cross-decodes); differential comparator self-test and
+  manifest validation (37 scenarios); offline race/leak smoke (16 cases × 3);
+  fuzz smoke (104 frame seeds, 10 message seeds, 1,824 bounded mutations);
+  release example build; offline benchmark compilation; workspace
+  metadata/license/dependency checks; seven package listings; and the
+  Asia/Taipei unique-ID differential. `cargo fmt --all -- --check` and
+  `git diff --check` pass.
+- Full locked Cargo metadata contains seven workspace packages and 208
+  external packages, all registry-sourced with license metadata. Package
+  metadata checks confirm Apache-2.0, included LICENSE/NOTICE, valid
+  dependency direction, and `publish = false` for all workspace crates.
+- This closes the callback executor disable-setting slice only. Broad P18-V01
+  bidirectional Java/Rust source/API/settings/input/error/flow and
+  reverse-export reconciliation remains open. Current-revision GitHub Ubuntu
+  address-profile evidence/P18-V04, Phase 19 local Docker/Broker automation,
+  and pre-publication release-version/registry checks remain open.
+- The Java reference repository was read-only. No plan changes, push, tag,
+  publication, or Broker validation was performed.

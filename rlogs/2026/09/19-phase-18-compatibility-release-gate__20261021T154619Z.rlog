@@ -1,0 +1,48 @@
+# Phase 18 compatibility closure — current-revision P18-V02 refresh — 2026-10-21T15:46:19Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Verified code revision: `659ec260` (`fix(consumer): map push implementation factory setter`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## P18-V02 current-revision server-free checks
+
+All results below were checked on revision `659ec260` after adding the
+independent Push implementation factory slot:
+
+- PASS: `cargo test --workspace --locked`.
+- PASS: `cargo test --workspace --all-features --locked`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all --check` and `git diff --check`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify`; 37 scenarios, fixture
+  drift checks and Rust/Java cross-decodes. The existing JDK Unsafe/reflection
+  warnings remain; Maven exited successfully.
+- PASS: differential self-test and 37-row manifest validation.
+- PASS: `bash tests/stress/run-offline-smoke.sh`; 16 cases × 3.
+- PASS: release `fuzz_smoke`; 137 frame seeds, 11 message seeds, 2,368 bounded
+  mutations, 201 frame decodes and 118 message decodes.
+- PASS: `cargo build -p rocketmq-classic --examples --release --locked`.
+- PASS: `cargo bench -p rocketmq-classic --bench offline --locked`. Recorded
+  observations: frame encode/decode 2,994.4 ns/iteration, Zstd decode 2,065.6
+  ns, producer request construction 2,272.3 ns, 128-entry route lookup 27.1
+  ns, loopback pending completion 62,227.6 ns.
+- PASS: locked no-dependency Cargo metadata and
+  `python3 scripts/check-workspace-metadata.py`.
+- PASS: all seven distributable crate package listings with `--allow-dirty`;
+  each includes `LICENSE` and `NOTICE`.
+- PASS: four `unique_id::tests` under both `TZ=UTC` and `TZ=Asia/Taipei`.
+
+The package listing includes are: common (32 entries), consumer (55), core
+(81), protocol (30), remoting (42), producer (34), and facade (10).
+
+## Remaining compatibility status
+
+- Broad P18-V01 remains open. This continuation confirmed the pinned public
+  `DefaultMQPushConsumerImpl.get/setConsumeMessageService` seam and the
+  `getConsumerStatsManager` seam. Rust keeps consume-service lifecycle and
+  metrics ownership internal; the source/API audit must reconcile these and
+  the remaining source, settings, DTO, input, error, control-flow, and
+  reverse-export surface before claiming closure.
+- P18-V04 remains open without current-revision GitHub Ubuntu address-profile
+  and native Windows stack-runtime evidence. No remote CI was triggered.
+- Phase 19 Broker/Docker execution remains separate. The existing dirty
+  Phase 19 files were left untouched and unstaged.

@@ -1,0 +1,88 @@
+# Current-revision Phase 18 server-free verification — 2026-10-15T12:02:15Z
+
+- Revision: `d165ba45` (`docs(compat): correct inbound frame limit direction`);
+  code behavior under test includes `a06853ba`.
+- PASS: `cargo fmt --all -- --check`;
+  `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`;
+  `TZ=UTC cargo test --workspace --locked`;
+  `cargo test --workspace --all-features --locked`.
+- PASS: `mvn -o -q -f compat/java-reference/pom.xml verify` (37 scenarios,
+  Java frame-limit probes, base frames, 54 typed headers, and 14 typed bodies);
+  `python3 tests/differential/compare.py --self-test`;
+  `python3 tests/differential/compare.py --validate-manifest`.
+- PASS: `bash tests/stress/run-offline-smoke.sh` (16 cases × 3);
+  `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`
+  (104 frame seeds, 10 message seeds, 1,824 bounded mutations);
+  release example build; workspace benchmark compilation; locked Cargo
+  metadata; workspace license/dependency checks; seven package listings.
+- PASS: the pinned Java unique-ID helper differential under `TZ=UTC` and
+  `TZ=Asia/Taipei`; `git diff --check`.
+- P18-V02 server-free gates now pass on the current revision. P18-V01's broad
+  Java/Rust source/API/input/error/flow and reverse-export audit, current
+  GitHub Ubuntu address-profile evidence/P18-V04, Phase 19 local Docker/Broker
+  automation, and release version/registry resolution remain open.
+- Maven's Java compatibility harness emitted JDK `Unsafe` and reflective final
+  field mutation warnings; Maven exited successfully.
+- No plan changes, Java-reference changes, push, tag, publication, or Broker
+  validation.
+
+## P18-V01 Remoting codec public API reconciliation — 2026-10-15
+
+- Source review: Java 5.5.1 exposes `RemotingCommand.encode/decode`,
+  `NettyEncoder.encode`, and `NettyDecoder.decode`; its 16 MiB frame default is
+  private and its `frameMaxLength` property applies to inbound decoding only.
+- Rust public codec helpers now mirror those encoding/decoding capabilities
+  without caller-selected per-call bounds. The Java default is crate-private;
+  bounded helpers remain internal for the connection decoder and encoder.
+  Cross-crate loopback fixture callsites now use the public no-bound API.
+- Added compile-fail API guards for the old frame/header bounds and default
+  constant, plus an internal unit test for bounded transport encoding/decoding.
+- First focused run exposed an overly specific expected encoder error variant;
+  the test now checks the bound rejection without requiring one variant.
+- Code commit: `c27b60e4 fix(remoting): align public codec bounds with Java API`.
+- PASS after the change: formatter, all-target/all-feature workspace Clippy,
+  UTC default workspace tests, all-feature workspace tests, Maven verify
+  (37 scenarios, frame probes and Java/Rust cross-decodes), differential
+  self-test/manifest, race/leak smoke (16 × 3), fuzz smoke (1,824 mutations),
+  release examples, benchmark compilation, metadata/package checks, UTC and
+  Asia/Taipei unique-ID differential, and `git diff --check`.
+- This closes the codec API disposition only. The broader P18-V01 Java/Rust
+  source/API/settings/input/error/flow and reverse-export audit remains open.
+
+## P18-V01 historical-disposition documentation correction — 2026-10-15
+
+- Reconciled `KNOWN_DIFFERENCES.md`, `JAVA_5_5_1_COMPATIBILITY.md`, and the
+  Phase 3 Remoting inventory with the current parity contract: historical
+  acceptance of unmatched Rust-only APIs, immutable remoting config snapshots,
+  or selected observable differences does not close P18-V01. Public API and
+  setting capabilities must map to Java 5.5.1, and remaining setting-update
+  and operation behavior must be checked row by row.
+- Updated the release checklist to identify these earlier Phase 3 decisions as
+  historical and preserve the full P18-V01 audit as open local parity work.
+- Documentation-only correction; `git diff --check` is the validation gate.
+- Follow-up consistency pass: the Java compatibility summary and known-
+  differences index now mark remaining Phase 3 disposition labels as historical
+  where P18-V01 still needs to verify current API, setting and behavior parity.
+
+## P18-V01 Remoting live timeout setting — 2026-10-15T12:46:47Z
+
+- Java 5.5.1 `NettyRemotingClient.invokeSync` consults its retained mutable
+  `NettyClientConfig.clientCloseSocketIfTimeout` when handling a response
+  timeout. Rust now exposes live getter/setter methods on `RemotingClient` and
+  reads the atomic setting at that timeout boundary instead of using only the
+  construction snapshot.
+- Added a Java local-socket probe, run by Maven verify, and a Rust loopback
+  regression that both mutate the setting after client construction/start and
+  verify that the timed-out call leaves its socket open.
+- Code commit: `95548e49 fix(remoting): read live sync timeout close setting`.
+- PASS: remoting crate tests, strict Remoting and workspace Clippy, default and
+  all-feature workspace tests, Maven verify (37 scenarios and the live-config
+  probe), differential self-test/manifest, 16-case race/leak smoke × 3, fuzz
+  smoke (104 frame seeds, 10 message seeds, 1,824 mutations), release examples,
+  workspace benchmark compilation, locked metadata, metadata/license/dependency
+  checks, seven package listings, UTC/Asia-Taipei unique-ID fixture, formatting,
+  and `git diff --check`.
+- This closes the `clientCloseSocketIfTimeout` timing row only. Broad P18-V01,
+  current-revision GitHub Ubuntu address-profile/P18-V04 evidence, Phase 19
+  local Docker/Broker automation, and pre-publication version/registry checks
+  remain open.

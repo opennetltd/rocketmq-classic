@@ -1,0 +1,19 @@
+# Phase 3 continuation audit — 20261003T132458Z
+
+## Decisions in force
+- Fixed construction-time ClientConfig snapshot; no runtime mutation parity.
+- Tokio executor/scheduling/lifecycle differences accepted.
+- All Rust-only API inventory entries retained.
+- P3-V04 remains deferred to Phase 19.
+
+## Audit
+- Re-read the Phase 3 plan, compatibility matrix, detailed remoting inventory, known differences and recent commits.
+- Confirmed P3-V01/V02/V03/U01 local tests exist and prior full workspace gates passed.
+- Found stale `PARTIAL` summary wording in JAVA_5_5_1_COMPATIBILITY.md that contradicts detailed accepted dispositions and user decisions. Callback timeout scanner grace and shutdown/callback behavior have named tests in the detailed inventory.
+- Updated the compatibility summary and ADR to reflect current local acceptance and previously approved runtime/API differences; no Rust code behavior gap identified in this pass.
+
+## Validation and status
+- Validation passed: transport integration tests (77 passed); `cargo fmt --all --check`; `cargo clippy --workspace --all-targets --locked --offline -- -D warnings`; workspace metadata check; differential comparator self-test; `git diff --check`.
+- Committed compatibility reconciliation in `e78dcc5`; broader document status sync is recorded in this continuation.
+- Final cross-document review found stale ADR/README language implying Phase 3 remained broadly partial. Updated those descriptions to distinguish completed local functionality, accepted Java/Netty differences, and P3-V04 Phase 19 validation. Full workspace tests, fmt, clippy, metadata and differential self-test passed during this continuation.
+- Cross-reference search also found README and ADR wording that still called the transport partial. Updated README, ADR, known-differences disposition and this log so implemented local features, accepted Java/Netty differences, and the deferred P3-V04 handoff are distinguished.

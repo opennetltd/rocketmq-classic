@@ -1,0 +1,251 @@
+Phase 18 API surface audit continuation — 2026-10-22 13:32 UTC
+
+Environment: macOS AArch64, Rust 1.85.0. Workspace branch is `phase/18-phase-18-compatibility-closure`; pinned RocketMQ Java source commit is `efa1be59d6fc747ad220f036c86030f05f0419f9`. Kept unrelated Phase 19 working-tree files untouched.
+
+Pinned-source API audit finding:
+- The generated Rust `java_encode_with_features` adapter was applied to `CheckRocksdbCqWriteResult`, `AclInfo`, `AclPolicyInfo`, and `AclPolicyEntryInfo`; pinned Java declares these as plain classes and does not inherit `RemotingSerializable.encode(JSONWriter.Feature...)`.
+- `TopicConfigAndQueueMapping` also has the writer-feature instance adapter in Rust, but Java extends plain `TopicConfig`.
+- `TopicQueueMappingDetail` extends `TopicQueueMappingInfo`, which extends `RemotingSerializable`; its Rust method is valid, but feature serialization currently lacks a root/nested bean schema.
+- Other types in the large remoting adapter invocation resolve to pinned `RemotingSerializable` subclasses (or the expected Java alias), so no additional plain-class mismatch was found in that invocation.
+
+Implementation and Java fixture changes are in progress. No Phase 18 plan files or files in the separate pinned Java checkout were changed.
+
+Validation results will be appended after targeted Java/Rust differential checks and the Phase 18 gates.
+
+Phase 18 API surface audit continuation — validation update — 2026-10-22 13:55 UTC
+
+Completed implementation slice:
+- Removed inherited writer-feature instance methods from the five Rust types that are plain Java classes (`CheckRocksdbCqWriteResult`, `AclInfo`, `AclPolicyInfo`, `AclPolicyEntryInfo`, `TopicConfigAndQueueMapping`); retained static RemotingSerializable utilities and compile-fail API guards.
+- Added `TopicQueueMappingDetail` root/nested JSON bean schema handling for inherited Fastjson2 writer features, including nested `LogicQueueMappingItem` values.
+- Added direct-root `LogicQueueMappingItem` cases (default and populated) so its inherited writer-feature API is checked independently as well as nested.
+- Added Java-oracle fixtures and Rust behavior/API coverage for TopicQueueMappingDetail equality/hash/toString and public helper operations, including aliasing and null boundaries. The Java oracle remains pinned to RocketMQ 5.5.1.
+
+Validation:
+- Direct Java fixture generation: passed; 36 runtime route/VIP invoked cases verified.
+- `cargo test -p rocketmq-classic-protocol --all-features --locked inherited_remoting_serialization_matches_invoked_java`: passed (3 selected tests).
+- `cargo test -p rocketmq-classic-protocol --all-features --locked`: passed (158 unit tests, 163 doctests, integration targets).
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- `mvn -f compat/java-reference/pom.xml verify`: passed (BUILD SUCCESS, 2m23s; 37 scenario manifest cases, runtime route fixtures, and Java decoding of 106 typed headers and 19 typed bodies).
+
+The worktree still contains the unrelated Phase 19 changes to `integration-tests/README.md`, `tests/differential/run.sh`, `integration-tests/run-local.sh`, and its Phase 19 log. These remain untouched and must not be staged with this slice. The branch is 70 commits ahead of `origin/phase/18-phase-18-compatibility-closure` and has no upstream-only commits.
+
+Phase 18 current-revision server-free gate — 2026-10-22 14:07 UTC
+
+Refreshed after code commit `4a0074f6` and documentation commit `60c12c63`:
+- `cargo test --workspace --locked`: PASS.
+- `cargo test --workspace --all-features --locked`: PASS.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`: PASS.
+- `cargo fmt --all -- --check` and `git diff --check`: PASS.
+- `mvn -f compat/java-reference/pom.xml verify`: PASS (37 scenario manifest cases; 36 runtime route/VIP invoked cases; Java decoded 106 typed headers and 19 typed bodies).
+- `python3 tests/differential/compare.py --self-test` and `--validate-manifest`: PASS; 37 scenarios.
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`: PASS; 163 frame seeds, 11 message seeds, 2,784 bounded mutations, 245 frame decodes, 112 message decodes.
+- `bash tests/stress/run-offline-smoke.sh`: PASS; 16 deterministic race/leak cases × 3 repetitions.
+- `cargo build -p rocketmq-classic --examples --release --locked`: PASS.
+- `cargo bench --workspace --no-run --locked`: PASS.
+- `python3 scripts/check-workspace-metadata.py`: PASS; all seven product package listings include `LICENSE` and `NOTICE`.
+- Four Core Unique ID tests pass under both `TZ=UTC` and `TZ=Asia/Taipei`.
+- Windows GNU compile checks pass: `cargo check -p rocketmq-classic-core --all-targets --target x86_64-pc-windows-gnu --locked` and the Consumer stack-capture test `--no-run` cross-compile.
+
+Broad P18-V01 bidirectional source/API/settings/input/error/control-flow/reverse-export reconciliation remains open. Current-revision remote Ubuntu CI and native Windows stack-capture execution remain unverified. Phase 19 Broker/Docker validation is separate. No push or remote CI was run; the protected Phase 19 worktree files remain unstaged.
+
+Phase 18 API surface audit continuation — static-topic constant and method matrix — 2026-10-22 14:17 UTC
+
+Pinned Java 5.5.1 `javap -public` audit follow-up:
+- Found and added `TopicQueueMappingInfo.LEVEL_0` and the inherited `TopicQueueMappingDetail.LEVEL_0` Rust constants, checked against the Java oracle.
+- Added the direct `LogicQueueMappingItem` public-method matrix, including getters, setters, offset conversion and decision helpers, delta, hash code, and `toString`; Java and Rust compare default, populated, and undecided values.
+- Java spells `checkIfLogicoffsetDecided`; Rust exposes the idiomatic `check_if_logic_offset_decided` name for the same method.
+
+Validation after this code slice:
+- `cargo test -p rocketmq-classic-protocol --all-features --locked`: PASS (159 unit tests, 163 doctests, integration targets).
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features --locked -- -D warnings`: PASS.
+- `cargo fmt --all -- --check` and `git diff --check`: PASS.
+- Direct Java runtime route fixture generation: PASS (36 invoked cases).
+- `mvn -f compat/java-reference/pom.xml verify`: PASS (BUILD SUCCESS at 2026-10-22 14:16:32 UTC; Java decoded 106 typed headers and 19 typed bodies).
+- `fixtures/runtime/route.json` SHA-256: `e1b5ca4167b237c2011e8ecd62600a54ac0b43e522e4ae164157db2c7ddb5716`.
+
+The earlier full workspace/release gate in this log predates these final constant and method-matrix additions and will need refreshing before they can be used as current-revision evidence. Broad P18-V01 reconciliation, current-revision remote Ubuntu CI, and native Windows execution remain open. Protected Phase 19 files remain unstaged and untouched.
+
+Phase 18 current-revision workspace gate — 2026-10-22 15:12 UTC
+
+Refreshed after code commit `e415be18` (documentation follow-up `62a17ecf` only):
+- `cargo test --workspace --locked`: PASS.
+- `cargo test --workspace --all-features --locked`: PASS.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`: PASS.
+- `cargo fmt --all -- --check` and `git diff --check`: PASS.
+
+The protocol-specific and pinned Maven results for `e415be18` are recorded above. This refresh does not complete the broad P18-V01 source/API/settings/input/error/control-flow/reverse-export reconciliation. Current-revision remote Ubuntu CI and native Windows stack-capture execution remain unverified. The separate Phase 19 worktree files remain unstaged.
+
+Phase 18 static-topic direct equality probe — 2026-10-22 14:28 UTC
+
+The static-topic public method crosswalk listed `LogicQueueMappingItem.equals`, but the direct Java method fixture only asserted its hash/text operations (nested equality was exercised indirectly by TopicQueueMappingDetail cases). Added 11 direct Java equality pairs: defaults, equal populated items, one changed pair for each of the eight fields, and null-versus-empty broker name. The existing Rust equality implementation is compared against the actual Java `equals` outcomes.
+
+Validation:
+- Focused `cargo test -p rocketmq-classic-protocol --all-features --locked logic_queue_mapping_item_methods_match_invoked_java`: PASS.
+- Strict all-target/all-feature Protocol Clippy, `cargo fmt --all -- --check`, and `git diff --check`: PASS.
+- Pinned `mvn -f compat/java-reference/pom.xml verify`: PASS (BUILD SUCCESS at 2026-10-22 14:27:21 UTC, 37 scenario cases, 36 route/VIP invoked cases, Java decoded 106 typed headers and 19 typed bodies).
+- Route fixture SHA-256: `0fcad65ecc00a9c55657113ed494d0d818621f5dcd4fa11e5da87e49c61d9470`.
+
+The broad P18-V01 source/API/settings/input/error/control-flow/reverse-export audit remains open; remote Ubuntu CI and native Windows execution are still unverified. Protected Phase 19 worktree files remain unstaged.
+
+Phase 18 current-tree offline gate and P18-05 measurement — 2026-10-22 14:37 UTC
+
+Validated the authoritative source checkouts:
+- The specified Java repository is `/Users/bruce.tsai/Projects/3rd/rocketmq`, currently on `master` at `2238256de1d227a4384ba969dfa31473187b4d08`; the pinned 5.5.1 release commit `efa1be59d6fc747ad220f036c86030f05f0419f9` is present and resolves to `rocketmq-all-5.5.1`. The checkout's pre-existing untracked `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java` was left untouched.
+- Rust branch HEAD before this documentation update is code/test `70671a33` plus docs `e897168c`. Protected Phase 19 files remain unstaged and untouched.
+
+Current-tree server-free gates:
+- Locked default and all-feature workspace tests: PASS.
+- Workspace all-target/all-feature Clippy with `-D warnings`, formatting, and `git diff --check`: PASS.
+- Pinned Maven verify: PASS (37 scenario cases; 36 runtime route/VIP cases; Java decoded 106 typed headers and 19 typed bodies).
+- Differential comparator self-test and manifest: PASS; 37 scenarios.
+- Fuzz smoke: PASS; 163 frame seeds, 11 message seeds, 2,784 bounded mutations, 245 frame decodes, 112 message decodes.
+- Race/leak smoke: PASS; 16 deterministic cases × 3 repetitions.
+- Release facade examples, workspace metadata/license/dependency checks, and all seven product `cargo package --list` checks: PASS; each listing includes LICENSE and NOTICE.
+- Four Core Unique ID tests pass under both `TZ=UTC` and `TZ=Asia/Taipei`.
+- Windows GNU Core all-target check and Consumer native stack-capture test `--no-run` cross-compile: PASS. Native Windows execution was not run.
+
+P18-05 fixed-input release benchmark, one local observation on Apple M5 Max / macOS AArch64, 18 logical CPUs, Rust 1.85.0:
+- Frame encode/decode: 20,000 × 427 bytes; 45,089,709 ns total, 2,254.5 ns/op; 40.00 allocations and 4,676.0 bytes/op.
+- Zstd message decode: 10,000 × 146 bytes; 11,554,709 ns total, 1,155.5 ns/op; 17.00 allocations and 197,493.0 bytes/op.
+- Producer send construction: 20,000 × 512 bytes; 23,641,041 ns total, 1,182.1 ns/op; 54.00 allocations and 3,665.0 bytes/op.
+- Route address lookup (128 entries): 100,000 × 10 bytes; 1,411,333 ns total, 14.1 ns/op; 0 allocations and 0 bytes/op.
+- Loopback pending request completion: 500 × 128 bytes; 34,555,541 ns total, 69,111.1 ns/op; 81.00 allocations and 9,546.0 bytes/op.
+
+The benchmark is a single observational baseline, with no performance acceptance threshold or optimization claim. `.github/workflows/ci.yml` was reviewed as a server-free Ubuntu job plus a native Windows stack job; neither remote job was run. Broad P18-V01 remains open, as do current-revision GitHub Ubuntu execution and native Windows runtime execution. This is not Phase 18 completion evidence.
+
+Phase 18 static-topic wrapper API continuation — 2026-10-22 14:50 UTC
+
+Implemented the missing `TopicConfigAndQueueMapping` Rust constructor and Java-compatible `toString`, plus Rust `Hash` support for `TopicConfigAndQueueMapping` and `TopicQueueMappingDetail`. The Java oracle now covers the wrapper's two constructors, five declared methods and 27 total public methods including inherited `TopicConfig`; default/populated states; copied scalar fields and shared attribute aliasing; mapping detail identity, mutation and null setter; null config failure; equality/hash outcomes; and exact text.
+
+`fixtures/producer/core.json` SHA-256: `39cf5836801a5d5664a61199200dd96b77084cdec557bcc6581eee353967bb39`.
+
+Validation on source commit `7397bb16`:
+- `cargo test -p rocketmq-classic-protocol --all-features --locked`: PASS (159 unit tests, all integration targets, 163 doctests).
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features --locked -- -D warnings`: PASS.
+- Focused wrapper differential, `cargo fmt --all -- --check`, and `git diff --check`: PASS.
+- `mvn -f compat/java-reference/pom.xml verify`: PASS (37 scenarios; 36 route/VIP cases; Java decoded 106 typed headers and 19 typed bodies).
+
+The full workspace gate needs a post-change refresh. Broad P18-V01 source/API/settings/input/error/control-flow/reverse-export reconciliation remains open, along with current-revision remote Ubuntu CI and native Windows stack-capture execution. Phase 19 worktree files remain untouched and unstaged; no push or remote CI was run.
+
+Phase 18 current-revision P18-V02 workspace gate — 2026-10-22 14:59 UTC
+
+Refreshed after code commit `7397bb16` (docs `8499d4d9`):
+- `cargo test --workspace --locked`: PASS.
+- `cargo test --workspace --all-features --locked`: PASS.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`: PASS.
+- `cargo fmt --all -- --check` and `git diff --check`: PASS.
+- Pinned Maven `verify`: PASS (37 scenarios, 36 runtime route/VIP cases, 106 typed headers and 19 typed bodies decoded by Java).
+- Differential comparator self-test and manifest validation: PASS; 37 scenarios.
+- Fuzz smoke: PASS; 163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes, 112 message decodes.
+- Race/leak smoke: PASS; 16 deterministic cases × 3 repetitions.
+- Release facade examples, workspace bench compilation, workspace metadata/license/dependency checks, and seven product package listings with LICENSE/NOTICE: PASS.
+- Four Core Unique ID tests pass under both `TZ=UTC` and `TZ=Asia/Taipei`.
+- Windows GNU Core all-target check and Consumer stack-capture `--no-run` cross-compile: PASS; native Windows runtime execution was not run.
+
+The P18-05 one-run offline benchmark was already recorded for this code family and was not rerun because the new code is confined to the Protocol static-topic wrapper API. Broad P18-V01 remains open. Current-revision remote Ubuntu CI and native Windows execution remain unverified. Phase 19 worktree files were left untouched; no push or external CI was run.
+
+Phase 18 static-topic wrapper reverse-export crosswalk — 2026-10-22 15:00 UTC
+
+Added `TopicConfigAndQueueMapping`'s three public associated functions and Rust equality/hash semantics to the Protocol row of the Rust-to-Java crosswalk. The source item inventory now records 402 public items, up from the prior 399; the three associated-function names already existed elsewhere, so the distinct-name counts remain unchanged. This accounts for the new wrapper exports only; broader P18-V01 reverse-export and behavior reconciliation remains open.
+
+Phase 18 static-topic wrapper null-field differential and refreshed P18-V02 gate — 2026-10-22 15:10 UTC
+
+Added a Java oracle case that sets `TopicConfig.topicName`, `topicFilterType`, and `attributes` to null before wrapping it with a null mapping detail. The Rust test compares the copied field state and complete wrapper `toString`. Fixture semantic diff is limited to `topicConfigModelOperations.topicConfigAndQueueMappingApi.nullFields`. `fixtures/producer/core.json` SHA-256: `b64b02f271052b9e402bdebf4dca4ad61f4f40690d936e6f4a4f31de61351d2f`.
+
+Validation on test/fixture commit `c8356edf`:
+- `cargo test --workspace --locked`: PASS.
+- `cargo test --workspace --all-features --locked`: PASS.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`: PASS.
+- `cargo fmt --all -- --check` and `git diff --check`: PASS.
+- Pinned `mvn -f compat/java-reference/pom.xml verify`: PASS (37 scenarios; 36 route/VIP cases; Java decoded 106 typed headers and 19 typed bodies).
+
+Broad P18-V01 source/API/settings/input/error/control-flow/reverse-export reconciliation remains open. Current-revision remote Ubuntu CI and native Windows execution remain unverified. Protected Phase 19 files remain untouched and unstaged; no push or external CI was run.
+
+Phase 18 static-topic wrapper inherited-setter differential — 2026-10-22 15:17 UTC
+
+The direct Java wrapper probe now calls inherited `TopicConfig` setters on `TopicConfigAndQueueMapping` itself. It records updated topic name, queue counts, permissions, filter type, system flag, order, and the retained mapping detail. Rust invokes the inherited setters through its `DerefMut` surface and matches copied fields and full `toString`. The semantic fixture diff adds only `topicConfigModelOperations.topicConfigAndQueueMappingApi.inheritedSetters`. `fixtures/producer/core.json` SHA-256: `f46d7f15b0a1425822af97c42b9d639f82bb287f1a4d604e19db2edf150c3186`.
+
+Validation on test/fixture commit `ab46b125`:
+- Focused `cargo test -p rocketmq-classic-protocol --test topic_config_public_api --all-features --locked`: PASS.
+- `cargo test -p rocketmq-classic-protocol --all-features --locked`: PASS (159 unit tests, all integration targets, 163 doctests).
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features --locked -- -D warnings`: PASS.
+- `cargo fmt --all -- --check` and `git diff --check`: PASS.
+- Pinned `mvn -f compat/java-reference/pom.xml verify`: PASS (37 scenarios; 36 route/VIP cases; Java decoded 106 typed headers and 19 typed bodies).
+
+This closes only inherited setter dispatch for the static-topic wrapper. Broad P18-V01 source/API/settings/input/error/control-flow/reverse-export reconciliation remains open. Current-revision remote Ubuntu CI and native Windows execution remain unverified. Protected Phase 19 files remain untouched and unstaged; no push or external CI was run.
+
+P18-V01 inherited-setter validation follow-up — 2026-10-22 15:19 UTC
+
+The first Maven `verify` correctly detected producer-fixture drift after the Java oracle gained `inheritedSetters`; regenerated `fixtures/producer/core.json` through the configured `verify-java-producer-core-fixtures` execution with `producer.core.fixture.verify=false`. The first Protocol all-feature run then exposed a Rust test-input mismatch: it reused the existing `mapping-topic` detail while Java used `inherited-mapping`. Updated only the Rust test setup to align that oracle input. The focused target, Protocol all-feature suite, strict Protocol Clippy, formatting/diff checks, and full pinned Maven `verify` then passed. No production code changed in this extension.
+
+P18-V01 NamespaceUtil reverse-export correction — 2026-10-22 15:28 UTC
+
+Pinned Java `NamespaceUtil` declares four public constants and nine public
+method signatures. Rust retains the matching constants as `NamespaceUtil`
+associated constants and the matching methods, while four duplicate
+module-level constants had been exposed without Java counterparts. Workspace
+search found no callers of those aliases. Made them private and added
+compile-fail rustdoc guards for module-root imports. Code commit: `5024360d`.
+
+Validation on `5024360d`:
+- `cargo test --workspace --locked`: PASS.
+- `cargo test --workspace --all-features --locked`: PASS.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`: PASS.
+- `cargo fmt --all -- --check` and `git diff --check`: PASS.
+- `mvn -f compat/java-reference/pom.xml verify`: PASS (37 scenarios; 36
+  runtime route/VIP cases; Java decoded 106 typed headers and 19 typed bodies).
+
+This closes the four unmatched module exports only. Broad P18-V01
+source/API/settings/input/error/control-flow/reverse-export reconciliation,
+current-revision remote Ubuntu CI, and native Windows execution remain open.
+No push or external CI was run; protected Phase 19 worktree files remain
+untouched and unstaged.
+
+P18-V01 Rustdoc reverse-scan count correction — 2026-10-22
+
+Regenerated all-feature workspace Rustdoc JSON on code revision `5024360d`.
+Remoting remains at 399 public item records / 338 distinct names, including
+the synthetic crate-root marker; its 337 actual identifiers are unchanged by
+the Protocol static-topic wrapper. Protocol currently has 1,525 distinct
+public names including its marker (1,524 excluding it). A raw substring join
+against `PHASE_6_API_CONFIG_MAP.md` finds 966 names without a literal mention,
+excluding the marker. The earlier `399` to `402` wording incorrectly added
+three Protocol wrapper functions to the Remoting count; the static-topic
+wrapper's three functions remain recorded in the Protocol crosswalk. Four
+module-level NamespaceUtil constants no longer appear as public Rustdoc items.
+These are name-join counts, not missing-feature counts.
+
+`RUSTDOCFLAGS='-Z unstable-options --output-format json' cargo +nightly doc
+--workspace --all-features --locked --no-deps`: PASS. Existing workspace
+manifest and Consumer `AtomicU64::fetch_update` warnings remain. No tests were
+run for this documentation and inventory correction.
+
+P18-V01 TopicValidator and SessionCredentials constant export correction — 2026-10-22 15:45 UTC
+
+The reverse source review found duplicate Rust module-level exports alongside
+Java-shaped associated constants. Made 14 `rocketmq_classic_common::topic`
+TopicValidator aliases private, retaining the associated constants. Made
+five `rocketmq_classic_core::auth` SessionCredentials aliases private and
+hid the Rust-only `KEY_FILE_PROPERTY`; the Java `KEY_FILE` value remains
+available through `SessionCredentials::key_file_path`. Added compile-fail
+rustdoc guards for both module paths and updated the ACL profile integration
+test to access Java-mapped credentials through `SessionCredentials`.
+Code commit: `87900fb8`.
+
+Validation on `87900fb8`:
+- `cargo test --workspace --locked`: PASS, including the new compile-fail
+  rustdoc examples.
+- `cargo test --workspace --all-features --locked`: PASS.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`: PASS.
+- `cargo fmt --all -- --check` and `git diff --check`: PASS.
+- `mvn -f compat/java-reference/pom.xml verify`: PASS (37 scenarios; 36
+  runtime route/VIP cases; Java decoded 106 typed headers and 19 typed bodies).
+- `RUSTDOCFLAGS='-Z unstable-options --output-format json' cargo +nightly doc
+  --workspace --all-features --locked --no-deps`: PASS; existing manifest
+  and Consumer `AtomicU64::fetch_update` warnings remain.
+
+Broad P18-V01 source/API/settings/input/error/control-flow/reverse-export
+reconciliation remains open. Current-revision remote Ubuntu CI and native
+Windows execution remain open. No push or external CI was run; protected
+Phase 19 worktree files remain untouched and unstaged.

@@ -1,0 +1,50 @@
+# Phase 18 ProcessQueue timestamp branches and current-revision P18-V02 refresh — 2026-10-21T16:30:42Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `e7dd0a9b` (`test(consumer): cover process queue timestamp branches`)
+Runtime implementation revision: `9147a902` (`fix(consumer): match expired message cleanup semantics`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Source audit follow-up
+
+The added Java fixture cases pin the neighboring `ProcessQueue.cleanExpiredMsg`
+branches: missing and empty `CONSUME_START_TIME` skip expiry; Java Unicode
+decimal digits are accepted by `Long.parseLong`; orderly mode returns before
+parsing malformed values. Rust tests compare those outcomes with the invoked
+Java fixture. The fixture SHA-256 is
+`0ecf6ca6795174a96a90123cebb5415c2108cc81842ce84469e721d599f90d01`.
+
+This follow-up changes only the Java fixture, Rust assertions and compatibility
+documents; the runtime implementation remains `9147a902`. The earlier pinned
+source/error and retry work is recorded in
+`rlogs/2026/09/19-phase-18-compatibility-release-gate__20261021T162010Z.rlog`.
+
+## Verification
+
+- PASS: focused expiry branch comparison.
+- PASS: default and all-feature locked workspace suites.
+- PASS: strict all-target/all-feature workspace Clippy.
+- PASS: pinned Maven `verify`; 37 scenarios, fixture drift checks, 83 typed
+  headers and 16 typed bodies cross-decoded by Java.
+- PASS: differential comparator self-test and 37-row scenario manifest.
+- PASS: offline stress smoke, 16 cases × 3 repetitions.
+- PASS: release fuzz smoke, 137 frame seeds, 11 message seeds, 2,368 bounded
+  mutations, 201 frame decodes and 118 message decodes.
+- PASS: release examples and workspace bench compilation.
+- PASS: locked Cargo metadata, workspace license/dependency validation, seven
+  package listings containing `LICENSE` and `NOTICE`, and Unique ID tests under
+  UTC and Asia/Taipei.
+- PASS: formatting and `git diff --check` before commit.
+
+The offline benchmark sample is documented for runtime implementation
+`9147a902`; this fixture/test-only follow-up does not change benchmarked code.
+
+## Remaining status
+
+Broad P18-V01 remains open, including raw Push consume-service replacement,
+the shared mutable stats-manager accessor, arbitrary application-defined
+`MessageExt` subclasses, and the remaining source/settings/input/error/
+control-flow/reverse-export audit. P18-V04 current-revision GitHub Ubuntu and
+native Windows runtime evidence remain absent. No remote CI or push was
+performed. Phase 19 live Broker/Docker validation remains separate. Protected
+Phase 19 working-tree paths were left untouched and unstaged.

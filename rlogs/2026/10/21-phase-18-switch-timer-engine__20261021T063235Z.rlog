@@ -1,0 +1,21 @@
+# Phase 18 `switchTimerEngine` RPC slice — 2026-10-21T06:32:35Z
+
+- Continued the pinned RocketMQ Java 5.5.1 compatibility audit at source
+  commit `efa1be59d6fc747ad220f036c86030f05f0419f9`. Added the Core mapping for
+  `MQClientAPIImpl.switchTimerEngine(String,String,long)`, request 5001.
+- The method sends `E_T` in command ext fields, including an empty string, uses
+  the supplied Broker address unchanged when VIP mode is enabled, and raises
+  on non-success responses. Rust now exposes `MQClientApi::switch_timer_engine`
+  with these behaviors.
+- Invoked Java fixtures and a VIP-enabled Rust loopback compare the signature,
+  field values, body, address and success/error outcomes. Producer core fixture
+  SHA-256: `bb28b038fdd66160007d8c757e53ed4cb78ebcad0a91b4ff9d950fa04eccee6c`.
+- Validation passed: Core all-feature locked suite (184 unit tests, all
+  integration targets and 16 doctests); strict all-target/all-feature Clippy
+  for Common, Core, Producer and facade; Producer pinned fixture comparison;
+  Maven `verify` (37 scenarios, 67 typed-header frames, 15 typed-body fixtures
+  and Java/Rust cross-decodes); formatting and `git diff --check`.
+- Phase 18 plan file was not edited. Broad P18-V01, current-tree P18-V02,
+  P18-V03 package/provenance review and P18-V04 environment evidence remain
+  open. No remote CI or Phase 19 Broker/Docker validation ran. Existing Phase
+  19 worktree paths remain unstaged and untouched.

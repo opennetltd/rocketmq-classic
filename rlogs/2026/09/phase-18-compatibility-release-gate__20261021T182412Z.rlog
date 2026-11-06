@@ -1,0 +1,48 @@
+# Phase 18 MessageExt reconsume override follow-up — 2026-10-21T18:24:12Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `bcf66469` (`feat(common): honor MessageExt subtype reconsume hooks`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Fixture SHA-256: `c05bde846eae0f39cc654cf49cfa33f624be62165c17cbc2da46fa80d1a77c0a`.
+
+## Source audit and change
+
+- Java 5.5.1 Push retry and send-back paths dynamically call
+  `MessageExt.getReconsumeTimes` and `setReconsumeTimes` on base-typed
+  `MessageExt` values. Rust previously read and wrote the base field directly.
+- Added optional getter/setter hooks to `MessageExtSubtype`. Base behavior is
+  unchanged when a custom subtype leaves either hook at its default.
+- Extended the invoked Java direct-consume subtype fixture: its setter records
+  one write, its getter returns `13`, and the callback records that value.
+  Rust checks the same callback data and setter count; all 27 direct-consume
+  cases pass.
+- Updated the Phase 6, Phase 10 and Phase 18 compatibility crosswalks and the
+  release checklist. Other inherited virtual methods remain part of the broad
+  audit.
+
+## Verification
+
+- PASS: `cargo test --workspace --locked --quiet`.
+- PASS: `cargo test --workspace --all-features --locked --quiet`.
+- PASS: strict workspace Clippy with all targets/features and `-D warnings`;
+  `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: focused Common and Consumer package tests, including the
+  `runtime_direct_consume` Java/Rust fixture comparison. Consumer package
+  tests include 247 library tests and all package integration tests.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify`: 37 scenarios, 83
+  typed headers, 16 typed bodies and Rust/Java cross-decodes. The runtime
+  consumer fixture verifies 9 Running Info, 27 direct-consume and 15 reset
+  cases. Existing JDK Unsafe/reflection warnings were emitted.
+- Supplemental differential, stress, fuzz, examples, benchmark, metadata,
+  package-content and time-zone gates have not yet been refreshed on this new
+  code revision.
+
+## Remaining status
+
+This closes the two `reconsumeTimes` subtype hooks only. Broad P18-V01
+source/API/settings/input/error/control-flow/reverse-export work and inherited
+method overrides beyond the adapter remain open. Current GitHub Ubuntu and
+native Windows P18-V04 runtime evidence is absent. Phase 19 Broker/Docker
+validation remains separate. No push, remote CI, Broker or Docker run was
+performed. Pre-existing Phase 19 worktree paths were left untouched and
+unstaged.

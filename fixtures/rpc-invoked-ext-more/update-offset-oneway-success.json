@@ -1,0 +1,1 @@
+{"case":"update-offset-oneway-success","mode":"ONEWAY","outcome":"ok","provenance":{"client":"org.apache.rocketmq:rocketmq-client:5.5.1","entrypoint":"MQClientAPIExt.updateConsumerOffsetOneWay","serverBaselineContacted":false,"transport":"mock RemotingClient"},"request":{"code":15,"ext":{"commitOffset":"17","consumerGroup":"workers","queueId":"2","topic":"orders"},"version":515}}

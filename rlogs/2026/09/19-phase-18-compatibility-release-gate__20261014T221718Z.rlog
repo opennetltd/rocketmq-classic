@@ -1,0 +1,36 @@
+# Phase 18 live consumer-group flow follow-up — 2026-10-14T22:17:18Z
+
+- Continued on `phase/19-phase-18-compatibility-release-gate`; pinned Java
+  checkout remains read-only at `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- Added invoked Java fixture evidence for post-start facade-group mutation in
+  concurrent/orderly consume hooks, consume tracing, Push Broker send-back and
+  retry-topic fallback. Extended the Pull fixture to capture default/explicit
+  Broker groups and the default-group fallback after an explicit-group failure.
+  Fixture SHA-256: Push
+  `4d98b6989130933d91831cbe20c671ba389e4e61f129153843d5fe5be8c981e5`; Pull
+  `1090617637533587bc425acaf1862521b7d2826c8747839a14a6e985fbdd4c78`.
+- Updated Rust Push consume contexts and tracing to read the live facade group.
+  Push send-back now uses the live group for Broker headers and namespace-wraps
+  its retry fallback. Pull passes the effective default or explicit group for
+  Broker headers; shared fallback generation uses Pull's default facade group,
+  matching `DefaultMQPullConsumerImpl.sendMessageBack` after a custom override.
+  Updated test startup helpers to model Java's namespaced live facade group.
+- Initial shared-helper test exposed a Pull difference: Pull's started facade
+  stores its namespaced group while Push send-back reads its possibly mutated
+  raw live group. Kept those owner semantics distinct by passing Pull's effective
+  group at its call site and deriving fallback topic group from the owner
+  facade. Strict Clippy initially found a test mutex guard crossing shutdown
+  awaits; enclosed assertions in a lexical scope and reran Clippy successfully.
+- PASS: `cargo test -p rocketmq-classic-consumer --all-features --locked`
+  (219 unit tests, all consumer integration targets and 5 doctests); strict
+  all-target/all-feature Consumer Clippy; `mvn -f compat/java-reference/pom.xml
+  verify` (37 scenarios, fixture drift and Java/Rust cross-decodes); `cargo fmt
+  --all`; `git diff --check`.
+- Updated Phase 9 and Phase 10 compatibility matrices and the release checklist.
+  P18-V01 remains open for the broad Java/Rust API, inputs, branches, inherited
+  surfaces and reverse-export audit. Full workspace gates on the final revision,
+  current GitHub Ubuntu evidence and Phase 19 Broker/Docker scenarios remain
+  outstanding. No tag, push, publish or Broker request was performed.
+- Separate commits: `c8f2ef2b` adds the Java fixture evidence; `bd36cb44`
+  implements and tests the Rust flow corrections. Matrix, release-checklist and
+  execution-log updates are staged for their own documentation commit.

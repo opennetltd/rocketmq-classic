@@ -1,0 +1,27 @@
+# Phase 18 Lite request-header Core call-site updates
+
+- Recorded: 2026-10-23 14:46:43 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source revision: `8288cc98` (`fix(core): construct inherited Lite request headers`)
+- Pinned Java source: RocketMQ 5.5.1,
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Change
+
+- The Lite control header now has four inherited `RpcRequestHeader` fields, so
+  Core could no longer pass the unit-struct type as a value.
+- Updated six calls in `MQClientApi` for check-client, query-assignment,
+  set-message-request-mode, Lite subscription control, and batch-ack to use
+  `LiteSubscriptionCtlRequestHeader::default()`.
+- The empty default encodes no ext fields, preserving the requests' wire
+  header behavior.
+
+## Verification
+
+- `cargo test --offline --locked --workspace --all-features` — passed across all workspace crates, integration tests, and doctests.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- No push or remote CI was run; existing Phase 19 user-owned paths were not edited or staged.
+
+This closes the downstream call-site update only. Broad P18-V01 remains
+PARTIAL; native Windows runtime and current-revision remote Ubuntu CI remain
+open, and Phase 19 Broker/Docker work remains outside scope.

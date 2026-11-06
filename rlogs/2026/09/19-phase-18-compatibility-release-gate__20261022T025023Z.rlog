@@ -1,0 +1,51 @@
+# Phase 18 compatibility release gate — 2026-10-22 02:50:23 UTC
+
+Base revision: `a526dea9`. This entry records the request 201
+`getAllSubscriptionGroup` protocol and RPC slice. Pinned Java source is
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Compatibility changes
+
+- Added Java-compatible `GetAllSubscriptionGroupRequestHeader` and response
+  total header, including nullable fields and public accessor inventory.
+- Added `SubscriptionGroupWrapper` with Java constructor defaults, nullable
+  tables, `DataVersion`, subscription-group configs, and forbidden-topic map.
+- Added `MQClientApi::get_all_subscription_group` for request 201. It applies
+  configured VIP routing and metadata page size, shares one overall deadline,
+  aggregates both tables, restarts and clears both on version changes, and
+  treats missing/invalid `totalGroupNum` as a complete legacy-Broker response.
+- Added Java invocation cases for one/multiple pages, version restart, legacy
+  response, Broker failure, missing/null/malformed bodies, invalid total, and
+  timeout after a page. The version-restart case proves stale group and
+  forbidden rows are removed together.
+- Added bidirectional typed-header/body fixtures and updated the direct API
+  reverse-audit count from 11 open operations to 10.
+
+## Local verification
+
+- `cargo test -p rocketmq-classic-protocol --locked`: passed.
+- `cargo test -p rocketmq-classic-core --test admin_rpc --locked`: 96 passed.
+- `cargo test -p rocketmq-classic-core --lib --locked`: 199 passed.
+- `cargo clippy -p rocketmq-classic-protocol -p rocketmq-classic-core --all-targets --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- `mvn -o -f compat/java-reference/pom.xml verify`: BUILD SUCCESS; includes
+  Java fixture verification, all 95 Rust typed-header cross-decodes and all 18
+  Rust typed-body cross-decodes.
+- Producer core and query-admin header fixture verification passed.
+- SHA-256 `fixtures/producer/core.json`:
+  `c6b0fea6eca62451184b31ef87bb37ce358d07bcb9acea20a9bb9d9f86e3689b`.
+- SHA-256 `fixtures/remoting/query-admin-header-decode-modes.json`:
+  `ca1aa14c902ee60b69a4abca48679bc79af00bfa0c5badd24532e53518a8e6e4`.
+
+One initial compatibility test used Java's zero-timeout proxy with an empty
+reply queue, so the oracle emitted `NoSuchElementException` before exercising
+the timeout behavior. That mock-only case was removed; the real timeout-after-
+page case remains in both Java and Rust tests and passes.
+
+## Remaining work
+
+The request 201 slice is closed. The pinned `MQClientAPIImpl` direct-operation
+reverse audit still has 10 open rows, and the wider Phase 18 settings, inputs,
+errors, control flows, reverse-export audit, and platform evidence remain
+open. No Broker, Docker, or remote CI was used. Pre-existing Phase 19 worktree
+paths remain unstaged and outside this slice.

@@ -1,0 +1,29 @@
+# Phase 18 ProcessQueue reverse public API audit — 2026-10-23T01:45:50Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `e0471d46` (`test(consumer): map ProcessQueue public helpers`)
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Audit result
+
+The reverse audit records `ProcessQueue::new`, all nine nullable-input
+adapters, the AtomicLong-style count/size handle methods, the live-tree view and
+read/write guards, and the typed queue/expiry errors. The new regression checks
+these Rust public helper surfaces against the ProcessQueue owner source and
+Java disposition table. The declared Java method mapping remains an exact
+32-method fixture-to-Rust crosswalk.
+
+## Validation
+
+- Reverse-support-surface regression passed.
+- Java-to-Rust 32-method crosswalk regression passed.
+- Strict all-target/all-feature Consumer Clippy passed.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+- Default and all-feature workspace suites and full offline Maven `verify`
+  passed at prior code revision `533d9713`; `e0471d46` changes only the audit
+  regression and its documentation.
+
+This closes the ProcessQueue reverse-support-surface slice only. Broad P18-V01
+source/API/settings/input/error/control-flow and reverse-export reconciliation
+remains PARTIAL. Current-revision remote Ubuntu CI, native Windows runtime
+execution, and Phase 19 Broker/Docker evidence remain open.

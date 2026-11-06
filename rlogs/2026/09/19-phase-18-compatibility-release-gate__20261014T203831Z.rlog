@@ -1,0 +1,26 @@
+Phase 18 continuation — current-revision server-free gate rerun
+Session: 2026-10-14T20:38:31Z
+Branch: `phase/19-phase-18-compatibility-release-gate`
+Revision: `15f8494b`
+Java oracle: `/Users/bruce.tsai/Projects/3rd/rocketmq`, pinned source commit `efa1be59d6fc747ad220f036c86030f05f0419f9` (read-only).
+Plan files left unchanged.
+
+Validation
+- PASS: `cargo test --workspace --locked`.
+- PASS: `cargo test --workspace --all-features --locked`.
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `mvn -f compat/java-reference/pom.xml verify` (37 scenarios, Java/Rust fixture cross-decodes, runtime fixtures).
+- PASS: `python3 tests/differential/compare.py --self-test`.
+- PASS: `bash tests/stress/run-offline-smoke.sh` (16 deterministic race/leak cases × 3 repetitions).
+- PASS: `cargo run --locked -p rocketmq-classic-remoting --example fuzz_smoke` (104 frame seeds, 10 message seeds, 1,824 bounded mutations).
+- PASS: `cargo build -p rocketmq-classic --examples --release --locked`.
+- PASS: `cargo bench -p rocketmq-classic --bench offline --locked --no-run`.
+- PASS: `python3 scripts/check-workspace-metadata.py`; `cargo metadata --locked --format-version 1 --no-deps`; `cargo package --workspace --list --locked --allow-dirty` (seven packages).
+- Release checklist records the current-revision P18-V02 rerun.
+
+Remaining
+- P18-V01 remains open for the broad bidirectional Java/Rust source, public API/settings, overload/input/error/control-flow, inherited API, and reverse-export audit.
+- P18-V01 follow-up: Java `MQClientInstance.prepareHeartbeatData` calls `impl.groupName()` when each heartbeat is prepared; Rust Push registration retains the startup group in its registration. Determine whether Java's public post-start `setConsumerGroup` behavior is in-scope for live-setting parity and reconcile it before closing the audit.
+- P18-V04 still lacks the current-revision GitHub Ubuntu address-profile result.
+- Phase 19 Broker/Docker scenarios and pre-publication version/registry checks remain later gates; no push, publication, or tag action was taken.

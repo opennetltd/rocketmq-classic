@@ -1,0 +1,29 @@
+# Phase 18 current offline validation rerun — 2026-10-23T02:04:10Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Code revision: `bd2fc5b6966bb9efc0cc1f26e0f9653a5164ff65`
+Pinned Java source: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+Environment: macOS AArch64, Apple M5 Max, 18 logical CPUs, Rust 1.85.0.
+
+## Validation
+
+- `cargo test --offline --workspace --locked` passed.
+- `cargo test --offline --workspace --all-features --locked` passed.
+- Strict all-target/all-feature workspace Clippy passed.
+- Workspace format check and `git diff --check` passed.
+- Differential comparator self-test passed; all 37 manifest scenarios
+  validated.
+- Offline Maven `verify` passed. It verified the Java 5.5.1 source pin,
+  37 scenarios, 106 Java-decoded typed headers, 19 Java-decoded typed bodies,
+  and the configured fixture checks.
+- Fuzz smoke passed: 163 frame seeds, 11 message seeds, 2,784 bounded
+  mutations, 245 frame decodes, and 192 message decodes.
+- Deterministic race/leak smoke passed: 17 cases × 3 repetitions.
+- Release facade examples compiled.
+- The fixed-input offline benchmark completed; measurements are appended to
+  `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+
+The current macOS offline P18-V02 checks and P18-V04 manifest validation pass.
+Broad P18-V01 source/API/settings/input/error/control-flow and reverse-export
+reconciliation remains PARTIAL. Current-revision remote Ubuntu CI, native
+Windows runtime execution, and Phase 19 Broker/Docker evidence remain open.

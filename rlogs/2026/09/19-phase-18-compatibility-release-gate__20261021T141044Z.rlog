@@ -1,0 +1,34 @@
+# Phase 18 admin query key-filter parity — 2026-10-21T14:10:44Z
+
+Branch: `phase/18-phase-18-compatibility-closure`
+Pinned Java dependency: `org.apache.rocketmq:rocketmq-client:5.5.1`
+Pinned source commit: `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+- Compared `MqClientAdminImpl.filterMessages` with both Rust query paths. Java
+  uses Apache Commons `StringUtils.isNotBlank` (JDK
+  `Character.isWhitespace`) and `String.split(" ")`; Rust previously used
+  Unicode `trim()` in the direct wrapper and did not reject whitespace-only
+  keys in the cross-Broker merge. It also dropped all empty split tokens,
+  including interior ones.
+- Added invoked Java cases for an empty query key matching an interior empty
+  token but not a trailing token, NBSP, em-space, U+0085 and U+001C. Updated the
+  Rust fixture comparison to cover all query cases.
+- Added one Java-compatible key matcher shared by direct Broker filtering and
+  cross-Broker merging. It uses the pinned `Character.isWhitespace` codepoint
+  set and Java's trailing-empty-token removal while retaining interior tokens.
+- Added unit assertions for the Java whitespace and split boundaries.
+- Fixture SHA-256:
+  `16f61c5e859f44062a2ec732e2603ad97b38719b9a0f8fa23fc09ffa5112dfd3`.
+
+Verification passed:
+- `cargo test -p rocketmq-classic-core --locked` (all Core tests, including
+  82 `admin_rpc` tests and 16 doctests).
+- `cargo clippy -p rocketmq-classic-core --all-targets --all-features --locked -- -D warnings`.
+- `mvn -f compat/java-reference/pom.xml verify` (37 scenarios, 83 Java-decoded
+  Rust typed-header frames and 16 typed-body frames).
+- `cargo fmt --all -- --check` and `git diff --check`.
+
+This closes the recorded `queryMessage` key-filter input cases only. Broad
+P18-V01, final full-workspace P18-V02, current native platform CI evidence and
+Phase 19 live Broker/Docker scenarios remain open. Four preserved Phase 19
+worktree paths remain untouched and unstaged.

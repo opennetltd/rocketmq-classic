@@ -1,0 +1,23 @@
+# Phase 18 cold-data flow and CommitLog read-ahead RPC slice — 2026-10-21T04:44:00Z
+
+- Continued the pinned Java 5.5.1 P18-V01 audit and mapped four missing
+  `MQClientAPIImpl` operations to Core requests 2001–2004. Mutations preserve
+  Java's VIP address transformation and no-op inputs; reads preserve direct
+  addresses, nullable results, `READ_AHEAD_MODE` encoding, and Broker errors.
+- Added direct Java invocation fixtures for all four operations and scripted
+  Rust RPC comparisons, including request bodies/ext fields, no-op branches,
+  empty/null results and error responses. A VIP-enabled loopback regression
+  checks both mutation calls. Producer core fixture SHA-256:
+  `c20f4474d674bd4e0001f19c82fed8c5e2dfbe6f5c911ee6eade0fb1842c7cb0`.
+- Validation passed: Core all-feature locked suite (177 unit tests, all
+  integration targets and 16 doctests); strict all-target/all-feature Clippy
+  for Common, Core, Producer and facade; Producer pinned fixture comparison;
+  pinned Java Maven `verify` (37 scenarios, fixture drift, 67 typed-header
+  frames, 15 typed-body fixtures and Java/Rust cross-decodes); formatting;
+  and scoped `git diff --check`.
+- Updated Phase 6/7 maps, the Java compatibility summary, Phase 17 scope note,
+  requirement audit, release checklist and this execution record. The Phase 18
+  plan was not edited. Broad P18-V01, final current-worktree P18-V02,
+  P18-V03 package/provenance review, and current Ubuntu/native Windows P18-V04
+  evidence remain open. No remote CI or Phase 19 Broker/Docker validation ran.
+- Phase 19 worktree files remain untouched and unstaged.

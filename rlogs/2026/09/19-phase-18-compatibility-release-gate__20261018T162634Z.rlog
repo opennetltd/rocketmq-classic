@@ -1,0 +1,42 @@
+# P18-V02 current-worktree full server-free gate — 2026-10-18T16:26:34Z
+
+- Branch: phase/18-phase-18-compatibility-closure. Code revision tested:
+  43a7cebb. Cargo target artifacts were isolated at
+  /tmp/rocketmq-classic-target. No Broker, Docker, or remote CI was started.
+- Passed: cargo test --workspace --locked -- --test-threads=1;
+  cargo test --workspace --all-features --locked -- --test-threads=1;
+  cargo check --workspace --all-targets --all-features --locked --offline;
+  strict workspace Clippy with all targets/features and -D warnings.
+- Maven offline verify passed all 37 scenarios, fixture drift checks, 66
+  typed-header and 15 typed-body cross-decodes. The comparator self-test and
+  37-row manifest validation passed.
+- bash tests/stress/run-offline-smoke.sh passed 16 deterministic race/leak
+  cases × 3. The fuzz_smoke example passed 120 frame seeds, 11 message seeds,
+  2,096 bounded mutations, 164 frame decodes and 120 message decodes.
+- The release facade examples and all workspace benchmark targets compiled.
+  The offline benchmark ran on macOS ARM64, Apple M5 Max, 18 logical CPUs,
+  Rust 1.85.0:
+  - Remoting frame encode/decode: 20,000 iterations, 427 input bytes,
+    2,237.8 ns/iteration, 40 allocation calls and 4,676 allocated bytes.
+  - Zstd message decode: 10,000 iterations, 146 input bytes,
+    1,143.4 ns/iteration, 17 allocation calls and 197,493 allocated bytes.
+  - Producer request construction: 20,000 iterations, 512 input bytes,
+    1,195.5 ns/iteration, 54 allocation calls and 3,665 allocated bytes.
+  - 128-entry route lookup: 100,000 iterations, 10 input bytes,
+    14.8 ns/iteration, zero allocation calls and bytes.
+  - Loopback pending completion: 500 iterations, 128 input bytes,
+    65,795.8 ns/iteration, 81 allocation calls and 9,546 allocated bytes.
+  These are observations, not thresholds.
+- Locked Cargo metadata passed with 216 packages (208 registry packages).
+  Workspace metadata/license/dependency checks passed; each of the seven
+  product package listings includes LICENSE and NOTICE. Four Unique ID tests
+  passed under both TZ=UTC and TZ=Asia/Taipei. cargo fmt --all --check and
+  git diff --check passed.
+- P18-V02 server-free gates are complete on 43a7cebb. Broad P18-V01
+  bidirectional source/API/settings/input/error/flow reconciliation and Rust
+  reverse-export audit remain open. P18-V03 provenance/version/registry
+  preflight and current Ubuntu/native Windows P18-V04 evidence remain open.
+  Phase 19 local Docker/Broker runners and profiles remain separate work.
+- The Phase 19 README/runner changes were left unstaged and unchanged. The
+  external Java checkout was not modified. No plan, Broker/Docker state,
+  remote CI, package publication, release tag, or push changed.

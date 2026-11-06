@@ -1,0 +1,27 @@
+# Phase 18 batch deletion RPC slice — 2026-10-21T05:53:14Z
+
+- Continued the pinned RocketMQ Java 5.5.1 audit at
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`. Added Rust mappings for
+  `MQClientAPIImpl.deleteTopicInBrokerList(String,List,long)`, request 5002,
+  and `deleteSubscriptionGroupList(String,List,boolean,long)`, request 5003.
+  Both send Java-compatible body DTOs through the configured VIP address and
+  preserve Broker response errors.
+- Added nullable adapters for Java null lists and null elements. Invoked Java
+  fixtures and Rust scripted RPC tests compare exact body bytes for populated,
+  empty, null-list and null-element cases; subscription-group deletion checks
+  both `cleanOffset` values. A VIP-enabled loopback verifies both port
+  transforms. Producer core fixture SHA-256:
+  `33b7788c15092caaeb2e5cc42ac69eb7bcda5baf5ebc27c2caf01aac9c5e9ff3`.
+- Validation passed: both focused Java/Rust RPC differentials and the shared
+  VIP loopback; Core all-feature locked suite (181 unit tests, all integration
+  targets and 16 doctests); strict all-target/all-feature Clippy for Common,
+  Core, Producer and facade; Producer pinned fixture comparison; pinned Java
+  Maven `verify` (37 scenarios, 67 typed-header frames, 15 typed-body fixtures
+  and Java/Rust cross-decodes); formatting and `git diff --check`.
+- Updated the Phase 6 API map and requirement audit, Java compatibility summary,
+  Phase 7 fixture digest progression, release checklist and this record. The
+  Phase 18 plan was not edited. These RPCs are closed; broad P18-V01, P18-V02
+  current-tree refresh, P18-V03 package/provenance review and P18-V04
+  environment evidence remain open. No remote CI or Phase 19 Broker/Docker
+  validation ran.
+- Phase 19 worktree files remain untouched and unstaged.

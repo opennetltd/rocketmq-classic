@@ -1,0 +1,42 @@
+# Phase 18 P18-V01 — NotWriteDefaultValue writer feature
+
+- Timestamp: 2026-10-16 23:09:36 UTC
+- Branch: `phase/19-phase-18-compatibility-release-gate`
+- Code commit: `9f7870fe` (`feat(protocol): support default value writer feature`)
+- Java oracle: RocketMQ client 5.5.1 / Fastjson2 2.0.63
+- Scope: map `JSONWriter.Feature.NotWriteDefaultValue` across inherited body,
+  route, and heartbeat serializers.
+
+## Changes
+
+- Java default-valued bean fields are omitted, including nested DTO fields.
+- Map entries are kept as values, so zero queue IDs and offsets are not removed.
+- `ConsumeMessageDirectlyResult.autoCommit` retains the pinned Java output for
+  both `true` and `false` values.
+- Fixture comparisons now exercise this feature alongside the prior eight
+  mapped writer features. The remaining 39 of 48 features are unmapped.
+
+## Validation
+
+- An ad hoc JShell probe against the pinned Java class confirmed the
+  `NotWriteDefaultValue` outputs for default `ConsumeMessageDirectlyResult`,
+  `autoCommit=false`, and `TopicQueueMappingInfo` containing zero map entries.
+- `TZ=UTC cargo test -p rocketmq-classic-protocol --all-features --locked`:
+  passed (122 unit tests, all Protocol integration targets, 42 doctests).
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features
+  --locked -- -D warnings`: passed.
+- `TZ=UTC mvn -o -q -f compat/java-reference/pom.xml verify`: passed all 37
+  scenarios and Java/Rust fixture-drift checks.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- Default and all-feature full-workspace tests passed on earlier revision
+  `c7c26cc0`; the final full-workspace P18-V02 gate remains due after
+  `9f7870fe`.
+
+## Remaining work
+
+- Thirty-nine writer features and the broad P18-V01 source/API/settings/input/
+  error/flow/reverse-export reconciliation remain open.
+- Current-revision Ubuntu and native Windows CI evidence, release version and
+  registry preflight, and Phase 19 local Docker/Broker automation remain open.
+- No plan edit, Docker/Broker execution, push, tag, publication, or release
+  action occurred.

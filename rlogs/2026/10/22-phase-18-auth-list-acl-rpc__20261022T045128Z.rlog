@@ -1,0 +1,49 @@
+# Phase 18 compatibility release gate — 2026-10-22 04:51:28 UTC
+
+Base revision: `606b1fab`. This entry records the request 3010 `listAcl`
+Broker RPC slice. Pinned Java source is
+`efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+## Compatibility changes
+
+- Added nullable `ListAclsRequestHeader` with Java's no-op `checkFields()`
+  behavior for `subjectFilter` and `resourceFilter`; included it in the
+  typed-header inventory and Java/Rust frame cross-decode.
+- Added `MQClientApi::list_acl` for request 3010. It accepts nullable filters,
+  sends no request body, preserves the supplied Broker address, and uses the
+  caller timeout. The response preserves a nullable list and nullable
+  `AclInfo` members.
+- Added invoked Java/Rust cases for populated/default/null/empty filters,
+  null response body and JSON null, populated and null-member lists,
+  Fastjson's object-root coercion to a list containing a string, typed Rust
+  malformed-response adaptation, success, Broker rejection, timeout, and
+  VIP-enabled unchanged-address behavior.
+- Updated request-code and direct API audits. The auth reverse-audit table
+  and all 18 original direct-operation candidates now have no open direct RPC
+  rows; broader Phase 18 reconciliation remains.
+
+## Local verification
+
+- `cargo test -p rocketmq-classic-protocol --locked --quiet`: 156 unit tests,
+  57 integration tests, and 157 doctests passed.
+- `cargo test -p rocketmq-classic-core --test admin_rpc --locked --quiet`:
+  120 passed.
+- `cargo test -p rocketmq-classic-core --lib --locked --quiet`: 210 passed.
+- `cargo clippy -p rocketmq-classic-protocol -p rocketmq-classic-core -p rocketmq-classic-remoting --all-targets --all-features --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- `mvn -o -f compat/java-reference/pom.xml verify`: BUILD SUCCESS; Java
+  decoded 106 Rust typed-header fixtures and 19 Rust typed-body fixtures.
+- SHA-256 `fixtures/producer/core.json`:
+  `31a2e5bc8ac794de7aa689a030cd9f5d46c42826f1033fb10ef9314d607201bf`.
+- SHA-256 `fixtures/remoting/header-list-acls-request.json`:
+  `b6d22306f686c1f0d2ab75b37bafb438a4dc7a21e667975424078c6830fe1129`.
+- SHA-256 `fixtures/remoting/header-list-acls-request.bin`:
+  `a2d69f5f22c6fb5385b602727c9ddb6b8ac4e26045c91579db4ed29bdcb4dc46`.
+
+## Remaining work
+
+Request 3010 is closed for the response, filter, and header states described
+above. The direct auth RPC inventory has no remaining open rows. Broader Phase
+18 settings, input, error, control-flow, reverse-export, and platform
+reconciliation remains open. No Broker, Docker, or remote CI was used.
+Pre-existing Phase 19 worktree paths remain unstaged and outside this slice.

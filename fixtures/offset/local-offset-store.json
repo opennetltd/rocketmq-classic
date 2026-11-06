@@ -1,0 +1,14 @@
+{
+	"offsetTable":{
+		{
+			"brokerName":"broker-b",
+			"queueId":0,
+			"topic":"events"
+		}:9007199254740993,
+		{
+			"brokerName":"broker-a",
+			"queueId":2,
+			"topic":"orders"
+		}:41
+	}
+}

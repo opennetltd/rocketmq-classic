@@ -1,0 +1,24 @@
+# Phase 3 remoting transport work log — 2026-09-27 10:55:36 UTC
+
+## Scope
+Repair the GO_AWAY retry race found during Phase 3 transport review. Java 5.5.1 remains the client behavior baseline. Phase 3 is not accepted or complete; P3-V04 remains deferred to Phase 19; Phase 4 is not started.
+
+## Changes
+- Fixed `retire_for_go_away` so a GO_AWAY response can still initiate the one allowed retry if the old socket has already closed and its active cache entry was removed. The retired-generation marker is preserved while the connection remains alive, so a second response on that generation cannot initiate another retry.
+- Prevented retirement/retry when a replacement is already cached for that address, and made connection-close bookkeeping remove the current/retired generation under a consistent pair of locks. A retired close no longer removes or closes a replacement.
+- Added `p3_multiple_go_away_responses_on_retired_connection_only_retry_once`, exercising two in-flight requests on the old channel, one replacement/retry, and a second GO_AWAY response from the retired generation.
+- Updated the compatibility inventory's GO_AWAY and signed-time entries to record the latest reviewed behavior and evidence.
+
+## Verification
+- `cargo test -p rocketmq-classic-remoting --offline p3_go_away -- --test-threads=1` — passed (4 selected tests).
+- `cargo test -p rocketmq-classic-remoting --offline p3_async_second_go_away_callback_retains_original_request -- --test-threads=1` — passed.
+- Repeated `p3_multiple_go_away_responses_on_retired_connection_only_retry_once` 25 times — all passed.
+- `cargo test --workspace --offline -- --test-threads=1` — passed: common 11, protocol 9, phase1 fixtures 1, remoting unit 50, codec 4, transport 76; doc tests passed (0 each).
+- `cargo clippy --workspace --all-targets --offline -- -D warnings` — passed.
+- `cargo fmt --all --check`, `git diff --check`, `python3 scripts/check-workspace-metadata.py`, and `python3 tests/differential/compare.py --self-test` — passed.
+
+## Remaining gates / disposition
+- Continue the public API, hook/processor collection, and transport control-flow audit; inventory rows marked `PARTIAL`, `NOT MAPPED`, or `NOT EQUIVALENT` still require evidence and disposition. GO_AWAY interleavings are not presumed exhaustive.
+- Review outstanding pre-existing uncommitted work, including signed-time changes and the earlier rlog `20260927T085045Z`; do not overwrite or silently fold that record into this one.
+- Reconcile both Phase 3 plans/inventory and commit only reviewed batches.
+- P3-V04 Broker/TLS validation remains `PENDING_PHASE_19`. Do not mark Phase 3 complete or begin Phase 4.

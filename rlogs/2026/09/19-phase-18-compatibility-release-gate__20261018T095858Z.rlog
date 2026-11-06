@@ -1,0 +1,42 @@
+# Phase 15–18 continuation — 2026-10-18T09:58:58Z
+
+- Resumed the active objective to close Phases 15–18. Read the Phase 15–18
+  plans and the Rust/coding workflow references; plans remain unchanged.
+- Confirmed the Java source checkout at
+  `/Users/bruce.tsai/Projects/3rd/rocketmq` is on `2238256d`; it has an
+  unrelated untracked `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java`
+  file and is left untouched. Compatibility comparisons continue to use the
+  pinned Java client commit recorded by the repository.
+- Phase 15–17 have their own existing phase branches. Created
+  `phase/19-phase-18-compatibility-closure` from the active Phase 18 workline.
+  The pre-existing uncommitted Phase 19 runner files were preserved and will
+  not be staged with Phase 18 changes.
+- The last complete full-workspace P18-V02 evidence is at `d8f84f2c`; later
+  parity commits `1a4924a3` and `8f64dde3` make a current-revision rerun
+  necessary. P18-V01 broad reverse/source parity, P18-V03 final package
+  review, and P18-V04 current-revision Ubuntu/native Windows evidence remain
+  open. Next: inspect exact remaining parity rows and rerun relevant local
+  gates without Docker/Broker.
+
+## P18-V01 Remoting callback executor setting parity — 2026-10-18
+
+- Source commit `7b9cc7c0` changes Remoting `callback_executor_threads` from `usize` to Java-compatible `i32`. The configured signed value is retained, and every non-positive value maps to an effective callback limit of four at start. The Rust behavior is checked against all six Java fixture cases, including `Integer.MIN_VALUE` and `Integer.MAX_VALUE`.
+- Updated the transport settings test to accept the complete Java signed-int sample domain and retained the on-demand maximum-capacity callback test.
+- Verification on macOS: `cargo fmt --all -- --check` PASS; `cargo test -p rocketmq-classic-remoting callback_executor_thread_settings_match_java_fixture --locked` PASS; `cargo test -p rocketmq-classic-remoting --test transport p3_controls_validate_defaults_hooks_callback_and_channel_events --locked` PASS; `cargo test -p rocketmq-classic-remoting --test transport p3_java_max_callback_capacity_starts_and_grows_on_demand --locked` PASS; `git diff --check` PASS.
+- The callback setting mismatch is closed for this slice. Broad P18-V01 bidirectional reconciliation remains open; full current-revision P18-V02, P18-V03 package/provenance review, P18-V04 current-revision Ubuntu/native Windows evidence, and Phase 19's remaining local scenarios are not closed by these targeted checks.
+
+## Callback adapter and current-revision server-free gate follow-up — 2026-10-18
+
+- Source commit `75d9d25b` updates the Core-to-Remoting callback-count adapter to use the signed `i32` setting introduced by `7b9cc7c0`; the effective non-positive normalization remains four. `cargo test -p rocketmq-classic-core callback_thread_effective_capacity_matches_invoked_java_executor --locked` passed.
+- `cargo fmt --all` and `cargo fmt --all -- --check` passed; `git diff --check` passed.
+- Current-revision `cargo test --workspace --locked` compiled the workspace and passed the suites emitted before the Remoting `tests/codec.rs` target started, but did not finish. At 68 seconds, `sample 96633 2 1` showed the test process stack entirely in `_dyld_start` with 96 KiB physical footprint, matching the previously recorded macOS test-binary launch stall. The process was interrupted with Ctrl-C (Cargo exit 130). This is an environment-blocked partial run, not a passing workspace gate or an assertion failure.
+- P18-V02 remains open pending a complete current-revision default/all-feature test run and the remaining full server-free checks.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` also did not finish. After 67 seconds, a sampled `clippy-driver` was blocked in `rustc_session::search_paths::SearchPath::new` while iterating a directory (`ReadDir::next` / `readdir_r` / `__getdirentries64`), matching the prior macOS path-enumeration stall. Interrupted with Ctrl-C (exit 130); not recorded as a pass.
+
+## P18-V02 current-revision server-free gate — 2026-10-18
+
+- The workspace `target/debug/deps` directory was unresponsive to `readdir`; placing Cargo artifacts under `/tmp/rocketmq-classic-target` avoided the host-path stall. No repository files were redirected or changed by this workaround.
+- Current-revision gates passed with `CARGO_TARGET_DIR=/tmp/rocketmq-classic-target`: `cargo test --workspace --locked`; `cargo test --workspace --all-features --locked`; `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`; Maven `verify`; the differential comparator self-test and 37-row manifest validation; release facade examples; the offline deterministic race/leak runner (16 cases × 3); bounded fuzz smoke (120 frame seeds, 11 message seeds, 2,096 mutations); `cargo bench --workspace --no-run --locked`; and the offline benchmark. Rust formatting and `git diff --check` also pass.
+- Maven `verify` passed the 37 Java scenarios and decoded 66 Rust-generated typed headers plus 15 typed bodies; Java also decoded both Rust-generated message fixtures. Java emitted existing JDK `Unsafe`/reflective-final-field warnings.
+- Release benchmark on macOS ARM64 Apple M5 Max, Rust 1.85.0: frame encode/decode 2,105.9 ns/iteration; Zstd message decode 1,094.9 ns; producer request construction 1,197.2 ns; 128-entry route lookup 16.2 ns; loopback pending completion 69,773.3 ns. Allocation observations: 40 calls/4,676 B; 17 calls/197,493 B; 54 calls/3,665 B; 0/0 B; 81 calls/9,546 B, respectively. Measurements are observations, not acceptance thresholds.
+- P18-V02 current-revision server-free verification is complete. The broad P18-V01 API/settings/input/error/control-flow and reverse-export audit remains open; final P18-V03 package/provenance review and P18-V04 current-revision Ubuntu/native Windows CI evidence remain open. Phase 19 still has 30 of 37 live scenarios without runners, and MAN-05 awaits that matrix.

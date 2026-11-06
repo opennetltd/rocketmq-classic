@@ -1,0 +1,30 @@
+## Session 20261027T144518Z
+- Started from reviewed revision bee48c30 on branch fix/parity-fourth-review-2026-10-27.
+- Read the English and Traditional Chinese fourth-review plans; confirmed H01 trace namespace overload and Lite before/after stage mismatch.
+- Preserved all existing untracked evidence directories. Evidence is excluded from all commits.
+- Plan files are staged unchanged in this initial documentation commit, as authorized by the user.
+
+## Phase 1 — Consumer and Lite trace namespace parity
+- Replaced configured-namespace removal with Java's one-argument NamespaceUtil operation in General Consumer and Lite group/topic trace fields.
+- Lite now stores a once-normalized before group and derives SubAfter by normalizing that snapshot again; callback-time group mutation remains ignored.
+- Added regression cases for foreign and nested prefixes, absent/configured namespaces, null/empty groups, retry/DLQ topics, and system resources; General Consumer verifies its nested two-stage group and foreign topic.
+- Validation: cargo fmt --all; cargo test --offline --locked -p rocketmq-classic-consumer -p rocketmq-classic-producer trace (Consumer trace tests passed; full final gates remain).
+
+## Phase 2 — Producer trace namespace parity
+- Send, EndTransaction, and Recall trace builders now remove any resource namespace independently of ClientConfig, matching Java's overload; host-client ID remains derived from ClientConfig where required.
+- Regression tests assert public group  and Pub topic normalization without configured namespace, plus foreign-prefix EndTransaction and Recall group/topic values.
+- Validation: cargo test --offline --locked -p rocketmq-classic-producer trace (9 unit tests and 3 trace lifecycle integration tests passed); cargo fmt --all -- --check; git diff --check.
+
+## Evidence correction and cross-runtime trace probe
+- Correction to Phase 2 log: the public Producer group example is `other%workers`; the preceding shell `printf` expanded its Markdown backticks, leaving the example blank. The code/test commit is unaffected.
+- Updated a copy of the fourth-review probe to assert parity and ran it against revision 400774e1. All four Lite cases emitted the same SubBefore/SubAfter group values as Java, including foreign and nested prefixes. Rust outbound trace SEND contained the compared rows; Java invoked the actual Lite poll and trace hook. No live broker was contacted.
+- Evidence is in the untracked `plan/2026/10/05-project-parity-fourth-review-fix-evidence/` directory and is excluded from commits.
+
+## Final validation and plan audit
+- `cargo fmt --all -- --check`: passed.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`: passed.
+- `cargo test --workspace --locked`: passed (exit 0, including doctests and existing G01/G02 regressions).
+- `mvn -o -f compat/java-reference/pom.xml verify`: passed (exit 0; pinned Java trace and NamespaceUtil fixture executions included).
+- `scripts/check-workspace-metadata.py`: passed.
+- Re-read the complete English plan and checked each acceptance item against the final source, focused tests, Java/Rust Lite SEND probe, and gate results. Consumer registration and offset ownership were not changed.
+- Evidence remains untracked under `plan/2026/10/05-project-parity-fourth-review-fix-evidence/`; no evidence files are staged or committed.

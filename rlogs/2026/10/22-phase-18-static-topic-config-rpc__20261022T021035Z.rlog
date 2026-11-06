@@ -1,0 +1,35 @@
+# Phase 18 static-topic config RPC — 2026-10-22T02:10:35Z
+
+- Closed the pinned Java 5.5.1 `MQClientAPIImpl.getTopicConfig` request 351
+  slice from source commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+  `MQClientApi::get_topic_config` sends nullable `topic` with `lo=true`, applies
+  configured VIP conversion, honors the caller timeout, returns a nullable
+  `TopicConfigAndQueueMapping`, and preserves Broker errors and malformed-body
+  failures.
+- Added `GetTopicConfigRequestHeader`, `TopicConfigAndQueueMapping`,
+  `TopicQueueMappingDetail`, and `LogicQueueMappingItem` support. DTO decoding
+  covers Java primitive defaults and explicit null-to-zero values, static queue
+  mapping defaults, nested integer-keyed maps, and Fastjson's unquoted integer
+  map keys. The key normalization is scoped to these DTOs and integer-keyed
+  maps; generic route decoding remains covered by its existing test.
+- Invoked Java fixtures and Rust tests cover populated/default responses,
+  primitive nulls, JSON-null and absent bodies, nullable and empty topics,
+  topic-not-found and generic Broker errors, malformed JSON, VIP routing, and
+  the caller timeout. `fixtures/producer/core.json` SHA-256:
+  `d8ebada9ed15f648ee76a88c35f3269d4ac294143ed6bb7d9b3a99aa64e43421`.
+  Request-header identity fixture SHA-256:
+  `b5a219866569c6b83d179d6f30e8d2ca4caed384eab7ef47e957680b606365c1`.
+  Typed request frame SHA-256:
+  `06ecd7a4ff0e7225d73309b57b017d25347492073e8883ebe0515dc3bf6044f6`.
+  Typed request JSON SHA-256:
+  `f0f983d4a00b17ba8d25f3d854a4a696fa29c8b1f12bd1e9f5451e916f2771fd`.
+- Validation passed: `cargo fmt --all`; locked protocol/core tests; strict
+  workspace all-target/all-feature Clippy; focused request 351 API tests;
+  pinned Java Maven `verify` (37 scenarios, 91 Rust-generated typed headers,
+  16 typed bodies); and `git diff --check`.
+- Updated the Phase 6 API map, request code inventory, and direct-operation
+  audit. Twelve initial direct-operation rows remain open; broad P18-V01
+  reconciliation remains open. Current-revision Ubuntu and native Windows
+  P18-V04 evidence remains unavailable under the no-remote-CI constraint. No
+  Broker, Docker, or remote CI work was run. Protected Phase 19 worktree paths
+  were left untouched and unstaged.

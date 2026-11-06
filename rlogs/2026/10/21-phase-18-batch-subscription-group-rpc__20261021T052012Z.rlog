@@ -1,0 +1,27 @@
+# Phase 18 batch subscription-group RPC slice — 2026-10-21T05:20:12Z
+
+- Continued the pinned Java 5.5.1 audit at
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`. Added
+  `MQClientApi::create_subscription_group_list` for
+  `MQClientAPIImpl.createSubscriptionGroupList(String,List,long)`, sending
+  request 225 with a Java-compatible `SubscriptionGroupList` body through the
+  configured VIP address.
+- Added the protocol body wrapper and an invoked Java signature/operation
+  fixture with populated, empty and Broker-error cases. Rust compares the
+  request bytes, timeout, response behavior and VIP-enabled two-port loopback.
+  Producer core fixture SHA-256:
+  `2479e9af49895298bf807b04775db0e3acef6ad2b6a0a6e2cf59a830ca89169e`.
+- Validation passed: Core all-feature locked suite (179 unit tests, all
+  integration targets and 16 doctests); strict all-target/all-feature Clippy
+  for Common, Core, Producer and facade; Producer pinned fixture comparison;
+  pinned Java Maven `verify` (37 scenarios, 67 typed-header frames, 15
+  typed-body fixtures and Java/Rust cross-decodes); formatting; and
+  `git diff --check`.
+- Updated the Phase 6 API map and requirement audit, Java compatibility
+  summary, Producer fixture digest progression, release checklist and this
+  record. The Phase 18 plan was not edited. This batch RPC is closed; the
+  sibling batch topic method and broader P18-V01 public API audit, P18-V02
+  current-tree refresh, P18-V03 package/provenance review and P18-V04
+  environment evidence remain open. No remote CI or Phase 19 Broker/Docker
+  validation ran.
+- Phase 19 worktree files remain untouched and unstaged.

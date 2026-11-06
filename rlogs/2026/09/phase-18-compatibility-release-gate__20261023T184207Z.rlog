@@ -1,0 +1,58 @@
+# Phase 18 compatibility release gate — 2026-10-23 18:42:07 UTC
+
+Base revision: `d4e9c7ac` on `phase/18-phase-18-compatibility-closure`.
+This append-only run record refreshes the server-free P18-V02 checks after
+adding sustained local-offset persistence coverage. No product source changed
+since the previous 2,000-concurrent-send stress addition.
+
+## P18-04 coverage
+
+Added `repeated_offset_persistence_keeps_long_running_snapshot_restorable` to
+the local offset store tests. It writes and checks 128 snapshots of eight
+queues, then reopens the store and verifies all final offsets. Added it to the
+offline stress runner and README, bringing the suite to 19 cases repeated
+three times. Existing remoting start/shutdown ownership, concurrent runtime
+construction, reconnect, pending cleanup, callback shutdown, concurrent
+producer sends, and consumer ownership race cases cover the other enumerated
+start/stop and shutdown boundaries.
+
+## Current-revision verification
+
+Passed at revision `d4e9c7ac`:
+
+- `cargo fmt --all -- --check`
+- `git diff --check`
+- `cargo test --workspace --locked --quiet` (sequential run)
+- `cargo test --workspace --all-features --locked --quiet` (sequential run)
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+- `cargo test -p rocketmq-classic-consumer --lib offset::local::tests --locked`
+- `cargo clippy -p rocketmq-classic-consumer --all-targets --locked -- -D warnings`
+- `bash tests/stress/run-offline-smoke.sh` (19 cases x 3 repetitions)
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`
+  (163 frame seeds, 11 message seeds, 2,784 mutations; 245 frame and 192
+  message decodes)
+- `python3 tests/differential/compare.py --self-test`
+- `python3 tests/differential/compare.py --validate-manifest` (37 scenarios)
+- `python3 scripts/check-workspace-metadata.py`
+- `cargo check --workspace --all-targets --all-features --target x86_64-pc-windows-gnu --locked`
+- `mvn -o -q verify` from `compat/java-reference` (37 scenarios, Java 5.5.1
+  runtime probes, 11 message fixtures, Java cross-decode of 106 typed headers
+  and 19 typed bodies)
+
+The default and all-feature workspace test commands were also attempted
+simultaneously; two pull-consumer tests failed with `OffsetStore(AlreadyOpen)`.
+Both full suites passed when rerun sequentially, with no code changes. The
+stress runner passed its offset persistence case all three times. The Windows
+GNU result is compile evidence only. Release examples and the offline
+benchmark retain the previous results because this revision changes only test
+code and stress documentation; the benchmark sets no threshold.
+
+## Remaining scope
+
+This closes the P18-04 sustained offset persistence test gap and refreshes
+local P18-V02 evidence only. Broad P18-V01 Java source/API/settings/input/error
+and control-flow plus Rust reverse-export reconciliation remains PARTIAL.
+Native Windows runtime and current-revision remote CI were not run. Phase 19
+live Broker/Docker scenarios remain separate. No plan was edited, no remote CI
+or push was run, and the four pre-existing Phase 19 worktree paths remain
+untouched and unstaged.

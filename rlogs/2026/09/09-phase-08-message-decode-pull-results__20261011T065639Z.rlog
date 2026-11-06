@@ -1,0 +1,21 @@
+Phase 8 execution started 2026-10-11 06:56Z.
+- Created branch `phase/09-phase-08-message-decode-pull-results` from the clean Phase 7 tip `51d0019f`.
+- Read both Phase 8 plans and the repository `coding-general` execution instructions; implementation plans remain unchanged.
+- Pinned Java oracle remains commit `efa1be59d6fc747ad220f036c86030f05f0419f9`; the checkout HEAD is `2238256de1d227a4384ba969dfa31473187b4d08`. Left its unrelated untracked `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java` untouched.
+- Current code provides `MessageExt`, raw `PullResultExt`, compression backends and client decode-read/decompress settings, but no message-record decoder or consumer result processor. Source and API inventory is in progress.
+
+2026-10-11 Phase 8 closeout review:
+- Re-read the complete English and Traditional Chinese Phase 8 plans. Reviewed every changed path, the new bounded decoder, consumer pull processing, Java fixture generator, tests, SHA manifest, and method matrix. No plan file was modified.
+- Compared pull-result behavior with the Java 5.5.1 client source artifact. Confirmed FOUND decoding, inner-batch fallback, tag filtering, hooks, transaction/min/max/broker/queue enrichment, offset delta, raw-buffer release, class-filter subscription setup, and broker-address keyed Filter Server selection.
+- Confirmed the pinned client source retains filterClassSource locally and omits it from heartbeat JSON; the 5.5.1 client source has no class-filter source upload API/call. Updated the matrix with this boundary and mapped MessageClientExt.offsetMsgId to the same stored ID as MessageExt.msgId.
+- Prior recorded verification passed: cargo fmt --all -- --check; strict workspace/all-target/all-feature Clippy; cargo test --workspace --locked (full suite passed on rerun after an unrelated TLS temp-directory collision); Maven verify; differential comparator self-test; git diff --check; and fixture SHA-256 verification. Live Broker/Filter Server checks remain Phase 19.
+- Closeout source review complete; commits pending.
+- Commit `a9cfaaf2 test(compat): add Java message decode fixtures` records the pinned Java fixture generator, Maven drift gate, fixture bytes, and checksum.
+- Reviewed and staged implementation/docs commit; cached diff passes `git diff --cached --check`.
+- Phase 8 is committed in two coherent changes: Java oracle fixtures/drift gate, then bounded message decoding and pull-result processing with its evidence matrix. The branch was clean after the implementation/docs commit; final status is confirmed after this log update is included.
+
+2026-10-11 Phase 8 final audit and verification:
+- Rechecked the pinned 5.5.1 client class-filter paths: `DefaultMQPushConsumer.subscribe(topic, fullClassName, filterClassSource)` builds local `SubscriptionData`, sets class-filter mode/source, and triggers the consumer heartbeat when initialized. Pull requests set the class-filter flag and `PullAPIWrapper` selects a Filter Server by the route's broker-address key. No class-filter source upload method/call exists in the pinned client/common source. The Rust phase surface covers subscription-data construction and Filter Server route selection; consumer lifecycle remains in later consumer phases.
+- Confirmed the Java oracle checkout still has only its pre-existing untracked `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java`; left it untouched.
+- Final verification: `cargo test --workspace --locked` passed; prior `cargo fmt --all -- --check` and strict workspace Clippy passed; `mvn -f compat/java-reference/pom.xml verify` completed `BUILD SUCCESS` and verified all 10 Java message fixtures; `python3 tests/differential/compare.py --self-test` passed; `git diff --check` passed; fixture SHA-256 manifest passed.
+- No Broker or Filter Server was contacted. Live checks remain Phase 19.

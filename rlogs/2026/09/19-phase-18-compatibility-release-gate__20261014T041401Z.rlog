@@ -1,0 +1,12 @@
+# Phase 18 server-free gate rerun — 2026-10-14T04:14:01Z
+
+Revision: `20a5e3c0` on `phase/19-phase-18-compatibility-release-gate`; worktree clean.
+
+- PASS: `cargo test --workspace --locked` (exit 0, including protocol compile-fail doctests).
+- PASS: `cargo test --workspace --all-features --locked` (exit 0).
+- PASS: `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`.
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (exit 0; fixture drift, Java/Rust cross-decodes, and 37 scenarios). Maven/JDK emitted existing Unsafe and reflective-final-field warnings; verification completed successfully.
+- PASS: comparator self-test; manifest validation (37 scenarios); `bash tests/stress/run-offline-smoke.sh` (16 deterministic cases × 3 repetitions); `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked` (1,824 bounded mutations).
+- PASS: `cargo build -p rocketmq-classic --examples --release --locked`; `cargo bench -p rocketmq-classic --bench offline --locked --no-run`; `python3 scripts/check-workspace-metadata.py`; `cargo package --workspace --list --locked --allow-dirty` (seven package archives listed).
+- This closes the current-revision server-free P18-V02 gates and the local example/package graph checks. P18-V01 remains PARTIAL for complete Java/Rust source, overload/input/branch, inherited/export reconciliation. P18-V04 still lacks a GitHub Ubuntu result for this branch/revision. Phase 19 Docker/Broker execution is not part of this phase run and remains the next automated integration gate; owner platform checks and registry/version decisions remain separate.

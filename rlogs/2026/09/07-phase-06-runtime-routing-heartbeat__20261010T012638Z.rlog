@@ -1,0 +1,9 @@
+Session: 2026-10-10T01:26:38Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Planned runtime source-family public-name continuation: ran `javap -classpath "$HOME/.m2/repository/org/apache/rocketmq/rocketmq-client/5.5.1/rocketmq-client-5.5.1.jar" -public` for `MQClientInstance`, `MQClientManager`, `ClientRemotingProcessor`, `TopicPublishInfo`, `consumer.RebalanceService`, and `consumer.PullMessageService`. Their public declaration-line counts are 53, 7, 6, 18, 3, and 11. A repeatable Python scan finds zero distinct declared names absent from `docs/compatibility/PHASE_6_API_CONFIG_MAP.md`; this records public names only, not completion of future-owner behavior or all source branches. Updated the API map and requirement audit with the four additional source families. Documentation commit `a23052ec`.
+
+Verification: the pinned-artifact declaration/name scan passed for all six classes; `git diff --check` passed. No Rust behavior changed.
+
+Full source branch, DTO input/alias, platform, and whole-phase reconciliation remain open. P6-V04 remains assigned to Phase 19.

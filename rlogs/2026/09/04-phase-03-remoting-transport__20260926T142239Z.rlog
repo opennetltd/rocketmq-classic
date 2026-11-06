@@ -1,0 +1,8 @@
+# Phase 3 parity continuation — 2026-09-26T14:22:39Z
+
+- Continued Java 5.5.1 shutdown/executor audit from clean commit `f292840`; Phase 3 remains unaccepted and Phase 4 has not started. Phase plan unchanged.
+- Added a deterministic regression for an inbound request accepted into the Rust inbound queue immediately before shutdown. It failed before the fix: the processor handler did not run before the timeout. Changed the dispatcher to close inbound admission when shutdown begins, forward queued accepted requests to workers, and let workers drain their channel before exiting. The regression uses a synchronous custom executor to avoid reliance on worker scheduling for its assertion.
+- Updated `docs/compatibility/PHASE_3_REMOTING_INVENTORY.md` to describe the new queue-drain coverage and retain PARTIAL status for Java event-loop identity, submission/rejection races, Tokio scheduling, and shutdown waiting semantics.
+- Validation passed: `cargo fmt --all --check`; `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`; `cargo test --workspace --locked --offline` (common 11, protocol 9 unit + 1 integration, remoting 29 unit + 4 codec + 63 transport); `python3 scripts/check-workspace-metadata.py`; `python3 tests/differential/compare.py --self-test`; `git diff --check`.
+- No Java Maven, Broker, Docker, TLS/auth cluster, or cross-language live test was run. Remaining gaps are not waived; this batch does not complete Phase 3. P3-V04 remains Phase 19.
+- Commit status: this code/test/inventory/log batch is pending commit at log creation.

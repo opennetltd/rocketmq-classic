@@ -1,0 +1,22 @@
+# Phase 18 `resumeCheckHalfMessage` RPC slice — 2026-10-21T06:19:27Z
+
+- Continued the pinned RocketMQ Java 5.5.1 compatibility audit at source
+  commit `efa1be59d6fc747ad220f036c86030f05f0419f9`. Added Core mappings for
+  `MQClientAPIImpl.resumeCheckHalfMessage(String,String,String,long)`, request
+  323, and its nullable `topic`/`msgId` fields.
+- Java returns true only for `SUCCESS`; all other Broker response codes return
+  false. Rust now uses the configured VIP address, omits null fields, sends no
+  body and preserves that boolean result contract.
+- Invoked Java and Rust loopback differential cases cover success,
+  non-success, null topic, null message ID, both fields null, exact request
+  fields and the VIP port offset. Producer core fixture SHA-256:
+  `bbeea411ebb9a1cbf177a4f0efddbf85023a475288bd123764959acca248efc6`.
+- Validation passed: Core all-feature locked suite (182 unit tests, all
+  integration targets and 16 doctests); strict all-target/all-feature Clippy
+  for Common, Core, Producer and facade; Producer pinned fixture comparison;
+  Maven `verify` (37 scenarios, 67 typed-header frames, 15 typed-body fixtures
+  and Java/Rust cross-decodes); formatting and `git diff --check`.
+- Phase 18 plan file was not edited. Broad P18-V01, current-tree P18-V02,
+  P18-V03 package/provenance review and P18-V04 environment evidence remain
+  open. No remote CI or Phase 19 Broker/Docker validation ran. Existing Phase
+  19 worktree paths remain unstaged and untouched.

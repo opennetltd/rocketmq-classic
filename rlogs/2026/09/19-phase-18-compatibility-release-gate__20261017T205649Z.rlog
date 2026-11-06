@@ -1,0 +1,35 @@
+# P18-V01 Remoting suspended response metric verification — 2026-10-17T20:56:49Z
+
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Java oracle: RocketMQ client 5.5.1, source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`, inspected read-only.
+- No production code changed in this slice; existing Rust behavior was given
+  end-to-end integration evidence.
+
+## Source mapping
+
+- Java `NettyRemotingAbstract.writeResponse` builds the RPC latency attributes
+  from `request.isSuspended()`, request code, and response code. It records
+  `result=oneway` for one-way requests and otherwise records the write result
+  after the channel write completes or fails.
+- Rust `client::processor::send_response` uses
+  `response_attributes_builder` with the inbound request. That helper adds the
+  same `is_long_polling`, request-code, and response-code attributes. The
+  response path records the metric after the local socket write result; its
+  oneway path records `result=oneway` immediately.
+- An inbound RPC hook can update the local suspended state before the processor
+  sends its response. The test now uses that path rather than only testing the
+  attribute builder in isolation.
+
+## Verification
+
+- `cargo test --locked -p rocketmq-classic-remoting --test transport
+  p3_v03_inbound_dispatch_and_reordered_parallel_responses`: PASS (1 test).
+- `cargo fmt --all -- --check`: PASS.
+- `git diff --check`: PASS.
+- Test commit: `0fdbc1d4 test(remoting): verify suspended response metric label`.
+
+The remoting suspended-state metric row is closed. The broad P18-V01
+source/API/settings/overload/input/error/flow and reverse-export audit remains
+open. No Java oracle, plan, remote branch, tag, publication, Broker operation,
+or deployment was changed.

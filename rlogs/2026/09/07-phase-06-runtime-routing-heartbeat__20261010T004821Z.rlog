@@ -1,0 +1,7 @@
+Session: 2026-10-10T00:48:21Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Completed the reverse public API mapping for pinned `MessageQueue`: constructors, bean getters/setters, value methods, and typed `compareTo` with the erased Object bridge. Direct Java evidence was already present in `messageQueueMethods`, `messageQueueCompareTo`, and `messageQueueSetters`; native test `message_queue_hash_equals_and_text_match_invoked_java` now constructs both Rust constructor forms from the Java default/populated/Unicode rows. Focused protocol method tests pass (4 passed), including the explicit constructor assertions; `cargo fmt --all -- --check` and `git diff --check` pass. Pinned Java Maven verify passes offline and reports the route, config, and runtime fixture counts. Its first sandboxed attempt hit a local Maven plugin-lock error; the offline retry with repository-lock access completed successfully.
+
+Test-only commit `388e9e7e`; API-map/audit commit `48cca772`. No production behavior change. Full Phase 6 input/source/reverse-export reconciliation and platform evidence remain open; P6-V04 stays `PENDING_PHASE_19`.

@@ -1,0 +1,34 @@
+# Phase 18 public tuple error payload privacy
+
+- Recorded: 2026-10-23 13:32:26 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Source revision: `65cf3cad` (`fix: hide writable Rust exception payload fields`)
+- Pinned Java source: RocketMQ 5.5.1,
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Change
+
+- `RequestSendFailureCause(pub String)` and
+  `TransactionCallbackError(pub String)` exposed writable public tuple fields
+  with no Java public-field counterpart.
+- Both wrappers now store their strings privately and expose public `new` and
+  read-only `message()` methods. Core/Producer call sites use these methods.
+- Compile-fail Rustdoc examples verify external callers cannot access field
+  `0`. The compatibility map now connects the accessors to Java throwable
+  message construction and `getMessage()` behavior.
+
+## Verification
+
+- `cargo test --offline --locked -p rocketmq-classic-core -p rocketmq-classic-producer --all-features` — passed, including all Core/Producer test binaries and doctests (21 Core doctests, 8 Producer doctests).
+- `cargo clippy --offline --locked -p rocketmq-classic-core -p rocketmq-classic-producer --all-targets --all-features -- -D warnings` — passed.
+- `RUSTDOCFLAGS='-Z unstable-options --output-format json' cargo +nightly doc --offline --workspace --all-features --locked --no-deps` — passed; existing workspace `publish` and Consumer `AtomicU64::fetch_update` warnings remain.
+- Rustdoc public-name counts: Common 439, Consumer 460, Core 746, Producer
+  361, Protocol 1,524, Remoting 337. No public tuple-field item named `0`
+  remains in Core or Producer.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+- No push or remote CI was run; existing Phase 19 user-owned paths were not
+  edited or staged.
+
+This closes two additional Rust public-field discrepancies only. Broad
+P18-V01 source/API/settings/input/error/control-flow reconciliation remains
+open.

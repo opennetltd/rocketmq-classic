@@ -1,0 +1,30 @@
+# Phase 18 live NameServer scan setting parity — 2026-10-15T13:38:10Z
+
+- Read-only Java 5.5.1 source review confirmed `NettyRemotingClient.start()`
+  reads the retained mutable `NettyClientConfig.isScanAvailableNameSrv`
+  value to decide whether to schedule NameServer reachability scans.
+- Rust now exposes a live atomic `RemotingClient` getter/setter for this
+  setting, and `start()` reads the current value. Added a loopback regression
+  that changes the value after construction and before start. Added the same
+  lifecycle case to `RemotingLiveConfigProbe`, which opens a local Java peer
+  and verifies the scan connection.
+- Code commit: `6ffccd1b fix(remoting): read nameserver scan setting live`.
+- PASS: UTC `cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked`; strict all-target/all-feature
+  workspace Clippy; full Remoting tests (85 unit, 6 codec, 1 fuzz regression,
+  5 security, 90 transport, 5 doctest); Maven `verify` (37 scenarios, Java
+  fixture checks, live remoting config probe and Java/Rust cross-decodes);
+  differential comparator self-test and 37-scenario manifest validation;
+  deterministic race/leak smoke (16 cases × 3); fuzz smoke (104 frame seeds,
+  10 message seeds, 1,824 mutations); release examples; offline benchmark
+  compilation; locked Cargo metadata; workspace license/dependency checks;
+  seven package listings; Asia/Taipei unique-ID differential; formatting and
+  `git diff --check`.
+- This closes the `isScanAvailableNameSrv` setting timing row only. Broad
+  P18-V01 bidirectional source/API/settings/input/error/flow and reverse-export
+  reconciliation remains open. Current-revision GitHub Ubuntu address-profile
+  evidence/P18-V04, Phase 19 local Docker/Broker automation, and pre-publication
+  version/registry checks remain open. Owner-run deployment/live Broker checks
+  remain Phase 19 manual validation.
+- The Java reference repository was read-only. No plan changes, push, tag,
+  publication, or Broker validation was performed.

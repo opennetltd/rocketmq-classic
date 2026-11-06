@@ -1,0 +1,7 @@
+# Phase 6 generic putAll source maps — 2026-10-10T19:11:34Z
+
+- Generalized `FactoryTable`, producer/consumer registry tables, and `TopicRouteTable` `put_all` methods from owned `BTreeMap` parameters to `IntoIterator<Item = (String, value)>`, preserving the supplied iterator order and independent per-key writes.
+- Changed fixture-backed valid bulk-insertion cases to use Rust `HashMap` inputs for factory, producer, consumer, and raw route tables. Existing ordered nullable-row adapters continue to model null key/value failure positions.
+- Focused manager-table (17), registry-table (19), and topic-route-table (6) integration suites passed. Full locked workspace/all-target tests, strict all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture drift checks, and Java cross-decodes), comparator self-test/manifest22, fmt, and diff checks passed.
+- Attempted full core Windows-target checking. It stopped in `aws-lc-sys` before compiling core because `x86_64-w64-mingw32-gcc` is unavailable. Earlier isolated Windows address-module checking is narrower; whole-core Windows compilation and Windows runtime enumeration remain open.
+- Pinned fixture content was unchanged. Broader Phase 6 source/API/input/platform reconciliation remains open; P6-V04 remains a Phase 19 handoff.

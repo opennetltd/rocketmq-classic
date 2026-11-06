@@ -1,0 +1,24 @@
+P18-V02 repeat the remoting shutdown admission boundary —
+2026-10-22 22:06 UTC
+
+Environment: macOS AArch64, Rust 1.85.0. Branch:
+`phase/18-phase-18-compatibility-closure`. Java reference is RocketMQ 5.5.1,
+commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+The new shutdown regression covers an observable admission window and timed
+worker join. Added it to `tests/stress/run-offline-smoke.sh` so the case is
+repeated three times with the existing deterministic race/leak suite. Updated
+the suite description and final case count from 16 to 17.
+
+Verification:
+- `bash tests/stress/run-offline-smoke.sh` completed all 17 selected cases
+  three times with passing test results. Its trailing summary string still
+  printed the old count 16; corrected the count after the run.
+- `bash -n tests/stress/run-offline-smoke.sh` — PASS after the count correction.
+- The script contains exactly 17 `run_repeated` cases — PASS.
+- `git diff --check` — PASS.
+
+Broad P18-V01 reconciliation remains open. This records only a repeated
+shutdown-admission regression; it does not replace the server-free gate or
+current-platform CI evidence. No external CI, push, publication, or release
+operation was performed. Protected Phase 19 working-tree paths remain unstaged.

@@ -1,0 +1,57 @@
+P18-V01 nonpositive decoder field parity and local gate refresh — 2026-10-22 20:11 UTC
+
+Environment: macOS AArch64, Apple M5 Max (18 logical CPUs), Rust 1.85.0.
+Branch: `phase/18-phase-18-compatibility-closure`. Pinned RocketMQ Java
+client/source: 5.5.1, commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+Implementation commit: `8ca83fc8 fix(common): accept nonpositive decoder field
+lengths`. Pinned Java `MessageDecoder.decode(ByteBuffer)` only reads body or
+property bytes for positive lengths. Zero and negative body lengths leave the
+body absent; zero and negative property lengths leave the property map absent.
+In both cases Java's buffer position remains immediately after the length
+field. Rust now matches these cases and returns the matching consumed-byte
+count. The Java fixture records a negative body case with body bytes removed
+and a negative property case with the original property bytes unconsumed. The
+fixture SHA-256 is
+`9cd0b64fe95643177c533d6cc2fd1f33c957e54cd3bd9559ecb07f6083939938`.
+
+Harness notes: the first Java compile found a duplicate local fixture variable;
+renamed it and recompiled. The first Common differential run caught an obsolete
+expectation that negative properties fail; updated the regression to assert
+Java's absent-map result and cursor. The regenerated fixture then passed Maven
+verification.
+
+Validation on this source tree:
+- Focused Common message-decode differential — PASS (26 tests).
+- `cargo test --offline --workspace --locked` and
+  `cargo test --offline --workspace --all-features --locked` — PASS.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked
+  -- -D warnings`, `cargo fmt --all -- --check`, and `git diff --check` — PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS; 37 scenarios,
+  11 Java message-decoder fixtures, 36 route/VIP cases, 106 typed headers,
+  and 19 typed bodies.
+- Differential self-test and manifest validation — PASS (37 scenarios).
+- Bounded fuzz smoke — PASS (163 frame seeds, 11 message seeds, 2,784
+  mutations, 245 frame decodes, 189 message decodes); race/leak smoke — PASS
+  (16 cases x 3).
+- Release facade examples and offline benchmark compile/run — PASS.
+- Workspace metadata and all seven product package listings — PASS; each
+  listing includes `LICENSE` and `NOTICE`.
+- Four Core Unique ID tests under both UTC and Asia/Taipei — PASS.
+- Windows GNU Core all-target check and Consumer stack-capture test
+  `--no-run` cross-compilation — PASS; native Windows execution remains
+  unverified.
+
+Benchmark sample on this machine: Remoting encode/decode 1,786.3 ns
+(40 allocations / 4,676 bytes); Zstd message decode 1,085.0 ns
+(17 / 197,493 bytes); Producer request construction 1,278.4 ns
+(54 / 3,665 bytes); route lookup 13.9 ns (0 / 0 bytes); loopback pending
+completion 67,460.8 ns (81 / 9,546 bytes). No threshold is defined and timings
+are machine/run specific.
+
+Broad P18-V01 API/settings/source/input/error/control-flow/reverse-export
+reconciliation, current-revision remote Ubuntu CI, native Windows execution,
+and Phase 19 Broker/Docker evidence remain open. The differential manifest
+still has 30 Phase 19 live-runner cases pending. No push, external CI,
+publication, or release action was performed. Protected Phase 19 worktree
+paths remain unstaged.

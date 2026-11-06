@@ -93,10 +93,10 @@ crates/rocketmq-classic-protocol/src/heartbeat/
 
 先寫對應失敗測試／Oracle fixture，再依序實作；以下 case 必須成為可執行檢查，而非人工勾選。以下檢查不依賴 Docker 或 live Broker，使用 Java fixture、可控時鐘及 scripted peer；共通命令與證據規則見執行索引。
 
-- [ ] **P1-V01** — raw code、signed 邊界、LanguageCode 與 SerializeType 映射可 round-trip 且不遺失欄位。
-- [ ] **P1-V02** — property golden case 涵蓋 separator、Unicode、empty input、duplicate 與 unknown key。
-- [ ] **P1-V03** — Java queue 排序／allocation input fixture 與 route/heartbeat JSON 語意一致，包含 static metadata。
-- [ ] **P1-V04** — Phase 0 的每個 model 欄位都能表達，package dependency 檢查無循環。
+- [x] **P1-V01** — raw code、signed 邊界、LanguageCode 與 SerializeType 映射可 round-trip 且不遺失欄位。
+- [x] **P1-V02** — property golden case 涵蓋 separator、Unicode、empty input、duplicate 與 unknown key。
+- [x] **P1-V03** — Java queue 排序／allocation input fixture 與 route/heartbeat JSON 語意一致，包含 static metadata。
+- [x] **P1-V04** — Phase 0 的每個 model 欄位都能表達，package dependency 檢查無循環。
 
 ### 5.1 實作完成後的本機命令
 

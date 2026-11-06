@@ -1,0 +1,15 @@
+{
+  "client": "org.apache.rocketmq:rocketmq-client:5.5.1",
+  "sourceCommit": "efa1be59d6fc747ad220f036c86030f05f0419f9",
+  "entrypoint": "OffsetSerializeWrapper.toJson(true)",
+  "fixture": "local-offset-store.json",
+  "sha256": "34bf0884372a9a5089aecd25e0c88952b6189d679904d0f2aae22c891df46f6a",
+  "serverBaselineContacted": false,
+  "generation": "temporary JUnit fixture in an isolated archive of the pinned source commit",
+  "javaRuntime": "Zulu 21.0.12.1",
+  "generationCommand": "mvn -pl client -am -Dcheckstyle.skip=true -Dspotbugs.skip=true -Dtest=LocalOffsetSerializationOracleTest -Dsurefire.failIfNoSpecifiedTests=false test",
+  "defaultDirectoryProperty": "rocketmq.client.localOffsetStoreDir",
+  "defaultDirectory": "${user.home}/.rocketmq_offsets",
+  "storePathPattern": "{root}/{clientId}/{group}/offsets.json",
+  "backupSuffix": ".bak"
+}

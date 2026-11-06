@@ -1,0 +1,55 @@
+# Phase 18 compatibility release gate — evidence refresh
+# Recorded: 2026-10-22 23:01:29 UTC
+# Code revision audited: 60238931
+
+## Current local gate evidence
+
+Platform: macOS AArch64, Apple M5 Max (18 logical CPUs), Rust 1.85.0.
+
+- `cargo test --offline --workspace --locked --quiet` — PASS.
+- `cargo test --offline --workspace --all-features --locked --quiet` — PASS.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — PASS.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS: 37 differential scenarios, 11 message fixtures and runtime cases; Java cross-decodes 106 typed headers and 19 typed bodies produced by Rust.
+- Differential comparator `--self-test` and `--validate-manifest` — PASS; 37 scenarios registered.
+- Fuzz smoke — PASS: 163 frame seeds, 11 message seeds, 2,784 bounded mutations, 245 frame decodes and 192 message decodes.
+- Offline race/leak smoke — PASS: 17 cases, 3 repetitions each.
+- `scripts/check-workspace-metadata.py` — PASS.
+- `cargo build --offline -p rocketmq-classic --examples --release --locked` — PASS.
+- `cargo bench --offline -p rocketmq-classic --bench offline --locked --no-run` — PASS; benchmark execution also PASS.
+- UTC and Asia/Taipei Unique ID fixtures — PASS.
+- Windows GNU Consumer all-target/all-feature check, all-feature test executable link, and strict target Clippy — PASS.
+
+The benchmark execution was measured on production revision `ead33f69` and
+recorded in `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+Revision `60238931` adds regression coverage and documentation only, so the
+measured production code is unchanged.
+
+## Java oracle provenance
+
+The external Java checkout currently points at
+`2238256de1d227a4384ba969dfa31473187b4d08` (RocketMQ 5.3.3), not 5.5.1. Its
+pre-existing untracked file `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java`
+was not modified. Phase 18 source review and invoked fixtures use pinned Java
+5.5.1 commit `efa1be59d6fc747ad220f036c86030f05f0419f9` and pinned 5.5.1 Maven
+artifacts; provenance identities remain in
+`docs/compatibility/PHASE_18_JAVA_PROVENANCE.md`.
+
+## Environment limit and remaining acceptance work
+
+The pinned Rust 1.85 MSVC target was installed and the cross-check retried, but
+the environment lacks Windows SDK headers (`stdlib.h`, `windows.h`). Native
+Windows runtime execution and current-revision remote Ubuntu CI remain open.
+P18-V01 broad source/API/settings/input/error/control-flow and Rust reverse-
+export reconciliation remains PARTIAL. Thirty of the 37 manifest scenarios
+are live handoff cases marked `PENDING_PHASE_19`; Phase 19 Broker/Docker evidence
+is still outstanding. This local gate refresh does not close Phase 18.
+
+## Documentation updated
+
+- Refreshed the current server-free snapshot in
+  `docs/compatibility/PHASE_6_REQUIREMENT_AUDIT.md` with the current revision,
+  test/fixture counts, platform result and remaining acceptance work.
+- Added the `ead33f69` offline benchmark measurement to
+  `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+- No Java fixture or protected plan was changed.

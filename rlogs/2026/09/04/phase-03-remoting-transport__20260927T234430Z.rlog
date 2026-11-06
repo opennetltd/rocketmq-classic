@@ -1,0 +1,25 @@
+# Phase 3 remoting transport work log — 2026-09-27 23:44:30 UTC
+
+## Scope and gate
+Continued the Java RocketMQ 5.5.1 transport-parity audit. Phase 3 remains unaccepted; do not start Phase 4. P3-V04 remains deferred to Phase 19.
+
+## Changes and findings
+- Ran the pending loopback test `p3_close_channels_closes_go_away_current_and_retired_generations`. The first compile correctly exposed test access to private client internals; changed synchronization to use the scripted peer's retry-write signal. The test now asserts both pending invokes terminate and both old/current peer sockets see closure without reaching into implementation state.
+- Repeated the close/replacement test 20 times; all runs passed.
+- Source-reviewed `NettyRemotingClient.scanAvailableNameSrv()` at the pinned Java reference. Its per-address worker catches probe exceptions and does not alter `availableNamesrvAddrMap`; an actual null channel removes availability, while a valid channel inserts it. Rust had converted `ClientInner::connection` errors to `None`, making a failed probe look like a successful null result and incorrectly removing availability. Preserved `Result` through scan completion and changed only successful results to update availability; errors now leave existing state unchanged. Added error branches to `stale_name_server_probe_does_not_override_current_generation_availability`.
+- Updated `docs/compatibility/PHASE_3_REMOTING_INVENTORY.md` with the source-backed failure behavior and the newly tested `close_channels` coverage.
+- Reviewed Rust public remoting API names against Java's public `NettyRemotingClient` methods and `NettyClientConfig` getters/setters. This pass found the NameServer failure semantic discrepancy above; it does not close the remaining full audit/disposition items.
+- Reviewed historical untracked log `rlogs/2026/09/04/phase-03-remoting-transport__20260927T085045Z.rlog` and preserved it unchanged as historical evidence; this new log records subsequent work.
+
+## Validation
+- `cargo test -p rocketmq-classic-remoting --offline stale_name_server_probe_does_not_override_current_generation_availability -- --test-threads=1` — passed.
+- `p3_close_channels_closes_go_away_current_and_retired_generations` — passed, including 20 consecutive runs.
+- `cargo test --workspace --offline -- --test-threads=1` — passed (common 11, protocol 9, Phase 1 fixture 1, remoting unit 50, codec 4, transport 77; doc tests passed).
+- `cargo clippy --workspace --all-targets --offline -- -D warnings` — passed.
+- `cargo fmt --all --check`, `git diff --check`, `python3 scripts/check-workspace-metadata.py`, and `python3 tests/differential/compare.py --self-test` — passed.
+
+## Remaining work / blockers
+- Continue the complete Rust public API and hook/processor collection audit and review every remaining `PARTIAL` inventory entry individually (scan/executor lifecycle, callback/event lifecycle, watermark accounting, TLS loading timing, processor remarks, and error taxonomy/cause/remark paths).
+- Continue concrete GO_AWAY/close/shutdown interleaving review and add tests for any uncovered behavior.
+- Re-read both Phase 3 plans, verify all requirements, update docs/logs for subsequent reviewed findings, and commit reviewed batches. Do not edit the plans.
+- P3-V04 live Broker/TLS validation remains a Phase 19 gate. Phase 3 acceptance and Phase 4 remain blocked.

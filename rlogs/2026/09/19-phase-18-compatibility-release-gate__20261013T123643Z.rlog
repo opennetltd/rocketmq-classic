@@ -1,0 +1,177 @@
+# Phase 18 execution session — 2026-10-13T12:36:43Z
+
+- Continued the P18-V01 Phase 10 Push raw implementation audit. Added `PushConsumer::get_max_reconsume_times`, using the existing Java-compatible config bridge where `-1` resolves to 16, and extended the invoked Java fixture plus Rust test for default and configured value 7.
+- Updated the Phase 10 matrix with the closed getter mapping. The wider `DefaultMQPushConsumerImpl` public method inventory remains open.
+- Current accessor fixture SHA-256: `6c64943e2493d0e367478711f51761864779b27de5d29b8145bb869ade3820b8`.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked raw_push_implementation_accessor_retains_identity`; strict consumer Clippy; `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and fixture drift checks); `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. Continue the raw Push implementation methods and remaining Pull/Phase 6 reconciliation.
+
+# Phase 18 execution session — 2026-10-13T12:44:07Z
+
+- Continued the Phase 10 Push raw implementation audit. Added `PushConsumer::has_hook`, `execute_hook_before`, and `execute_hook_after`, backed by the shared consume-hook registry, plus a registry emptiness query. The invoked Java fixture now checks direct hook registration, callback ordering, and status mutation visibility.
+- Updated the Phase 10 matrix and release checklist. Current Push implementation accessor fixture SHA-256: `ae2b0a060c1ff4d0757926fd891b0ef4fa74051f0666d78b470259615b4a83ba`.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked push_raw_consume_hook_entrypoints_match_java`; strict consumer Clippy; `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and fixture drift checks, exit 0); `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. The remaining Push implementation public-method audit and the Phase 9/6 reconciliation remain open.
+
+# Phase 18 execution session — 2026-10-13T12:49:18Z
+
+- Continued the Phase 10 Push raw implementation audit for `getOffsetStore` and `setOffsetStore`. The setter now follows Java's direct store-field replacement semantics, including null and replacement after startup; the invoked Java fixture and Rust tests compare initial null, object identity and null reset.
+- Updated the Phase 10 matrix and release checklist. Current Push implementation accessor fixture SHA-256: `c7195beb1225540a1e671c85324e3984571d5d26764d790c27b08b16fd10e9da`.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (182 unit tests plus all consumer integration/doc tests); strict consumer Clippy; `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and fixture drift checks, exit 0); `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. The remaining Push implementation public-method audit and the Phase 9/6 reconciliation remain open.
+
+# Phase 18 execution session — 2026-10-13T12:57:57Z
+
+- Continued the Phase 10 raw Push surface audit for `MQConsumerInner` settings and subscriptions. Added `group_name`, `message_model`, `consume_type`, `consume_from_where`, `is_unit_mode`, Java-shaped `subscriptions()` Set results, and a live `get_subscription_inner()` table handle. The invoked fixture compares defaults, subscription contents, and table identity after mutation.
+- Updated the Phase 10 matrix and release checklist. Current Push implementation accessor fixture SHA-256: `e6d1f1eea3537576b16dec98aa53fb534f85356168b40356b915d109400a63ce`.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (183 unit tests plus all consumer integration/doc tests); strict consumer Clippy; `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and fixture drift checks, exit 0); `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. The returned Push implementation public-method audit remains partial.
+
+# Phase 18 execution session — 2026-10-13T13:02:57Z
+
+- Continued the Phase 10 `DefaultMQPushConsumerImpl` accessor audit. Added `PushConsumer::set_pause` with Java's direct flag mutation semantics; lifecycle scheduling remains owned by `suspend`/`resume`. The invoked Java fixture checks false→true→false and the Rust differential checks both transitions. Updated the Phase 10 matrix and release checklist. Fixture SHA-256: `f1d43fe75eedcf2ba33021733d2c1cef203a9d03c9c27a6cddce7890f43cbe66`.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked push_raw_consumer_inner_accessors_match_java`; strict consumer Clippy; `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and fixture drift checks); `cargo fmt --all -- --check`; `git diff --check`.
+- Remaining work includes the method-by-method Push implementation surface, Pull rebalance/wrapper reconciliation, broad Phase 6 source/API/input/reverse-export audit, full Phase 18 release gates and package provenance review, Ubuntu CI evidence, and Phase 19 local Broker scenarios. No live Broker or Docker was used.
+
+# Phase 18 execution session — 2026-10-13T13:08:06Z
+
+- Continued the Phase 10 raw Push implementation method audit. Added `PushConsumer::set_consume_orderly` to mirror Java's direct `setConsumeOrderly` flag mutation; startup still derives the active consume service from the configured listener as in Java. Extended the invoked Java fixture and Rust differential to check false→true→false. Fixture SHA-256: `664d5e0d9924b139b81ada6e0eac4db8ac8215d45534f57a77360def9a38520a`.
+- The fixture/test-first compile failed as expected because `set_consume_orderly` was absent. After implementation PASS: full `cargo test -p rocketmq-classic-consumer --locked` (183 unit tests plus all integration/doc targets); strict consumer Clippy; `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and fixture drift checks); `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. The remaining raw Push public method mapping, Pull `getRebalanceImpl`/wrapper inventory, broad Phase 6 audit, full final Phase 18 workspace gates, package provenance review, Ubuntu CI result, and Phase 19 local Broker scenarios remain open.
+
+# Phase 18 execution session — 2026-10-13T13:15:10Z
+
+- Continued the Phase 10 raw Push API/config audit. Java 5.5.1 initializes `pullTimeDelayMillsWhenException` from inherited `ClientConfig` (default 1000 ms) and the public implementation setter changes subsequent Pull and POP error delays. Rust had ignored this value and used a fixed 3000 ms delay. `PushConsumer` now copies the configured default, exposes a live setter/getter, applies it to Pull/POP retry paths, and keeps the Broker flow-control delay separate. The invoked Java fixture checks the private implementation field before/after calling the public setter; fixture SHA-256: `58a621a561759257cdb94fe8d569830c8242a19703269365017c4fed794141c4`.
+- Fixture/test-first compile initially failed because the Rust delay accessors were absent. PASS after implementation: full `cargo test -p rocketmq-classic-consumer --locked` (183 unit tests plus every integration/doc target); strict all-target/all-feature consumer Clippy; `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and fixture drift checks); `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. The returned Push implementation method inventory, Pull rebalance/wrapper inventory, broad Phase 6 audit, final workspace-wide Phase 18 rerun, package content/dependency provenance review, Ubuntu CI evidence, and Phase 19 local Broker scenarios remain open.
+
+- Follow-up verification for the custom delay path: changed the Broker-flow-control test to construct a real Push consumer, confirming the inherited 1000 ms default and the separate 20 ms flow-control delay. PASS: `cargo test -p rocketmq-classic-consumer --lib --locked` (183 tests); strict consumer Clippy; `cargo fmt --all -- --check`; `git diff --check`. The earlier full consumer integration/doc suite and Maven `verify` remain green for the same implementation/fixture revision.
+
+# Phase 18 execution session — 2026-10-13T13:19:52Z
+
+- Continued the Phase 10 raw Push implementation audit. Added `PushConsumer::get_message_queue_listener` as the Rust accessor for Java `DefaultMQPushConsumerImpl.getMessageQueueListener`; it returns the queue-assignment callback configured on `PushConsumerConfig`. The Java fixture confirms null/default and the Rust differential checks `None`. Fixture SHA-256: `f074c1f5b11d9e1951d4bf058835340ad456d11d617ef0ff8e2d39ecdf9d0922`.
+- The fixture/test-first compile failed as expected because the Rust accessor was absent. PASS after implementation: focused raw-accessor test; strict consumer Clippy; `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and fixture drift checks); `cargo fmt --all -- --check`; `git diff --check`.
+- The broader Push raw-method inventory and other listed P18-V01/P18 release items remain open; no live Broker or Docker was used.
+
+# Phase 18 execution session — 2026-10-13T13:33:08Z
+
+- Continued P18-V01 / Phase 10 raw Push implementation inventory against pinned RocketMQ client 5.5.1 (`efa1be59d6fc747ad220f036c86030f05f0419f9`). The public `updateConsumeOffset` entrypoint was absent. Java directly writes with `increaseOnly=false`; added `PushConsumer::update_consume_offset` and the running-state-guarded `persist_consumer_offset` API.
+- The audit found a behavioral mismatch: Rust periodic and shutdown persistence used every offset-table key, while Java `persistConsumerOffset` persists only current pull `ProcessQueue` keys. Scoped direct, periodic and shutdown paths to assigned pull queues. Added an invoked Java fixture for both offset updates and active queue persistence, plus Rust checks for lifecycle, periodic persistence and stale/unassigned exclusion.
+- Updated `docs/compatibility/PHASE_10_OFFLINE_METHOD_MATRIX.md` and `docs/release-checklist.md`. Push accessor fixture SHA-256: `1acfbbe30f1c4ce80f2fc59fe57e3938b1f41918c4ebaf456d0df3b4da596142`.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (184 library tests, all integration tests; 227 total); strict consumer Clippy (`--all-targets --all-features --locked -- -D warnings`); `mvn -f compat/java-reference/pom.xml verify` (37 scenarios and fixture drift); `cargo fmt --all -- --check`; `git diff --check`. Focused raw-offset and orderly-shutdown tests also pass.
+- No live Broker or Docker was used. The broader Push raw implementation method inventory, Pull rebalance/wrapper inventory, Phase 6 behavior audit, final workspace-wide Phase 18 gates, package provenance review and Ubuntu CI remain open. Commit follows final diff review.
+
+# Phase 18 execution session — 2026-10-13T13:47:25Z
+
+- Continued P18-V01 / Phase 10 `DefaultMQPushConsumerImpl` reverse inventory. Added `PushConsumer::reset_offset_by_timestamp`: for every subscribed topic with route queues, search each queue at the requested timestamp and apply those offsets through the consumer reset lifecycle; empty route sets are skipped.
+- Extended the invoked Java Push implementation fixture with a constructor-free `MQClientInstance` test double. It records `resetOffsetByTimeStamp` search calls and the reset map without creating threads or contacting a Broker. Rust's scripted NameServer/Broker test compares topic, queue ID, broker, timestamp, lower-bound type and final offset values. Fixture SHA-256: `dad2b34371fbbe7125fa860e27be584056aa25cd57edffdba981782dbe7cfbf6`.
+- One Maven `verify` attempt found fixture drift because search calls were emitted in `Set.of` iteration order. Sorted that fixture output, regenerated it, and reran Maven successfully; earlier failure retained here as required.
+- PASS after correction: `cargo test -p rocketmq-classic-consumer --locked` (184 library tests and all integration tests; 228 total); strict consumer Clippy; `mvn -f compat/java-reference/pom.xml verify` (37 scenarios and fixture drift); `cargo fmt --all -- --check`; `git diff --check`.
+- Updated Phase 10 matrix and release checklist. No live Broker or Docker was used. Commit follows final diff review.
+- Change commit: `dbda48ad` (`Add Push timestamp offset reset API`).
+
+## P18-V01 orderly Push pull follow-up — 2026-10-13
+
+- Audited Java 5.5.1 `DefaultMQPushConsumerImpl.pullMessage` against `PullRequest` and the current Rust pull worker. Found that Java refreshes the configured start offset once when an orderly clustering queue is first locked, then marks the request `previouslyLocked`; Rust carried the matching flag but never read or set it. This could pull from an offset that changed between assignment and the first locked pull.
+- Extended the invoked Java 5.5.1 implementation fixture with sequential store offsets (15 then 21). It records that the first locked pull adopts 15, marks `previouslyLocked`, and the next attempt does not reread. Fixture SHA-256: `3407efb21e8c669d49864ff59a2cb3bcbb6382aa45e7a449c6a7ea0cb928869b`.
+- Added `first_orderly_locked_pull_refreshes_offset_once_like_java`. Before the Rust change it failed as expected: actual offset 8, fixture offset 15. Rust now recomputes the initial offset after lock validation, stores it on the pull request once, and retries on lookup failure using the configured Java exception delay. Removed the dead-code exemptions from the lock-history field/accessors.
+- Updated the Phase 10 pull method matrix and release checklist. The raw Push public-method audit remains open.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (185 library tests and all consumer integration/doc targets); `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`; `mvn -f compat/java-reference/pom.xml verify` (37 scenarios, Java fixture drift, cross-decodes); `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. Phase 18 V01–V04 and Phase 19 local Broker/Docker execution remain incomplete.
+
+# Phase 18 execution session — 2026-10-13T14:23:07Z
+
+- Continued the P18-V01 audit and closed the missing Push `queryConsumeTimeSpan` flow. Added protocol request header and response DTO, `MQClientApi::query_consume_time_span`, and `PushConsumer::query_consume_time_span`. The facade queries a fresh route and requests each Broker sequentially in route order with Java's 3000 ms deadline and VIP address behavior.
+- Added invoked Java 5.5.1 fixture and Rust RPC/facade tests for request code/header, decoded spans, Broker error, route ordering, fresh lookup and VIP endpoints. Fixture SHA-256: `612c0adbd099e5282e027b69a9996575d6efc8293a4b42c70c367da800637e0c`.
+- Updated request-code/header inventories, Phase 5/6/10 compatibility mappings, the Phase 6 requirement audit and release checklist. The first protocol full-suite run exposed a missing header inventory entry; registered the header and Java fixture, then reran the protocol suite successfully.
+- PASS: protocol full suite (110 unit tests, integration tests and 15 doctests); core full suite (156 unit tests and integration tests); consumer full suite (186 unit tests plus integration/doc targets); `mvn -f compat/java-reference/pom.xml verify` (BUILD SUCCESS); strict Clippy for protocol/remoting/core/consumer with all targets/features and `-D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- The full Maven `verify` completed at 2026-10-13T14:22:03Z. No live Broker or Docker was used. P18-V01 broad Push/Pull/Phase 6 reconciliation, final workspace-wide gates, package contents/dependency provenance review, Ubuntu CI evidence and Phase 19 local Broker/Docker execution remain open. This change is not committed yet.
+
+## P18-V01 Push raw-method follow-up — 2026-10-13T14:41:42Z
+
+- Added Push equivalents for `registerFilterMessageHook`, `parseSubscribeMessageQueues`, `tryResetPopRetryTopic`, and `resetRetryAndNamespace`. Push filter hooks now share the Pull result wrapper's hook list and run for POP messages after tag filtering and before the reconsume-limit check; messages removed by hooks join the POP ACK path. Queue parsing is shared by direct calls and `fetch_subscribe_message_queues`.
+- Extended the invoked Java 5.5.1 implementation fixture to call `processPopResult` and the three topic/queue helpers. Fixture SHA-256: `b9aae527405b614e012d1133960f3e74bbd3540c52f177061f86e1667d27e925`. Updated the Phase 10 method matrix and release checklist.
+- Initial Java fixture compilation failed because `Message.putProperty` is package-private; changed the fixture to use public `MessageAccessor.putProperty`, then generation succeeded. The first Rust focused compile found a borrow conflict in retry-topic reset; copied the parsed topic before mutation, then the check passed.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (187 unit tests and all integration/doc targets; 231 total); `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`; `mvn -f compat/java-reference/pom.xml verify` (37 scenarios and fixture drift checks); `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. Remaining P18-V01 work includes the rest of the returned Push implementation method inventory, Pull `getRebalanceImpl`/nested wrapper reconciliation, and broad Phase 6 source/API/input behavior audit. Package contents/dependency provenance review, Ubuntu CI evidence, final workspace release-gate rerun, and Phase 19 Broker/Docker scenarios remain open. Commit follows final review.
+
+## P18-V01 Push rebalance entrypoint follow-up — 2026-10-13T14:47:48Z
+
+- Added Push `is_subscribe_topic_need_update`, `update_topic_subscribe_info`, `do_rebalance`, and `try_rebalance` mappings for the public `MQConsumerInner` entrypoints. Route updates are restricted to subscribed topics and wake the runtime rebalance worker only when the set changes; direct rebalance calls honor pause state and use the owned serialized rebalance service.
+- Extended `PushImplementationAccessorFixtures` to invoke route-needed/update and paused `tryRebalance` directly. Fixture SHA-256: `ce4dbbca1c12d59c67593f2f687f13717ef7d8ed715f9c821f5acae7edbdbc96`. Updated Phase 10 matrix and release checklist.
+- PASS: focused `push_raw_rebalance_route_entrypoints_match_java`; full `cargo test -p rocketmq-classic-consumer --locked` (188 unit tests and all integration/doc targets; 232 total); strict consumer Clippy; `mvn -f compat/java-reference/pom.xml verify` (37 scenarios and all fixture drift checks); `cargo fmt --all -- --check`; `git diff --check`.
+- The first format check reported rustfmt's expected layout change for the new route-update signature; ran `cargo fmt --all`, then reran format and diff checks successfully. No live Broker or Docker was used. Returned Push implementation methods for scheduler, stats, runtime/client-factory, consume-service, and the full rebalance object still need explicit mapping or internal-entrypoint disposition; broad Phase 6/Pull audit and remaining release preparation are open.
+
+## P18-V01 Push shutdown overload — 2026-10-13 UTC
+
+- Pinned-source review of `DefaultMQPushConsumerImpl.shutdown(long)` confirmed that the facade forwards `awaitTerminationMillisWhenShutdown`, while the implementation overload also accepts a per-call wait. Added `PushConsumer::shutdown_with_await_termination_millis`; the existing `shutdown()` still uses the configured facade value.
+- Added a paused-time slow-listener regression with configured wait 0 and per-call wait 100 ms. The new test first failed to compile because the equivalent Rust API was absent, then passed after implementation and proved the explicit wait keeps the listener alive through its completion while all owned workers shut down.
+- Updated the Phase 10 method/settings matrix. PASS: `cargo test -p rocketmq-classic-consumer shutdown_with_explicit_wait_overrides_configured_wait --locked` (1 test).
+- Full consumer/workspace gates and the broader Push implementation method audit remain open. No Java reference files were changed.
+
+## P18-V01 Pull rebalance accessor — 2026-10-13 UTC
+
+- Re-ran the existing invoked `PullImplementationAccessorFixtures` evidence: Java creates one `RebalancePullImpl` before startup, reports a non-null/stable handle, and exercises its route/subscription/process-queue operations.
+- Added `PullConsumer::get_rebalance_impl` as a stable reference to the Rust owner, which holds the rebalance registration state; extended the existing fixture-backed Rust accessor test to assert presence and stable identity. The test failed before implementation because the equivalent accessor was absent, then passed after the owner alias was added.
+- Updated the Phase 9 matrix to distinguish the verified accessor from the remaining method-by-method disposition of raw Java rebalance tables, strategy/config/factory helpers and lock operations. PASS: `cargo test -p rocketmq-classic-consumer deprecated_java_impl_accessor_returns_the_same_pull_consumer --locked` (1 test).
+- Remaining broad Pull/Push raw surfaces and full Phase 18 gates stay open; no pinned Java source or plan file was modified.
+- The initial format check found two expected rustfmt layout changes in the new paused-time regression; `cargo fmt --all` applied them. PASS afterward: `cargo fmt --all -- --check`; `cargo test -p rocketmq-classic-consumer --locked` (189 unit tests and every consumer integration/doc target); `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`.
+
+## P18-V03 Package content/provenance check — 2026-10-13 UTC
+
+- Added identical workspace `LICENSE` and `NOTICE` files to all seven crate roots; extended `check-workspace-metadata.py` to check their contents, Apache-2.0 metadata, and the existing crate dependency direction.
+- PASS: `python3 scripts/check-workspace-metadata.py`; `cargo package --workspace --list --locked --allow-dirty` (all seven crate file lists include `LICENSE`/`NOTICE`); locked Cargo metadata inspection reports 207 external packages, all from crates.io with license metadata.
+- Registry-compatible workspace dependency versions/requirements remain unselected; package-list/metadata evidence does not prove registry resolution. No crate was published and `publish = false` remains in effect.
+
+## P18-V01 Push raw signature inventory — 2026-10-13T15:12Z
+
+- Extended `PushImplementationAccessorFixtures` to enumerate all declared, non-bridge, non-synthetic public method signatures on pinned Java 5.5.1 `DefaultMQPushConsumerImpl`; the fixture records 71 signatures. The Rust accessor test pins the inventory count. Fixture SHA-256: `a6db2529a1124c9e660581fb620fcc8cf7189d05501c55c5056a2eb43d281566`.
+- Updated the Phase 10 matrix and release checklist to clarify that the signature inventory is now captured but method-by-method Rust mapping or an internal-entrypoint disposition remains open. This does not close P18-V01.
+- The first direct `exec:java` invocation reused the previous compiled `Main` and showed its usage; reran with `compile exec:java` and the documented `push-implementation-accessor-fixture` subcommand to regenerate the fixture.
+- PASS: `cargo test -p rocketmq-classic-consumer raw_push_implementation_accessor_retains_identity --locked`; `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`; `mvn -f compat/java-reference/pom.xml verify` (37 scenarios, Java fixture drift, and cross-decodes).
+- Commit: pending final review.
+
+## P18-V01 Push raw consumerRunningInfo — 2026-10-13T15:26Z
+
+- Added `PushConsumer::consumer_running_info()` as the raw implementation counterpart, returning the existing Java-shaped owner snapshot with active pull/POP queues, offsets, subscriptions, status and properties. Created/shutdown states return typed Rust lifecycle errors; valid snapshots share the exact builder already used by inbound running-info handling.
+- Extended the pinned Java Push accessor fixture to invoke `DefaultMQPushConsumerImpl.consumerRunningInfo()` with injected service/factory/statistics objects and active queue entries. Rust compares subscription, pull/pop queue and status counts plus core-pool size; it also checks pre-start and shutdown lifecycle results. Updated the Phase 10 matrix and release checklist. Fixture SHA-256: `218b922da54f40d7bc9e748457d1cf9d801d16d286aec2044be44a0e8832cd85`.
+- Test-first Rust compilation failed because `consumer_running_info` was absent, then passed after implementation. Early Java fixture runs exposed a `Properties.get` Object/String compile error and a missing `readOffset` proxy value that left the fixture executor alive; changed to `getProperty`, supplied the offset, and put scheduler shutdown in `finally`. These attempts did not alter the pinned Java checkout.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (189 unit tests, all consumer integration tests and docs); strict consumer Clippy (`--all-targets --all-features --locked -- -D warnings`); `cargo fmt --all -- --check`; `git diff --check`; `mvn -f compat/java-reference/pom.xml verify` (37 scenarios, fixture drift, Java cross-decodes).
+- The wider 71-method Push disposition, Pull rebalance/wrapper audit, Phase 6 reconciliation and final workspace release gates remain open. Commit: pending final review.
+
+## P18-V01 Push adjustThreadPool follow-up — 2026-10-13T15:38:07Z
+
+- Audited `DefaultMQPushConsumerImpl.adjustThreadPool` against pinned 5.5.1 source and its four built-in concurrent/orderly pull/POP consume services. The implementation takes the decrease branch with empty queue accumulation, but each built-in service's `decCorePoolSize` and `incCorePoolSize` are empty methods. Added `PushConsumer::adjust_thread_pool` with the same no-change behavior; direct resizing remains `update_core_pool_size`.
+- Extended the invoked Java fixture to call `adjustThreadPool`, assert that its decrease branch is reached through a `ConsumeMessageService` probe, and retain core pool size 7. Rust checks the fixture and no-change owner behavior. Current Push implementation fixture SHA-256: `9c08cd1e78443f86a32a90deb6e242990a2b6cb09364772586116b24e1723cd8`.
+- PASS after change: `cargo test -p rocketmq-classic-consumer push_adjust_thread_pool_matches_java_default_service_noop --locked`; `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`; `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and fixture drift); `cargo fmt --all -- --check`; `git diff --check`.
+- PASS baseline at `9afaffe8` before this method change: `cargo test --workspace --locked`.
+- P18-V01 remains open: the other raw Push implementation signatures, Pull rebalance/wrapper inventory and broad Phase 6 reconciliation still need method-level mappings or reviewed internal-entrypoint dispositions. No files in the pinned Java repository were changed.
+
+## P18-V01 Pull raw-surface disposition — 2026-10-13T15:43:11Z
+
+- Audited pinned Java 5.5.1 `PullAPIWrapper`, `RebalanceImpl`, and `RebalancePullImpl` public methods and call sites. Mapped both `pullKernelImpl` overloads to Rust Pull/Push/Lite owner APIs and `popAsync` to the Push POP owner; recorded the source-confirmed zero/unsupported/empty Pull rebalance methods and the table/factory/lock helpers as internal entrypoints whose raw exposure would bypass Rust assignment, runtime, and shutdown ownership.
+- Updated the Phase 9 raw implementation matrix and release checklist. Pull raw-surface review is closed; Push raw signatures and the broad Phase 6 audit remain open under P18-V01.
+- PASS evidence already on this revision: `cargo test --workspace --all-features --locked`; `git diff --check`. The all-features run included consumer Pull rebalance, wrapper, Push/POP, admin, and lifecycle suites. No code changed in this documentation continuation, and the pinned Java checkout was not modified.
+
+## P18-V01 Push class-filter subscribe follow-up — 2026-10-13 UTC
+
+- Added `PushConsumer::subscribe_with_class_filter` to map Java 5.5.1 `DefaultMQPushConsumer.subscribe(topic, fullClassName, filterClassSource)`. The owner applies the configured namespace, stores class name/class-filter mode/source in `SubscriptionData`, and on a started consumer refreshes heartbeat state and wakes the owned rebalance worker.
+- Extended the invoked pinned Java facade fixture to compare pre-start storage, namespaced topic, class name, class-filter mode, retained source, the factory-present heartbeat call and serialized subscription wire data. Rust checks the pre-start table, started heartbeat state, and exact serialized fields after normalizing only the dynamic `subVersion`. Fixture SHA-256: `61bb4b8042ae675de235d0be2fe02a0cd55439c0352dee1aebbd2e9fc4ddc94a`.
+- Maven fixture verification first failed because serialized `subVersion` varied by generation time. Normalized the Java fixture field to `0`, regenerated it and reran verification successfully; the pinned Java source checkout was not modified.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (191 unit tests plus all consumer integration/doc targets); focused `class_filter_subscription_matches_java_facade_and_heartbeat_flow`; strict consumer Clippy (`--all-targets --all-features --locked -- -D warnings`); `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and fixture drift); `cargo fmt --all -- --check`; `git diff --check`.
+- This closes the class-filter facade subscription gap only. P18-V01 remains open for the remaining Push method dispositions and broad Phase 6 audit; P18-V02–V04 and Phase 19 local Broker/Docker execution remain open. The Java checkout's untracked `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java` remains present and untouched.
+
+## P18-V01 Push rebalance accessor follow-up — 2026-10-13 UTC
+
+- Added `PushConsumer::get_rebalance_impl` as a stable alias to the Push owner, matching the Rust Pull rebalance-handle design while keeping mutable route/assignment tables inside the lifecycle owner.
+- Extended the invoked Java 5.5.1 Push implementation fixture to call `getRebalanceImpl()` twice and assert non-null stable object identity. Rust verifies both accessor results point to the same `PushConsumer`. Fixture SHA-256: `cfb8a5dcf402c21e620f4c1c2ebc260a954c4c68f028d93e385699d1a4a284ba`.
+- PASS: `cargo test -p rocketmq-classic-consumer raw_push_implementation_accessor_retains_identity --locked`; strict consumer Clippy (`--all-targets --all-features --locked -- -D warnings`); `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and fixture drift); `cargo fmt --all -- --check`; `git diff --check`.
+- This closes accessor identity only. `RebalancePushImpl` method-flow reconciliation and the remaining Push raw surface stay open for P18-V01. The Java checkout was not modified.
+
+## P18-V01 Push POP consume-init mode mapping — 2026-10-13 UTC
+
+- Audited `RebalancePushImpl.getConsumeInitMode`: Java returns `MIN` (0) only for `CONSUME_FROM_FIRST_OFFSET`, and `MAX` (1) for the other five `ConsumeFromWhere` values. Added `PushConsumer::consume_init_mode` and routed POP header creation through that owner method.
+- Extended the invoked pinned Java fixture to call `getRebalanceImpl().getConsumeInitMode()` for every Java enum value. Rust compares all six results. Fixture SHA-256: `ba6729eefd9488face728d29910614dc4fe817adf686f33f9a279877c897b7c1`.
+- Initial Rust compile failed because the fixture's `i64` JSON number was compared with the API's `i32`; changed the assertion to compare `i64::from(...)`, then all checks passed.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (192 unit tests plus all consumer integration/doc targets); strict consumer Clippy (`--all-targets --all-features --locked -- -D warnings`); `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and fixture drift); `cargo fmt --all -- --check`; `git diff --check`.
+- The `getConsumeInitMode` flow is mapped; other `RebalancePushImpl` methods and the remaining Push raw implementation signatures remain under P18-V01 audit. No pinned Java sources were changed.

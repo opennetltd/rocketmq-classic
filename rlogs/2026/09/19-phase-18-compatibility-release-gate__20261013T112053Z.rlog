@@ -1,0 +1,11 @@
+# Phase 18 execution session — 2026-10-13T11:20:53Z
+
+- Continued P18-V01's raw Pull implementation API audit. Added public Rust facade entrypoints for `updateTopicSubscribeInfo`, `isSubscribeTopicNeedUpdate`, `doRebalance`, and `tryRebalance`, using Rust-owned queue sets and async lifecycle boundaries.
+- Retained the concrete Pull registration in the started state so direct rebalance calls run only this consumer's serialized rebalance cycle. Runtime callbacks and direct route-subscription methods now share the same subscription-map/cache helpers.
+- Extended the Java 5.5.1 accessor fixture to call `tryRebalance` with rebalance disabled (which returns true) and call the no-op `doRebalance`; Rust direct-entrypoint coverage verifies disabled and active calls, subscribed/unsubscribed route-info updates, and the resulting assignment.
+- PASS: focused `pull_raw_rebalance_entrypoints_update_and_use_subscription_info` test.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (173 unit tests, 43 integration tests, doc tests).
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and invoked accessor fixture verification).
+- PASS: `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`; `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. Remaining raw Pull audit items include direct hook invocation, `fetchConsumeOffset`/`updateConsumeOffsetToBroker` edge equivalence, `consumerRunningInfo`, and mutable implementation-state accessors. P18-V01 remains open.
+- Rust source, Java fixture, fixture JSON, Phase 9 matrix, and this log are included in the independent raw-rebalance-entrypoint commit.

@@ -1,0 +1,28 @@
+Phase 15 Request/reply — 2026-10-12 UTC
+
+Starting state:
+- Worktree was clean at Phase 14 HEAD `cb5493e33a8e516577d2e06e9f9d1f69a2278a11`; created branch `phase/16-phase-15-request-reply`.
+- Java working checkout remains 5.1.4; all source comparisons use pinned commit `efa1be59d6fc747ad220f036c86030f05f0419f9`, with the 5.5.1 Maven artifact as runtime oracle.
+- Read the English/Traditional Chinese Phase 15 plans, execution index, coding skill and Rust reference. Plans remain unchanged.
+
+Pinned-source audit:
+- Mapped all six public `DefaultMQProducer.request` overloads, request preparation, correlation UUID generation, request holder/future lifecycle, reply helper, reply header, and inbound reply processor into `docs/compatibility/PHASE_15_REQUEST_REPLY_MATRIX.md`.
+- Confirmed Java uses `UUID.randomUUID().toString()`, writes `CORRELATION_ID`, `REPLY_TO_CLIENT`, and decimal `TTL`, includes route/heartbeat preparation in the original request timeout, and sends with async-mode retry behavior.
+- Confirmed the Java singleton scans at 3s initial delay / 1s period, and atomically removes expired/replied entries before one callback. Reply helper requires request + `CLUSTER`, sets `<cluster>_REPLY_TOPIC`, `MSG_TYPE=reply`, correlation/reply-to/TTL. Reply processor returns SUCCESS for unknown/late/duplicate IDs and SYSTEM_ERROR on receive/decode failures.
+- Baseline implementation has reply request codes and typed headers, plus an inbound routing slot. It lacks request API, pending correlation storage, reply helper and completion dispatcher; unknown correlation currently yields REQUEST_CODE_NOT_SUPPORTED.
+
+Phase 15 implementation and verification are in progress; no completion claims yet.
+
+Verification continuation (2026-10-12 UTC):
+- `cargo test -p rocketmq-classic-core --locked` passed, including the runtime inbound, registry and integration suites.
+- `cargo test -p rocketmq-classic-producer --locked` passed: 62 unit tests and the producer, request/reply, scripted-send and transaction integration suites (3, 3, 5 and 6 tests).
+- `mvn -o -q -f compat/java-reference/pom.xml verify` passed after regenerating the request/reply fixture following an earlier drift failure. The run validated 32 Java scenarios, runtime inbound/discovery/heartbeat/route fixtures, configuration probes, generated request/reply data and Java/Rust cross-decodes. Existing JDK Unsafe/final-field mutation warnings were emitted; verification succeeded.
+- `cargo fmt --all -- --check`, strict Clippy for core and producer with all targets/features and `-D warnings`, `python3 tests/differential/compare.py --self-test`, Java fixture checksum verification, and `git diff --check` passed.
+- The Java reference checkout was not modified; source audit remains pinned to `efa1be59d6fc747ad220f036c86030f05f0419f9`. Phase 15 compatibility matrix records P15-V01, P15-V02 and P15-U01 as unit-verified; P15-V03 remains pending Phase 19.
+- Local verification is complete. Final source/diff review, commit, and Phase 16–18 work remain outstanding; this does not claim final compatibility acceptance.
+
+Final source-review correction (2026-10-12 UTC):
+- Comparing timeout-worker lifecycle directly with `RequestFutureHolder.shutdown` exposed that the worker also must stop when the last user producer unregisters, even while a shared runtime remains active. The internal runtime producer is excluded from this owner count, matching Java's `DefaultMQProducerImpl` registration set.
+- Added a lifecycle assertion first; `cargo test -p rocketmq-classic-core request_reply_timeout_worker_is_shared_and_joined_with_runtime --locked` failed on the new last-producer assertion before the implementation change, then passed after the fix. The same test verifies the worker remains shared while another user producer exists and restarts for a later producer.
+- Reran `cargo test -p rocketmq-classic-core --locked` successfully after the fix. Strict all-target/all-feature Clippy for core and producer, `cargo fmt --all -- --check`, and `git diff --check` also pass after the fix.
+- The earlier successful Maven verification remains applicable: the lifecycle correction changes only Rust runtime code and its unit test; Java fixture inputs and generated hashes are unchanged.

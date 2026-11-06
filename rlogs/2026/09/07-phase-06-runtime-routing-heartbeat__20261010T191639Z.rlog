@@ -1,0 +1,7 @@
+# Phase 6 raw route clear/compute ordering — 2026-10-10T19:16:39Z
+
+- Added a pinned Java 5.5.1 `ConcurrentHashMap.clear()` race against a blocked same-key `compute`. Java waits for the callback; compute runs once and returns its value; clear then removes the computed mapping.
+- The first Rust differential failed on `clearWaitsForCompute`: the previous raw route `clear()` bypassed the per-topic mutation gate. `TopicRouteTable::clear` now removes the start-snapshot keys one by one under their topic gates; it remains a weakly consistent per-key operation, not a whole-table transaction.
+- The invoked `runtimeTopicRouteTable.primitives` map now has 77 outcomes. `route.json` SHA-256: `f2c35bdda057ec82d400af935b9c16d91a62ec987e9e7e8a8a7b545fb84ea341`.
+- Focused route-table differential and full `cargo test --workspace --all-targets --locked` passed; strict workspace/all-target/all-feature Clippy, pinned offline Maven verify (22 scenarios, fixture drift and Java cross-decodes), comparator self-test/manifest22, fmt, and diff checks also passed.
+- Other route malformed-input/source branches and whole Phase 6 source/API/input/platform reconciliation remain open; P6-V04 remains a Phase 19 handoff.

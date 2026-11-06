@@ -1,0 +1,11 @@
+# Phase 18 execution session — 2026-10-13T12:17:48Z
+
+- Continued the P18-V01 raw Pull implementation audit for Java `get/setServiceState`. Added a shared Rust `ConsumerServiceState` type and optional getter/setter so Java enum values and null assignment remain observable.
+- Pull start now sets `START_FAILED` before initialization, returns to `CREATE_JUST` for Java's duplicate-group reset path, transitions to `RUNNING` only after successful startup, and becomes `SHUTDOWN_ALREADY` after shutdown. Caller-set `START_FAILED` blocks startup; caller-set `RUNNING` drives `is_running` and lets facade/raw offset reads use a preconfigured offset store without a live runtime. Java fixture records null assignment, direct `START_FAILED` guard and direct `RUNNING` access.
+- Reverse source inventory found another open raw accessor: Java 5.5.1 exposes deprecated `DefaultMQPushConsumer.getDefaultMQPushConsumerImpl()` with a broad public implementation surface, while Rust has no matching accessor alias or method-by-method raw surface map. Added it explicitly as a non-manual P18-V01 item in the Phase 10 matrix.
+- PASS: targeted service-state fixture differential, raw offset-entrypoint differential, and startup/shutdown lifecycle tests.
+- PASS: `cargo test -p rocketmq-classic-consumer --locked` (178 unit tests and all consumer integration/doc targets).
+- PASS: `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and Java fixture drift checks).
+- PASS: `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. Pull `getRebalanceImpl`, remaining nested wrapper public methods, the raw Push implementation surface, and broad Phase 6 bidirectional reconciliation remain open; P18-V01 stays open.

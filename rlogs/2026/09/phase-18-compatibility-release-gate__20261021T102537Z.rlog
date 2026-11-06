@@ -1,0 +1,74 @@
+# Phase 18 compatibility release gate — 2026-10-21 10:25:37 UTC
+
+## Bounded slice
+
+Mapped pinned Java 5.5.1 `MQClientAPIImpl.exportRocksDBConfigToJson(String,List,long)` and request header 355. Java source comparison used the local pinned source at RocketMQ commit `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+
+The Rust Protocol layer now exposes `ExportRocksDBConfigToJsonRequestHeader` and `ExportRocksDBConfigType`; Core sends the Java semicolon-encoded `configType` to the supplied address with the caller deadline and maps Broker outcomes. Java/Rust fixtures cover enum API and parser behavior, valid and empty lists, null list before RPC, request fields, and success/error responses.
+
+## Actions and checks
+
+- Compiled the pinned Java reference and refreshed the typed header, admin header decode-mode, and producer Core fixtures.
+- The first Protocol header inventory run failed because its source-inspection helper did not recognize the Rust enum's `const fn` declarations. Updated the inventory assertion to check those const APIs explicitly; rerun passed (10 tests).
+- `cargo test -p rocketmq-classic-protocol --test headers` passed (21 tests, including the validation matrix).
+- `cargo test -p rocketmq-classic-core --test admin_rpc export_rocksdb_config_to_json_matches_java_request_and_outcomes` passed (1 focused test).
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` passed.
+- `cargo fmt --all -- --check` and `git diff --check` passed after applying rustfmt to the Rust edits. The initial fmt check reported only formatting differences, which were fixed.
+- `mvn -f compat/java-reference/pom.xml verify` passed: 37 scenario-manifest cases, 75 Java-decoded Rust typed headers, and 15 typed bodies.
+- Producer Core fixture SHA-256: `a7188f46b4dae2f2a509e4caf5f96aaba00f74964afabc1454e5ca92b23bd344`.
+- Updated Java compatibility evidence, Phase 6 API map, Phase 6 requirement audit, and release checklist. The Phase 18 plan was not modified.
+
+## Commit and remaining scope
+
+The code/documentation slice is validated and ready for its bounded commit. Broad P18-V01, final current-revision P18-V02, Ubuntu/native Windows P18-V04, and Phase 19 work remain open.
+
+Post-validation: committed the bounded slice as `ea7a7818` (`fix(compat): map RocksDB config export RPC`). The post-commit worktree check shows only the four listed Phase 19 paths; they remain unstaged.
+
+## Bounded slice: NameServer write-permission RPCs — 2026-10-21
+
+Mapped pinned Java 5.5.1 `MQClientAPIImpl.wipeWritePermOfBroker(String,String,long)` request 205 and `addWritePermOfBroker(String,String,long)` request 327. Added nullable request headers, nullable boxed response headers, Core operations, invoked Java cases, Java decode-mode fixtures, and Java↔Rust typed frames. Success counts are unboxed at the Rust RPC boundary; Broker errors remain response errors.
+
+Actions and checks:
+
+- The first Maven compile failed because `RemotingCommand.setExtFields` requires `HashMap<String,String>`; changed the fixture response variable to that declared type and recompiled successfully.
+- Refreshed typed headers, admin header decode-mode fixtures and producer Core fixture from the compiled Java reference.
+- `cargo test -p rocketmq-classic-protocol --test header_inventory` passed (11 tests).
+- `cargo test -p rocketmq-classic-protocol --test headers` passed (22 tests, including the validation matrix and nullable boxed-count cases).
+- `cargo test -p rocketmq-classic-core --test admin_rpc write_permission_name_server_rpcs_match_java_fixture` passed (1 focused test covering 12 Java cases).
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` passed.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+- `mvn -f compat/java-reference/pom.xml verify` passed: 37 manifest scenarios, 79 Java-decoded Rust typed headers, and 15 typed bodies.
+- Producer Core fixture SHA-256: `4ee0b364d81e1d886e040b895a12ae46c676b8bd4a9648580f710e36627caec0`.
+- Updated the compatibility evidence, Phase 6 API map, Phase 6 requirement audit, and release checklist. Clarified that the Phase 17 tools-wrapper boundary does not remove the low-level client method from the Phase 18 inventory. The Phase 18 plan was not modified.
+
+The bounded code/documentation slice is validated and ready for its commit. Broad P18-V01, final current-revision P18-V02, Ubuntu/native Windows P18-V04, and Phase 19 work remain open. Four pre-existing Phase 19 worktree paths remain unstaged and untouched.
+
+Post-validation: committed the NameServer write-permission slice as `74a07703` (`fix(compat): map NameServer write permission RPCs`). The post-commit worktree check shows only the four preserved Phase 19 paths; they remain unstaged.
+
+Pre-existing Phase 19 worktree paths preserved without staging or edits:
+
+- `integration-tests/README.md`
+- `tests/differential/run.sh`
+- `integration-tests/run-local.sh`
+- `rlogs/2026/09/20-phase-19-docker-local-validation__20261017T224455Z.rlog`
+
+## Bounded slice: `checkRocksdbCqWriteProgress` — 2026-10-21
+
+Mapped pinned Java 5.5.1 `MQClientAPIImpl.checkRocksdbCqWriteProgress(String,String,long,long)`, request 354, and its nullable result DTO and `CheckStatus` enum. Core uses the supplied address and caller deadline, serializes nullable `topic` and primitive `checkStoreTime`, and parses success bodies with Java-compatible null/default handling. Java fixtures cover the direct address with VIP enabled, typed request fields, populated/missing DTO properties, JSON null, absent/empty/malformed bodies, and Broker rejection.
+
+Actions and checks:
+
+- The first Protocol compile used the response-only body adapter for a DTO that had no `encode_java_json` implementation. Switched to the generic Java-compatible adapter, which supplies the nullable parser and matching JSON writer.
+- The first header inventory run needed the generated Java header fixture; generated it. The validation matrix then exposed that the new primitive timestamp needed to be classified with primitive reflection defaults; updated the matrix.
+- The first full Maven verify stopped on expected header decode-fixture drift; regenerated it from the pinned Java class. A later producer fixture verify exposed nondeterministic key ordering in new `Map.of` enum rows; changed those rows to `TreeMap`, regenerated, and confirmed byte-for-byte stable output.
+- Protocol `header_inventory` passed (12 tests); Protocol `headers` passed (23 tests, including the validation matrix); focused Core test `check_rocksdb_cq_write_progress_matches_java_fixture` passed (1 test).
+- Strict locked all-target/all-feature workspace Clippy, `cargo fmt --all -- --check`, and `git diff --check` passed.
+- Final pinned Maven `verify` passed with 37 scenario-manifest cases, 80 Java-decoded Rust typed headers, and 15 typed bodies.
+- Producer Core fixture SHA-256: `6f853c6e49ad04a2fe2d1d7d202c992d1088e17da1fc248330bef7de968603a0`.
+- Updated Java compatibility evidence, Phase 6 API map, Phase 6 requirement audit, and release checklist. Clarified that Phase 17 excludes the `MQAdminExt` wrappers while both low-level methods belong in the Phase 18 client inventory. The Phase 18 plan was not modified.
+
+The bounded code/documentation slice is validated and ready for its commit. Broad P18-V01, final current-revision P18-V02, Ubuntu/native Windows P18-V04, and Phase 19 live Broker scenarios remain open. Four preserved Phase 19 paths remain unstaged and untouched.
+
+Final slice test extension: `cargo test --locked -p rocketmq-classic-protocol --doc` passed (151 doctests), including both new DTO compile-fail visibility/identity checks. `cargo test --locked -p rocketmq-classic-core --test admin_rpc` passed all 80 tests, including the new check-RocksDB progress differential. These supplement the already-recorded focused Protocol/Core tests, strict Clippy, and Maven verify.
+
+Post-validation: committed the `checkRocksdbCqWriteProgress` slice as `c163605a` (`fix(compat): map RocksDB CQ progress RPC`). The post-commit worktree check shows only the four preserved Phase 19 paths and this append-only execution log; the four Phase 19 paths remain unstaged and untouched.

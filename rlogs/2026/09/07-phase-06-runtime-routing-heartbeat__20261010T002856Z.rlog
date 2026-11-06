@@ -1,0 +1,7 @@
+Session: 2026-10-10T00:28:56Z
+Plan: plan/2026/09/07-phase-06-runtime-routing-heartbeat.md
+Branch: 07-phase-06-runtime-routing-heartbeat
+
+Corrected the detailed offset namespace inventory so it no longer describes the old non-null BTreeMap API. It now records the nullable table/key/value signature, namespace-independent null-table error, namespaced null-key error, pass-through null values/queue fields, and Java-versus-Rust mutation ownership boundary. Documentation commit `5dd403e4`; `git diff --check` passes. No code or fixture changed.
+
+The nullable offset correction and seven-case fixture are validated by focused native and Java drift tests plus the full offline Maven verify. Broader Phase 6 source/API/input/reverse-export reconciliation remains active; P6-V04 stays `PENDING_PHASE_19`.

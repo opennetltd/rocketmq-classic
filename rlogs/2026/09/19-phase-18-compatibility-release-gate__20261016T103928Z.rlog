@@ -1,0 +1,24 @@
+# Phase 18 pinned lifecycle/thread helper audit — 2026-10-16T10:39Z
+
+- Revision before this documentation slice: `ddd831df`; branch
+  `phase/19-phase-18-compatibility-release-gate`; worktree was clean.
+- Verified the Java source at pinned commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9` (not the Java repository's
+  working-tree HEAD).
+- `StartAndShutdown` declares `start`, `shutdown`, and default no-op
+  `preShutdown`; `AbstractStartAndShutdown` starts children in insertion order
+  and shuts them down in reverse order. Existing Phase 6/7 owners and the
+  `MQFaultStrategy` fixture/matrix map the client-facing lifecycle behavior.
+- `AsyncShutdownHelper`'s only client-source callsite is
+  `MQClientAPIFactory.shutdown`; pinned source has no separate factory creation
+  callsite. It coordinates shutdown for that implementation-only multi-client
+  helper; the primary Rust runtime owns one remoting client.
+- `ThreadUtils` declares 20 public static overloads. Client callsites cover
+  four consume executors, PullMessageService, AsyncTraceDispatcher, and
+  Remoting client/server workers. Existing Rust owner flows use bounded consume
+  workers and owned pull/trace/remoting tasks. Crosswalk added to
+  `docs/compatibility/PHASE_6_RUNTIME_INVENTORY.md`; broad P18-V01 remains open.
+- No product-code change or test run in this documentation-only slice. No plan
+  changed and no external Java files were modified.
+- `git diff --check` passed. No Rust test was rerun because this slice only records
+  source and existing lifecycle-test crosswalks.

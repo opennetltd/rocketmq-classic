@@ -1,0 +1,8 @@
+# Phase 18 execution session — 20261015T000122Z
+
+- Rechecked current branch `phase/19-phase-18-compatibility-release-gate`; Java source baseline remains the pinned 5.5.1 commit from the plan.
+- Reverse-surface cleanup: made Push/Pull default implementation constants crate-private except the Java-public consumer group constant; made the POP batch-ACK builder test-only/private; made class-filter subscription builder crate-private and removed its public re-export. Updated Phase 8–10/13 matrices. Pull result tests now create class-filter subscriptions through `PushConsumer::subscribe_with_class_filter`; added a compile-fail check for importing the internal helper.
+- `cargo test -p rocketmq-classic-consumer --all-features --locked`: passed (219 unit tests, all crate integration targets, 12 doctests; class-filter visibility doctest passed).
+- `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check` and `git diff --check`: passed after applying rustfmt.
+- Phase 18 P18-V01 semantic parity audit, P18-V04 CI evidence, and final phase-wide verification remain open; this entry records only the scoped API-surface change.

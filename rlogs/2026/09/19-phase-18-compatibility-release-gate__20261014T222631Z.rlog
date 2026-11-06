@@ -1,0 +1,70 @@
+# Phase 18 current-revision server-free gates — 2026-10-14T22:26:31Z
+
+- Branch `phase/19-phase-18-compatibility-release-gate`, HEAD `2c87e4ed`;
+  working tree was clean before this documentation update. Java source remains
+  read-only at `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- PASS: `cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked`.
+- PASS: strict workspace Clippy,
+  `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`;
+  `cargo fmt --all -- --check`; differential comparator self-test; 37-scenario
+  manifest validation; workspace metadata/license/dependency direction.
+- PASS: `mvn -f compat/java-reference/pom.xml verify` (37 scenarios, fixture
+  drift checks and Java/Rust cross-decodes); fuzz smoke (104 frame seeds, 10
+  message seeds, 1,824 bounded mutations); offline deterministic race/leak
+  smoke (16 cases × 3); release example build; offline benchmark compilation;
+  seven `cargo package --workspace --list --locked --allow-dirty` listings;
+  `git diff --check`.
+- P18-V02 server-free gates are verified on this revision. P18-V01 remains open
+  for complete source/API/settings/overload/input/error/control-flow and
+  reverse-export reconciliation. P18-V04 still lacks a current GitHub Ubuntu
+  CI result for the address profile; no workflow run exists for this local
+  branch. Phase 19 Docker/Broker validation and pre-publication registry checks
+  remain future acceptance work. No push, publication, or tag was performed.
+
+# Push consumer nullable-group surface correction — 2026-10-14T22:38:45Z
+
+- Removed the Rust-only nullable getter/setter aliases. The canonical Push
+  config/facade group getter and setter now use `Option<String>` to preserve
+  Java `String` nullability; updated Phase 10 crosswalk and compile-fail docs.
+- Java oracle: `MixAll.object2Properties` omits null fields (`common/.../MixAll.java:348`),
+  so Push running-info omits `consumerGroup` when the live group is null. Added a
+  regression assertion against the local running-info body.
+- First consumer compile exposed two running-info `BTreeMap` conversions and
+  three tests expecting old getter/setter types; corrected those call sites.
+  An initial null-group running-info test used the broker-routed API and failed
+  with `InvalidRoute("null consumer group")`; moved the assertion to local body
+  construction and restored a valid group before shutdown.
+- PASS: `cargo test -p rocketmq-classic-consumer --all-features --locked`
+  (219 unit, 9 admin, 2 facade API, 19 Lite/POP, 3 offsets, 1 orderly, 2 pull
+  consumer, 7 pull-result, 1 push-pipeline, 2 rebalance, and 8 doctests).
+- PASS: `cargo test --workspace --all-features --locked`;
+  `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`;
+  `cargo fmt --all -- --check`; `git diff --check`.
+- The full Phase 18 source/API/settings/overload/input/error/control-flow and
+  reverse-export audit remains open; these gates validate the nullable-group
+  correction only and do not close P18-V01 or any Phase 19 requirement.
+
+# Current-revision Phase 18 server-free gate rerun — 2026-10-14T22:43:51Z
+
+- Revision under validation: `8f530402` (Push consumer canonical nullable group
+  API correction); Java source remains read-only at
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`.
+- PASS: `cargo test --workspace --locked` and
+  `cargo test --workspace --all-features --locked`.
+- PASS: strict all-target/all-feature workspace Clippy,
+  `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`;
+  `cargo fmt --all -- --check`; `git diff --check`.
+- PASS: `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios,
+  fixture drift, source probes and Java/Rust cross-decodes); differential
+  comparator self-test; 37-scenario manifest validation; workspace metadata,
+  licenses and dependency direction.
+- PASS: `bash tests/stress/run-offline-smoke.sh` (16 cases × 3); remoting fuzz
+  smoke (104 frame seeds, 10 message seeds, 1,824 bounded mutations); release
+  example build; offline benchmark compilation; seven workspace package-content
+  listings.
+- P18-V02 server-free gates now pass on this revision. P18-V01 remains open for
+  complete source/API/settings/overload/input/error/control-flow and Rust
+  reverse-export reconciliation. P18-V04 still lacks a GitHub Ubuntu
+  address-profile result. Phase 19 local Docker/Broker setup and scenarios have
+  not run. No push, publication or tag was performed.

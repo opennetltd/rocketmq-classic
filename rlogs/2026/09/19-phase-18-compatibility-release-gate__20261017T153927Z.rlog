@@ -1,0 +1,58 @@
+# P18-V01 PullMessageRequestHeader field surface and P18-V02 current-revision gate — 2026-10-17T15:39:27Z
+
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Java oracle: RocketMQ client 5.5.1 commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`; inspected read-only.
+- Removed Rust-only `PullMessageRequestHeader::lite_topic`, which is absent
+  from the pinned Java header. Encoding no longer writes `liteTopic`; decoding
+  ignores it as an unknown field. Added
+  `pull_request_header_does_not_export_java_absent_lite_topic_field` and
+  updated the header validation inventory. Code commit: `86e7cb34`.
+
+## Verification
+
+- `cargo test --locked -p rocketmq-classic-protocol`: PASS (128 unit tests,
+  header inventory and validation matrices, integration tests, and 42 doctests).
+- Default and all-feature workspace tests with `--test-threads=1`: PASS in
+  Linux ARM64 `rust:1.85.0-bookworm` using `docker run --init`.
+- `cargo check --workspace --all-targets --all-features --locked --quiet` and
+  strict all-target/all-feature workspace Clippy: PASS in the same container.
+- Host `cargo fmt --all -- --check` and `git diff --check`: PASS.
+- `mvn -q -f compat/java-reference/pom.xml verify`: PASS; 37 scenarios,
+  fixture drift checks, and Java/Rust cross-decodes. The host JDK emitted its
+  existing `Unsafe` and reflective-final-field warnings.
+- Differential comparator self-test and 37-row manifest validation: PASS.
+- `bash tests/stress/run-offline-smoke.sh`: PASS; 16 deterministic race/leak
+  cases × 3 repetitions.
+- Remoting `fuzz_smoke`: PASS; 105 frame seeds, 11 message seeds, 1,856
+  mutations, 146 frame decodes, and 113 message decodes.
+- Release examples build and offline benchmark: PASS. Linux AArch64
+  observations: frame encode/decode 1,191.8 ns and 4,676 bytes per iteration;
+  Zstandard message decode 705.3 ns and 197,493 bytes; Producer send request
+  construction 774.3 ns and 3,665 bytes; 128-entry route lookup 12.6 ns and
+  zero bytes; pending completion 5,461.3 ns and 9,530 bytes. These are
+  observations, not acceptance thresholds.
+- Locked Cargo metadata, workspace metadata/license/dependency checks, and
+  seven package file lists containing `LICENSE` and `NOTICE`: PASS. Four Core
+  Unique ID tests pass under both `TZ=UTC` and `TZ=Asia/Taipei`.
+- The initial combined timezone wrapper used the slash in `Asia/Taipei` as a
+  temporary log-path separator and stopped before that case. Re-running both
+  timezone commands directly passed all four tests each.
+
+## Remaining work
+
+- Broad bidirectional P18-V01 Java source/API/settings/overload input/error/flow
+  reconciliation and Rust reverse-export audit remain open. In particular,
+  Java `decodeCommandCustomHeaderDirectly(..., false)` uses reflection and
+  catches field decoding errors individually before `checkFields()`, while the
+  Rust direct custom-header decoder ignores the hint and remains strict.
+- Current-revision GitHub Ubuntu/native Windows evidence for P18-V04 remains
+  open.
+- Phase 19 has 7 of 37 live scenarios passing; the remaining 30 local
+  Docker/Broker scenarios, `run-local.sh --all`, and two-Broker/TLS/ACL/feature
+  profiles remain automatic work.
+- Release version intent and registry dependency-resolution checks remain open.
+- Owner-only deployment/live Broker checks remain a separate final manual
+  handoff. No plan, Java oracle, remote branch, tag, publication, Broker
+  operation, or deployment was changed.

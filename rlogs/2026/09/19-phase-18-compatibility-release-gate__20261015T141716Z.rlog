@@ -1,0 +1,227 @@
+Session: 2026-10-15 14:17 UTC
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Scope: P18-V01 Remoting connectTimeoutMillis Bootstrap timing slice
+
+Source review
+- Compared pinned Java NettyRemotingClient.start(), fetchBootstrap(), and
+  createBootstrap() with Rust RemotingClient startup and connection selection.
+- Java configures direct Bootstrap at start; proxy Bootstrap is created and
+  cached on first use per CIDR, reading the then-current config value.
+- Rust previously used only the start snapshot for direct and proxy dials, and
+  NameServer scans imposed an extra deadline that did not match Bootstrap
+  timeout behavior when the configured value was zero or changed for a proxy.
+
+Implementation
+- Code commit: aca955cd fix(remoting): match proxy bootstrap timeout timing.
+- Rust now snapshots direct timeout at start, caches live timeout on first
+  matched proxy-CIDR use, reuses that value for that CIDR, and reads newer
+  values for later CIDRs. Reachability scans use an optional operation deadline
+  so zero means no separate connect cap.
+- Added Rust tests for post-start proxy timeout capture/cache, proxy scan
+  timeout sampling, and zero-timeout NameServer scanning.
+- Extended Java RemotingLiveConfigProbe to verify direct start-time capture,
+  cached proxy reuse, and first-use capture for another CIDR.
+- Updated the connectTimeoutMillis row in
+  docs/compatibility/PHASE_3_REMOTING_INVENTORY.md and appended this revision's
+  evidence to docs/release-checklist.md. No plan files were edited.
+
+Verification
+- `cargo test -p rocketmq-classic-remoting --all-features --locked`: passed;
+  88 unit, 6 codec, 1 fuzz regression, 5 security, 93 transport, 5 doctests.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check`: passed.
+- `mvn -f compat/java-reference/pom.xml verify`: passed; 37 scenarios,
+  Remoting live-config probe, Java/Rust cross-decodes and fixture checks.
+- `git diff --check`: passed before code commit.
+
+Status
+- The connectTimeoutMillis Bootstrap timing row is closed on aca955cd.
+- Broad P18-V01, full-workspace P18-V02 gates on the eventual final revision,
+  current-revision GitHub Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker
+  automation, and release version/registry checks remain open. Owner-run
+  deployment/live Broker checks remain manual Phase 19 validation.
+- Branch phase/19-phase-18-compatibility-release-gate is local and ahead of
+  origin; no push, tag, publication, or live Broker action was performed.
+
+Session: 2026-10-15 14:39 UTC
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Scope: P18-V01 Remoting per-channel idle-timeout and worker-group setting timing
+
+Source review
+- Compared pinned Java channel pipeline initialization with Rust's connection
+  creation and processor-worker startup paths.
+- Java reads `clientChannelMaxIdleTimeSeconds` and
+  `disableNettyWorkerGroup` while each channel pipeline is initialized. Rust
+  previously captured both at construction and could not reflect later Java
+  config changes.
+
+Implementation
+- Code commit: b37d8522 fix(remoting): read channel settings per connection.
+- Added live Rust adapters. Each new connection samples both values before
+  dialing; existing connections keep their initialized idle timer and dispatch
+  path. The worker pool starts at client start so later channels can choose
+  either dispatch mode.
+- Rust loopback tests cover post-start setting changes and existing-channel
+  retention. Java `RemotingLiveConfigProbe` checks the new channel's idle
+  handler and executor selection.
+- Updated the two setting rows in
+  `docs/compatibility/PHASE_3_REMOTING_INVENTORY.md` and appended evidence to
+  `docs/release-checklist.md`. No plan files were edited.
+
+Verification
+- `cargo test -p rocketmq-classic-remoting --all-features --locked`: passed;
+  89 unit, 6 codec, 1 fuzz regression, 5 security, 95 transport, 5 doctests.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check`: passed.
+- `mvn -f compat/java-reference/pom.xml verify`: passed; 37 scenarios,
+  Remoting live-config probe, Java/Rust cross-decodes and fixture checks.
+- `git diff --check`: passed before code commit; documentation diff check is
+  recorded with the following documentation commit.
+
+Status
+- The two Remoting setting-timing rows are closed on b37d8522.
+- Broad P18-V01, final-revision full-workspace P18-V02 gates, current-revision
+  GitHub Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker automation, and
+  release version/registry checks remain open. Owner-run deployment/live Broker
+  checks remain Phase 19 manual validation.
+
+Session: 2026-10-15 14:52 UTC
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Scope: P18-V01 Remoting Bootstrap socket-buffer, watermark, and allocator timing
+
+Source review
+- Pinned Java direct Bootstrap reads socket buffers, custom write watermarks,
+  and allocator choice while `start()` constructs the Bootstrap.
+- `createBootstrap()` for a matched proxy CIDR reads socket buffers when that
+  CIDR is first used and caches the Bootstrap; it does not set custom write
+  watermarks or the allocator option. Rust previously used construction-time
+  snapshots for all routes.
+
+Implementation
+- Code commit: 7b00a52f fix(remoting): sample bootstrap settings at source timing.
+- Added live Rust adapters for socket send/receive buffers, write watermarks,
+  and frame-pool enablement. Direct settings are captured at `start()`; proxy
+  socket buffers are captured and cached per CIDR. Proxy channels use default
+  watermarks and do not use the optional frame pool.
+- Added Rust regressions for direct start snapshots, per-CIDR proxy caching,
+  direct watermark validation, and retryable startup after invalid settings.
+  Extended Java `RemotingLiveConfigProbe` to inspect direct and proxy Bootstrap
+  option maps, including reuse and later-CIDR reads.
+- A first all-feature Rust run failed because an existing frame-limit child
+  test invoked the internal connection helper without calling `start()`. The
+  helper now follows the public lifecycle and shuts down its client. The full
+  Remoting suite then passed; the targeted frame-limit test passed again after
+  the cleanup adjustment.
+- Updated the five setting rows and appended release evidence.
+  No plan files were edited.
+
+Verification
+- `cargo test -p rocketmq-classic-remoting --all-features --locked`: passed;
+  91 unit, 6 codec, 1 fuzz regression, 5 security, 95 transport, 5 doctests.
+- Targeted `java_frame_max_length_property_is_applied_to_new_connections`:
+  passed after the test lifecycle correction.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check`: passed.
+- `mvn -f compat/java-reference/pom.xml verify`: passed; 37 scenarios,
+  Remoting live-config probe, Java/Rust cross-decodes and fixture checks.
+- `git diff --check`: passed before code commit.
+
+Status
+- The direct/proxy source-timing rows for socket buffers, write watermarks,
+  and allocator selection are closed on 7b00a52f.
+- Other Remoting settings, full bidirectional P18-V01 reconciliation,
+  final-revision workspace P18-V02, current-revision GitHub Ubuntu/P18-V04,
+  Phase 19 local Docker/Broker automation, and release version/registry checks
+  remain open. Owner-run deployment/live Broker checks remain manual.
+
+Session: 2026-10-15 15:00 UTC
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Scope: P18-V01 Remoting `useTLS` setting timing
+
+Source review
+- Java builds its SSL context when the client is constructed, then reads
+  mutable `useTLS` for each new channel. If no SSL context was captured,
+  enabling the flag later cannot add TLS to the channel.
+- Rust previously used `TransportMode` as both context and channel decision,
+  so it could not turn TLS off for a later channel after construction.
+
+Implementation
+- Code commit: 04c219dc fix(remoting): read TLS toggle for new channels.
+- Rust now exposes a live `useTLS` adapter, captures the connector at
+  construction, and samples the toggle per new connection before handshake.
+  Existing connections retain their established transport mode.
+- Added Rust loopback coverage for post-start disable/enable and for enabling
+  the toggle when no TLS connector was captured. Extended Java
+  `RemotingLiveConfigProbe` to mutate `useTLS` after client start and verify a
+  new channel omits `SslHandler`.
+- Updated the Remoting inventory and release checklist. No plan files were
+  edited.
+
+Verification
+- `cargo test -p rocketmq-classic-remoting --all-features --locked`: passed;
+  91 unit, 6 codec, 1 fuzz regression, 5 security, 97 transport, 5 doctests.
+- `cargo clippy -p rocketmq-classic-remoting --all-targets --all-features
+  --locked -- -D warnings`: passed.
+- `cargo fmt --all -- --check`: passed.
+- `mvn -f compat/java-reference/pom.xml verify`: passed; 37 scenarios,
+  Remoting live-config probe, Java/Rust cross-decodes and fixture checks.
+- `git diff --check`: passed before code commit.
+
+Status
+- The Remoting `useTLS` setting-timing row is closed on 04c219dc.
+- Broad P18-V01, final-revision full-workspace P18-V02, current-revision GitHub
+  Ubuntu/P18-V04 evidence, Phase 19 local Docker/Broker automation, and release
+  version/registry checks remain open. Owner-run deployment/live Broker checks
+  remain Phase 19 manual validation.
+
+Session: 2026-10-15 15:12 UTC
+Plan: plan/2026/09/19-phase-18-compatibility-release-gate.md
+Scope: Current-revision server-free P18-V02 gates after Remoting `useTLS`
+
+Revision
+- Code revision: 04c219dc. Documentation-only follow-up: 44d69079.
+- `mvn -f compat/java-reference/pom.xml verify` passed after the code change;
+  it verified 37 scenarios, the Remoting live-config probe, fixture checks,
+  and Java/Rust cross-decodes.
+
+Verification
+- `env TZ=UTC cargo test --workspace --locked`: passed.
+- `cargo test --workspace --all-features --locked`: passed.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`:
+  passed.
+- `python3 tests/differential/compare.py --self-test`: passed;
+  `--validate-manifest`: 37 scenarios passed.
+- `bash tests/stress/run-offline-smoke.sh`: 16 deterministic cases passed,
+  each repeated three times.
+- `cargo run --locked -p rocketmq-classic-remoting --example fuzz_smoke`:
+  passed 104 frame seeds, 10 message seeds, 1,824 bounded mutations.
+- `cargo build -p rocketmq-classic --examples --release --locked`: passed.
+- `cargo bench --workspace --no-run --locked`: passed.
+- `cargo metadata --locked --format-version 1`: passed; 215 total packages,
+  including 208 external packages, all registry-sourced with license metadata.
+- `python3 scripts/check-workspace-metadata.py`: passed.
+- `cargo package --workspace --list --locked --allow-dirty`: listed all seven
+  packages successfully.
+- The Java-backed unique-ID fixture passed under both UTC (full workspace run)
+  and `TZ=Asia/Taipei` (focused test).
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+
+Status
+- Current-revision server-free P18-V02 is closed on code revision 04c219dc.
+- Broad P18-V01, current-revision GitHub Ubuntu/P18-V04 evidence, Phase 19
+  local Docker/Broker automation, and release version/registry-resolution
+  checks remain open. Owner-run deployment/live Broker checks remain Phase 19
+  manual validation.
+
+Addendum: Remoting setting inventory review — 2026-10-15 15:13 UTC
+- Rechecked pinned Java `NettyRemotingClient` construction/start/channel/bootstrap
+  read sites against every `NettyClientConfig` row in the Remoting inventory.
+  The timing disposition now includes construction, start, per-channel,
+  per-operation, and per-proxy-CIDR first-use snapshots; the live `useTLS`
+  toggle closes the final row identified by this review.
+- Clarified the inventory conclusion that Remoting setting-timing rows have
+  dispositions, while the broader P18-V01 API, overload/input/error/control-flow
+  and reverse-export audit remains open. No plan files were edited.

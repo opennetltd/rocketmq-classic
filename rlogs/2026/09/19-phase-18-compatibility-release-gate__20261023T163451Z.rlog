@@ -1,0 +1,45 @@
+# Phase 18 ProducerConnection assigned-Set alias verification
+
+- Recorded: 2026-10-23 16:34:51 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Java baseline: RocketMQ 5.5.1, source commit `efa1be59d6fc747ad220f036c86030f05f0419f9`
+- Product/test commit: `b41efa8b`
+
+## Gap and evidence
+
+The `ProducerConnection` Set-type correction had direct getter/setter alias
+coverage for `ConsumerConnection`, but not for `ProducerConnection` itself.
+Pinned Java's `setConnectionSet(HashSet)` retains the assigned object;
+`getConnectionSet()` returns it, and insertion through that getter is visible
+through the assigned reference.
+
+The Java oracle now invokes this behavior on an isolated `ProducerConnection`
+and records both reference identity and mutation visibility. The isolated DTO
+keeps the separate producer RPC response fixture at its original one-entry
+shape. Rust's Protocol regression performs the same setter/getter operation,
+checks `SharedValue::ptr_eq`, and observes the inserted connection through the
+assigned shared set.
+
+Updated `fixtures/producer/core.json` SHA-256:
+`412fb8f5d9805edb2f994876d81ca980bfccc2963a1aff2bea19b98319a1eb5a`.
+
+An initial combined fixture probe mutated the DTO later used for the RPC
+response and correctly caused the one-entry Rust response assertion to fail.
+The oracle probe was moved to its own DTO; the regenerated fixture then retained
+the one-entry RPC body and the Protocol suite passed.
+
+## Verification
+
+- `mvn -o -f compat/java-reference/pom.xml -DskipTests compile` — passed.
+- `mvn -o -f compat/java-reference/pom.xml -Dexec.args='producer-core-fixtures /Users/bruce.tsai/Projects/trio/rocketmq-classic/fixtures/producer/core.json false' exec:java` — passed.
+- `cargo test --offline --locked -p rocketmq-classic-protocol --lib` — 160 passed.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — passed.
+- `mvn -o -f compat/java-reference/pom.xml verify` — BUILD SUCCESS; validated the 37-scenario manifest, fixture drift, Java/Rust cross-decodes, 11 message fixtures, 106 typed headers, and 19 typed bodies.
+- `cargo fmt --all -- --check` and `git diff --check` — passed.
+
+This closes the direct `ProducerConnection` assigned-Set alias evidence gap
+only. Broad P18-V01 source/API/settings/input/error/control-flow and
+reverse-export reconciliation remains open. No Phase 19 path was staged or
+changed, and no push or remote CI was run. Product/test commit: `b41efa8b`;
+compatibility documentation and this run record are committed separately.

@@ -1,0 +1,49 @@
+# Phase 18 — Compatibility release gate (resumed session)
+
+- Resumed on 2026-10-13 07:40 UTC on `phase/19-phase-18-compatibility-release-gate`; inspected the active Phase 18 plan and existing worktree. Java oracle remains `/Users/bruce.tsai/Projects/3rd/rocketmq` and is read-only.
+- Corrected the benchmark's reported Remoting input length to use the encoded frame size (427 bytes) and route-lookup input size to use the key length (10 bytes), with the 128-entry route dataset explicit in the benchmark name.
+- PASS: `cargo fmt --all -- --check`; `cargo bench -p rocketmq-classic --bench offline --locked`; `cargo clippy -p rocketmq-classic --bench offline --all-features --locked -- -D warnings`.
+- Recorded fixed-input latency and allocator observations, host/toolchain, sample counts, interpretation limits, and reproduction commands in `docs/compatibility/PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`. The measurements are observations only and define no performance threshold.
+
+Linux server-free oracle/CI preparation (2026-10-13 07:50 UTC):
+- The existing Java address fixture embeds Homebrew/macOS interface details and Java vendor metadata; the Linux profile also compared the entire volatile `/proc/net/if_inet6` line. Added a Linux portable comparison that still requires the pinned Java major version 27 and exact stable API outcomes, while the Linux oracle checks loopback IPv6/interface identity and `/proc` address/interface evidence without machine-specific flags. macOS keeps strict full-fixture verification.
+- Added Java 27 setup and Phase 18 server-free Rust, Python, Maven, example, fuzz-smoke, stress-smoke, and benchmark-compilation commands to `.github/workflows/ci.yml`.
+- PASS: portable address oracle on the local Java 27 runtime via `mvn -f compat/java-reference/pom.xml compile exec:java@verify-runtime-address-fixtures -Druntime.address.fixture.verify.mode=--verify-portable`; strict complete `mvn -q -f compat/java-reference/pom.xml verify` on macOS (37 manifest scenarios, Java cross-decodes and generated-fixture checks).
+- Linux-specific Maven profile is not executable on this macOS host; CI is configured to execute it on Ubuntu. No Broker or Docker was started.
+
+Server-free CI gate change (2026-10-13 07:51 UTC):
+- CI pins Rust 1.85.0 and Java 27, then requires default/all-feature locked tests, strict workspace Clippy, Java 5.5.1 Maven verification, comparator self-test and manifest validation, deterministic fuzz/race smoke, facade example compilation, offline benchmark compilation, and workspace metadata validation. All configured jobs remain server- and Docker-free.
+- The first post-fixture-change `cargo test --workspace --locked` exposed one stale Rust unit assertion reading the removed raw `procRow` field. Updated the test to validate the stable Java-recorded address/interface pair through the Linux row parser; focused locked test `cargo test -p rocketmq-classic-core --lib linux_loopback_proc_scope_matches_invoked_java_551 --locked` passes. The original full-suite failure is retained here and will be rerun after the correction.
+
+Release-preparation metadata and docs (2026-10-13 08:09 UTC):
+- Updated README and the Phase 17 matrix to reflect Phase 18 work and its open audit status.
+- Added `docs/release-checklist.md` with the verified crate dependency order, outstanding P18-V01 items, Linux CI evidence, and Apache LICENSE/NOTICE review state.
+- Added the repository URL and per-crate descriptions without changing versions or `publish = false`.
+- PASS: `cargo metadata --locked --no-deps --format-version 1` reports all seven package descriptions, repository URLs, `Apache-2.0` metadata and unpublished status; `git diff --check` passes.
+- No tests were run for these documentation/metadata-only edits. Registry publication and tagging remain out of scope.
+
+Pull implementation accessor/send-back follow-up (2026-10-13 08:34 UTC):
+- Extended the Java 5.5.1 pull implementation accessor fixture and Rust config/facade surface for `maxReconsumeTimes` (default 16), deprecated send-back overloads, group override and retry-topic fallback. Source review confirmed Pull send-back uses a 3000 ms RPC timeout, resolves logical queue Broker names through the namespaced queue endpoint for address lookup while retaining the supplied Broker name in the header, and does not refresh a missing route before retry fallback.
+- Updated the Phase 9 matrix and release checklist. The raw `DefaultMQPullConsumerImpl` audit remains open for the other method/lifecycle/rebalance surfaces listed in the matrix; P9-V03 remains `PENDING_PHASE_19`.
+- Initial `cargo fmt --all -- --check` found a formatting delta and was corrected with `cargo fmt --all`. The first consumer test compile exposed a test-only attempt to initialize private `RouteSnapshot` state; changed the test to start from `RouteSnapshot::default()` and populate its public topic table. These failures are retained here.
+- PASS: `cargo fmt --all -- --check`; `cargo test -p rocketmq-classic-consumer --locked` (168 unit tests plus all consumer integration targets); `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`; full workspace default and all-feature locked test suites; strict workspace Clippy before the final route-refresh removal; `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios, invoked Java 5.5.1 source fixtures and generated cross-decodes); `git diff --check`.
+- No Docker or live Broker was started. The documented logical Broker/timeout behavior is offline-verified; live send-back, the remaining raw API audit, P18-V01 and Phase 19 acceptance stay open.
+
+Apache license and attribution preparation (2026-10-13 08:37 UTC):
+- Added the full root Apache License 2.0 text and preserved the Apache RocketMQ reference NOTICE for the Java 5.5.1 compatibility harness/fixtures, copying both files from the read-only reference checkout. Marked those two release-checklist items complete; package contents and dependency license/provenance review remain open.
+- PASS: `cmp LICENSE /Users/bruce.tsai/Projects/3rd/rocketmq/LICENSE`; `cmp NOTICE /Users/bruce.tsai/Projects/3rd/rocketmq/NOTICE`; `git diff --check`.
+- No build or test was needed for these text-only additions.
+
+Pull raw subscribe-queue parser parity (2026-10-13 08:50 UTC):
+- Added `PullConsumer::parse_subscribe_message_queues` for the public raw `DefaultMQPullConsumerImpl.parseSubscribeMessageQueues` surface. The method strips only the configured namespace, preserves nullable topic/broker fields, and collects like a Java set.
+- Expanded the invoked Java 5.5.1 accessor fixture with already-logical and namespaced duplicates, retry topic, foreign namespace, null topic, and null broker inputs; regenerated the fixture and updated the Phase 9 method matrix. `fetchPublishMessageQueues` and other raw implementation methods remain open.
+- Diagnostic failures retained: the first differential run exposed a missing Rust test namespace; the next exposed that Rust `BTreeSet` iteration order differs from the fixture's canonical Java key order. The test now supplies the same namespace and sorts canonical keys before comparison.
+- PASS: targeted accessor/parser differential; `cargo test -p rocketmq-classic-consumer --locked` (168 unit tests and all consumer integration targets); `cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings`; `mvn -q -f compat/java-reference/pom.xml verify` (37 scenarios and fixture drift checks); `cargo fmt --all -- --check`; `git diff --check`.
+- No live Broker or Docker was used. This closes only the raw subscribe-queue parser mapping; P18-V01 and Phase 19 validation remain open.
+
+Pull raw publish-queue lookup parity (2026-10-13 10:23 UTC):
+- Implemented `PullConsumer::fetch_publish_message_queues` for `DefaultMQPullConsumerImpl.fetchPublishMessageQueues`. It passes the caller's topic unchanged, returns writable queues in Java route order, strips the configured namespace from returned queues, and distinguishes the Java missing/empty-route message from wrapped query/conversion failures.
+- Source review caught and corrected an initial design that would have used the shared route-refresh path. Java `MQAdminImpl.fetchPublishMessageQueues` queries NameServer directly and does not publish the result into the shared route cache; `ClientRuntime::get_topic_publish_queues` now performs direct API lookup and conversion without cache updates or consumer callbacks.
+- Added scripted NameServer coverage for exact topic, queue ordering, repeated lookup, a route disappearing after success, absent/empty routes, malformed route data, and Java error text; core test confirms direct lookup leaves the route cache empty. Updated Phase 6 and Phase 9 mappings.
+- PASS: `cargo test -p rocketmq-classic-core --locked` (all core unit/integration/doc targets); `cargo test -p rocketmq-classic-consumer --locked` (168 unit tests and all consumer integration/doc targets); targeted direct-cache test; consumer admin integration target (8 tests); strict all-target/all-feature Clippy for core and consumer; formatting and diff checks.
+- No live Broker or Docker was used. P9-V03 live validation and the remaining raw implementation audit, including P18-V01, remain open.

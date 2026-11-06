@@ -1,0 +1,145 @@
+# P18-V01 Pull response header decode-mode follow-up — 2026-10-17T19:40:32Z
+
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Code revision: `fcc0f3f1 fix(protocol): match Java pull response decoding`.
+- Java oracle: RocketMQ client 5.5.1, source commit
+  `efa1be59d6fc747ad220f036c86030f05f0419f9` (read-only).
+- Fixture: `fixtures/remoting/pull-response-header-decode-modes.json`.
+- Fixture SHA-256:
+  `9ba19f1b5394e7bd6e60366770990e034e75e98f2ecff04c82059d712dc8db59`.
+
+## Parity change
+
+- Java direct decoding preserves absent nullable `Long`/`Integer` wrapper
+  fields as null. Fast mode fails on malformed numeric conversion; reflection
+  mode catches a per-field conversion error and leaves that field null.
+- Rust `PullMessageResponseHeader` now preserves nullable values and mirrors
+  both decode modes. The Pull RPC requires `nextBeginOffset`, `minOffset`,
+  `maxOffset`, and `suggestWhichBrokerId` at result construction, matching
+  Java's unboxing failure boundary.
+- Optional wrapper values stay optional in the request-code compatibility
+  matrix.
+
+## Verification
+
+- Maven `verify`: PASS, all 37 scenarios, fixture drift checks, and Java/Rust
+  cross-decodes.
+- Linux Rust 1.85.0 default and all-feature workspace tests: PASS.
+- Linux all-target/all-feature workspace check and strict Clippy: PASS.
+- Formatting and `git diff --check`: PASS.
+- Two initial test assertions encoded incorrect Java assumptions and were
+  corrected: the direct RPC fixture had expected non-null wrapper values on
+  direct decode, and the validation matrix treated nullable wrapper fields as
+  required. Both corrected expectations now reflect the Java oracle.
+
+## Still open
+
+- Broad bidirectional P18-V01 source/API/settings/input/error/flow and
+  reverse-export reconciliation, including other custom-header mode differences.
+- Remaining current-revision P18-V02 supplemental checks: differential
+  comparator/manifest, race/leak and fuzz smoke, release examples/benchmarks,
+  locked metadata/package checks, and UTC/Asia-Taipei Unique ID checks.
+- Current-revision GitHub Ubuntu and native Windows P18-V04 evidence.
+- 30 Phase 19 local Docker/Broker scenarios and required multi-Broker/TLS/ACL/
+  feature profiles.
+- Pre-publication release-version intent and registry dependency-resolution
+  checks. Owner-only production validation remains separate manual work.
+
+No plan, Java oracle, remote branch, tag, publication, Broker operation, or
+deployment was changed.
+
+## Current-revision P18-V02 supplemental gates — 2026-10-17T19:44:48Z
+
+- Code revision: `fcc0f3f1`; documentation HEAD before this record:
+  `29b38b4b`.
+- `python3 tests/differential/compare.py --self-test`: PASS.
+- `python3 tests/differential/compare.py --validate-manifest`: PASS, 37 scenarios.
+- `bash tests/stress/run-offline-smoke.sh`: PASS, 16 race/leak cases × 3.
+- `cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked`: PASS,
+  105 frame seeds, 11 message seeds, 1,856 bounded mutations, 146 frame
+  decodes, 113 message decodes.
+- `cargo build -p rocketmq-classic --examples --release --locked`: PASS.
+- `cargo bench -p rocketmq-classic --bench offline --locked --no-run`: PASS.
+- `cargo bench -p rocketmq-classic --bench offline --locked`: PASS on macOS
+  ARM64, Apple M5 Max, Rust 1.85.0. Per-iteration observations: frame
+  encode/decode 1,954.6 ns; Zstd message decode 1,038.8 ns; Producer request
+  construction 1,181.7 ns; route lookup 15.5 ns; loopback pending completion
+  64,728.4 ns. These are observations, not acceptance thresholds.
+- `cargo metadata --format-version 1 --locked --no-deps`: PASS.
+- `cargo package --workspace --list --locked --allow-dirty`: PASS.
+- `python3 scripts/check-workspace-metadata.py`: PASS, package licenses and
+  dependency direction.
+- `TZ=UTC cargo test -p rocketmq-classic-core --lib unique_id::tests --locked`:
+  PASS, 4 tests. Same command under `TZ=Asia/Taipei`: PASS, 4 tests.
+- Final `cargo fmt --all -- --check` and `git diff --check`: PASS.
+
+This closes the remaining server-free P18-V02 supplemental gates for
+`fcc0f3f1`. Broad P18-V01, current-revision GitHub Ubuntu/native Windows
+P18-V04 evidence, Phase 19 local Docker/Broker scenarios and profiles, and
+pre-publication version/registry checks remain open. Owner-only production
+validation remains separate manual work.
+
+## P18-V01 FastCodesHeader production source inventory — 2026-10-17T19:47:25Z
+
+- Scanned the pinned Java client `remoting/src/main/java` source tree for
+  production `FastCodesHeader` implementations. Exactly four were found:
+  `PullMessageRequestHeader`, `PullMessageResponseHeader`,
+  `SendMessageResponseHeader`, and `SendMessageRequestHeaderV2`.
+- Each maps to an invoked Java fast/reflection fixture and a Rust comparison.
+  The fixtures cover valid and missing fields plus representative conversion
+  failures; Send V2 also covers inherited-field decode behavior and V1
+  conversion.
+- Rust implements mode-specific decoding for all four classes. The full
+  current-revision P18-V02 suite verified these fixtures on code revision
+  `fcc0f3f1`.
+- This closes the bounded production `FastCodesHeader` inventory. Generic
+  reflection decoding for other typed headers and broad bidirectional P18-V01
+  source/API/settings/input/error/flow reconciliation remain open.
+
+## Consumer offset header follow-up and full current-revision P18-V02 — 2026-10-17T20:26:39Z
+
+- Repository: /Users/bruce.tsai/Projects/trio/rocketmq-classic.
+- Branch: phase/19-phase-18-compatibility-release-gate.
+- Starting code HEAD: 51168d2b. Final code HEAD for this record: 3beabab0.
+- Java oracle: /Users/bruce.tsai/Projects/3rd/rocketmq, RocketMQ 5.5.1 source commit efa1be59d6fc747ad220f036c86030f05f0419f9, read-only.
+- Scope: P18-V01 consumer offset typed-header decode behavior and current-revision P18-V02 gates.
+
+## Oracle finding and code commits
+
+- Source inspection confirmed QueryConsumerOffsetRequestHeader, UpdateConsumerOffsetRequestHeader, and QueryConsumerOffsetResponseHeader do not implement FastCodesHeader. RemotingCommand therefore uses the generic reflective path regardless of its useFastEncode hint. The decoder catches missing or invalid per-field conversions; Boolean.parseBoolean maps malformed setZeroIfNotFound to false; these three checkFields implementations are no-ops. Java's String, Integer, and Long header values can therefore remain null after direct decoding despite CFNotNull annotations.
+- Added OffsetHeaderDecodeModeFixtures and fixtures/remoting/offset-header-decode-modes.json. Rust models the direct-decoded fields as nullable, follows per-field reflection recovery under either mode hint, and checks response offset at the consumer RPC result boundary.
+- Fixture SHA-256: 2e911e6369ef5260ac73ad7ecbd3db9b38d190f8b080b5d36fc46997e7f20ddb.
+- Code commit: b59431e4 fix(protocol): match Java offset header decoding.
+- The first full Linux workspace run exposed a timeout in consumer_lookup_uses_timeout_mutated_after_runtime_construction because its first NameServer route lookup also used the mutated 150 ms timeout. The test now warms and verifies the route under the original 3000 ms timeout before applying the Java fixture's 150 ms value to the Broker RPC. The focused test and all 17 runtime_lookup tests pass.
+- Test-only commit: 3beabab0 test(core): isolate live lookup timeout case.
+
+## Current-revision verification on 3beabab0
+
+Linux ARM64 container: rust:1.85.0-bookworm, Docker --init, isolated target directory.
+
+- cargo test --workspace --locked: PASS.
+- cargo test --workspace --all-features --locked: PASS.
+- cargo check --workspace --all-targets --all-features --locked: PASS.
+- cargo clippy --workspace --all-targets --all-features --locked -- -D warnings: PASS.
+- mvn -f compat/java-reference/pom.xml verify: PASS; all 37 scenarios, fixture-drift checks and Java/Rust cross-decodes passed, including the new offset-header fixture.
+- python3 tests/differential/compare.py --self-test: PASS.
+- python3 tests/differential/compare.py --validate-manifest: PASS, 37 scenarios.
+- bash tests/stress/run-offline-smoke.sh: PASS, 16 deterministic race/leak cases × 3 repetitions.
+- cargo run -p rocketmq-classic-remoting --example fuzz_smoke --locked: PASS, 105 frame seeds, 11 message seeds, 1,856 mutations, 146 frame decodes, 113 message decodes.
+- cargo build -p rocketmq-classic --examples --release --locked: PASS.
+- cargo bench -p rocketmq-classic --bench offline --locked --no-run: PASS.
+- cargo bench -p rocketmq-classic --bench offline --locked: PASS on Linux ARM64, Rust 1.85.0. Observed per-iteration times: frame encode/decode 1,197.0 ns; Zstd message decode 700.7 ns; Producer request construction 788.8 ns; route lookup 13.0 ns; loopback pending completion 5,367.3 ns. These are observations, not acceptance thresholds.
+- cargo metadata --format-version 1 --locked --no-deps: PASS.
+- cargo package --workspace --list --locked --allow-dirty: PASS for seven packages.
+- python3 scripts/check-workspace-metadata.py: PASS, workspace metadata, package licenses and dependency direction.
+- TZ=UTC cargo test -p rocketmq-classic-core --lib unique_id::tests --locked: PASS, 4 tests.
+- TZ=Asia/Taipei cargo test -p rocketmq-classic-core --lib unique_id::tests --locked: PASS, 4 tests.
+- cargo fmt --all -- --check and git diff --check: PASS.
+
+## Diagnostic notes and remaining work
+
+- A macOS cargo test -p rocketmq-classic-remoting --locked run passed its 131 library tests, then the codec integration-test child remained in dyld startup. A live sample showed only _dyld_start before Rust main; the command was interrupted. The complete default and all-feature workspace suites subsequently passed in Linux on 3beabab0.
+- Compatibility API/config mapping, request-code matrix, requirement audit, and release checklist were updated in the worktree; documentation commit is pending.
+- Broad P18-V01 source/API/settings/input/error/flow and reverse-export reconciliation remains open. Current-revision GitHub Ubuntu/native Windows P18-V04 evidence, 30 Phase 19 Docker/Broker scenarios and required profiles, and pre-publication version/registry dependency resolution remain open. Owner-only production checks remain separate final manual work.
+- Plans were not edited. The Java oracle remained read-only. No remote branch, tag, publication, Broker operation, or deployment was changed.

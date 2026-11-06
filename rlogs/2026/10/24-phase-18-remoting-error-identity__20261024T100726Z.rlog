@@ -1,0 +1,38 @@
+# Phase 18 Remoting ErrorSource identity equality
+
+- Recorded: 2026-10-24 10:07:26 UTC
+- Workspace: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`
+- Branch: `phase/18-phase-18-compatibility-closure`
+- Code revision: `1e928372` (`fix(remoting): match Java throwable identity equality`)
+- Pinned Java source: RocketMQ 5.5.1,
+  `efa1be59d6fc747ad220f036c86030f05f0419f9`
+
+## Change
+
+`ErrorSource` previously compared wrapped causes by rendered source-chain text.
+Java `Throwable.equals` inherits identity equality from `Object`. Rust now
+compares the identity of its shared `Arc` error object, so clones remain equal
+and separate causes with the same message compare unequal. A regression covers
+both `ErrorSource` and derived `TransportError` equality. The request-failure
+classification test now checks the mapped variant, address, and cause message
+instead of constructing a second error object and expecting identity equality.
+
+The Remoting inventory and known-differences note now reflect this mapping. The
+older release-checklist entry is retained as historical evidence and
+superseded by the new follow-up entry.
+
+## Verification
+
+- `cargo test --offline --locked -p rocketmq-classic-remoting`: passed (146
+  unit, 9 codec, 1 fuzz-regression, 7 security, 109 transport tests, and 20
+  doctests).
+- `cargo clippy --offline --locked -p rocketmq-classic-remoting --all-targets
+  --all-features -- -D warnings`: passed.
+- `cargo fmt --all` and `git diff --check`: passed.
+- The first full package run exposed the old value-comparison assertion in
+  `asynchronous_write_failure_matches_java_request_fail_classification`; that
+  assertion was updated to check classification fields, and the full package
+  run then passed.
+- This package verification does not refresh the workspace-wide P18-V02 gates
+  for revision `1e928372`. No push or remote CI was run. Native Windows runtime
+  and Phase 19 Broker/Docker evidence remain separate.

@@ -1,0 +1,7 @@
+# Phase 18 continuation — 2026-10-18T18:35:20Z
+
+- Branch: `phase/18-phase-18-compatibility-closure`. Java oracle at `/Users/bruce.tsai/Projects/3rd/rocketmq` remained read-only. Existing uncommitted Phase 19 files were not staged or changed.
+- Pinned Java 5.5.1 `DeleteKVConfigRequestHeader` exposes no public fields. Made Rust `namespace` and `key` crate-private, added Java-equivalent accessors and a compile-fail doctest, migrated Core call sites, and expanded the invoked fast/reflection decode fixture plus Java API inventory.
+- Verification passed: workspace all-target/all-feature `cargo check`; Protocol header validation and 89 doctests; Remoting query/admin differential; both Core Delete KV RPC regressions; strict all-target/all-feature Clippy for Protocol, Remoting and Core; pinned Maven `verify` (37 scenarios, fixture checks, 66 typed-header and 15 typed-body cross-decodes); formatting and `git diff --check`.
+- Query-admin fixture SHA-256: `645d41ced3b7bb8ccb355be4546867207335bf7eb2f40aab889d2583aac5d461`. Code commit: `cd3742dc` (`fix(protocol): align DeleteKV header visibility`). Checklist and this log are tracked separately.
+- This closes one header visibility row only. Broad P18-V01 bidirectional reconciliation, the final current-revision P18-V02 gate, current GitHub Ubuntu/native Windows P18-V04 evidence, and Phase 19's 30 missing local Broker/Docker scenario runners/profiles remain open. Owner-only manual validation remains in the separate handoff.

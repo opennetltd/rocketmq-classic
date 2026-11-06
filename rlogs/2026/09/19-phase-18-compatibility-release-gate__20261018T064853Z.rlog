@@ -1,0 +1,31 @@
+# Phase 18 Running Info property-key parity — 2026-10-18T06:48:53Z
+
+- Branch: `phase/19-phase-18-compatibility-release-gate-resume`; base:
+  `a13ce233`. Java reference checkout was read-only at its existing `master`
+  HEAD; pinned source commit `efa1be59d6fc747ad220f036c86030f05f0419f9` was
+  read with `git show`. Existing untracked Java file `broker/src/test/java/org/apache/rocketmq/broker/aaaa.java` was preserved.
+- Source audit found that Java's public
+  `ConsumerRunningInfo.PROP_CONSUME_ORDERLY` value is
+  `PROP_CONSUMEORDERLY`; Rust emitted `PROP_CONSUME_ORDERLY`. Added all six
+  Java public property-key constants to `ConsumerRunningInfoBody`, switched
+  Push/Pull Running Info generation to those constants, and corrected the
+  Push wire key.
+- Extended the pinned Java Running Info fixture with all six constant names
+  and values plus orderly/thread-pool properties. Regenerated its dependent
+  MqClientAdmin aggregate fixture from the same Java oracle. The updated
+  SHA-256 values are `54ba7d8dba8b942528eed61d3d15a273a23b944ba4653824300d09c579ef026e`
+  and `ae161fbf6d2ba14453c7ff91b99ca5be3ae9aaae7f55d46026276ade1de6fe60`.
+- Source-backed Rust checks: Protocol Running Info body test PASS (1 test);
+  Push Running Info property-generation test PASS (1 test). Strict Clippy
+  passed for Protocol and Consumer with all targets/features; `cargo fmt
+  --all -- --check` and `git diff --check` passed.
+- `mvn -f compat/java-reference/pom.xml compile` passed. The initial full
+  `verify` exposed expected drift in the MqClientAdmin aggregate fixture after
+  the body fixture changed; regenerated that dependent fixture, then
+  `mvn -f compat/java-reference/pom.xml verify` passed: 37 scenarios, 66
+  typed-header cross-decodes and 15 typed-body cross-decodes. The dedicated
+  Running Info and MqClientAdmin fixture checks both passed.
+- Pinned Java helper methods used only by `rocketmq-tools` were reviewed
+  against the Phase 17 tools exclusion; client DTO fields/constants remain
+  mapped. Broader P18-V01 audit remains open. Pre-existing Phase 19
+  README/runner edits were not staged.

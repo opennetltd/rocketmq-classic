@@ -1,0 +1,23 @@
+# Phase 3 remoting transport — execution log (20260927T043501Z)
+
+## Scope and decisions
+- Continued the required Java 5.5.1 parity review; Phase 3 remains unaccepted and Phase 4 has not started.
+- Compared Java `NettyRemotingAbstract.buildProcessRequestHandler` and `UtilAll.exceptionSimpleDesc` with Rust inbound processor/hook/pipeline failure handling.
+- Rust already returned `SYSTEM_ERROR` on failed inbound execution, but discarded available Rust failure messages in favor of the generic `system error`. Updated response remarks to preserve typed error messages and string panic payloads. Non-string panic payloads use a generic Rust remark. Java's exception class/description plus first stack frame cannot be represented exactly and remains a documented partial difference.
+- Corrected the Phase 3 inventory's stale statement that default encrypted-key behavior remains different; built-in PBES1/PBES2 support now covers Java's fixture and supported RustCrypto algorithms. Unsupported formats remain a known limitation.
+
+## Changes
+- `crates/rocketmq-classic-remoting/src/client/processor.rs`: retain before/after hook, pipeline and processor error details in inbound `SYSTEM_ERROR` remarks; preserve string panic payloads.
+- `crates/rocketmq-classic-remoting/tests/transport.rs`: assert hook and processor failure remarks and response opaque.
+- `docs/compatibility/PHASE_3_REMOTING_INVENTORY.md`, `docs/compatibility/KNOWN_DIFFERENCES.md`: document exception remark mapping and remaining Java stack metadata gap; fix stale TLS key-parity summary.
+
+## Validation
+- `cargo test -p rocketmq-classic-remoting --offline` — passed (39 unit, 4 codec integration, 67 transport integration tests).
+- `cargo test --workspace --offline` — passed (11 common, 9 protocol, 1 protocol fixture, 39 remoting unit, 4 codec, 67 transport; doc tests passed).
+- `cargo clippy --workspace --all-targets --offline -- -D warnings` — passed.
+- `cargo fmt --all --check`, `python3 scripts/check-workspace-metadata.py`, `python3 tests/differential/compare.py --self-test`, and `git diff --check` — passed.
+
+## Remaining work
+- Public API/configuration bidirectional inventory and transport race/order, event/executor queue, SOCKS/NameServer/reconnect parity review remain open.
+- Final review against both Phase 3 plans remains pending. P3-V04 Broker/TLS-auth/cross-language/live validation remains for Phase 19. No Phase 4 work started.
+- Changes are not yet committed at log creation time.

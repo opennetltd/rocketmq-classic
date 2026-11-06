@@ -1,0 +1,66 @@
+# Phase 18 compatibility release gate — execution session
+
+Date: 2026-10-16 UTC
+Branch: `phase/19-phase-18-compatibility-release-gate`
+Plan: `plan/2026/09/19-phase-18-compatibility-release-gate.md`
+
+## Scope and constraints
+
+Continue the Phase 18 Java 5.5.1 parity work from the current repository state. Keep the Java oracle read-only; do not start Docker or contact a Broker, and do not push, tag, publish, or deploy. Keep implementation and documentation changes in separate commits.
+
+## Actions and evidence
+
+- Confirmed the current code revision was `c3842532` and the worktree contained only an unfinished compatibility-map documentation edit.
+- Implemented `WriteLongAsString` in the shared Protocol JSON writers. Mapped Java long-valued bean properties and offset-table values to JSON strings; quoted numeric keys in route `brokerAddrs` while preserving numeric `currIdMap` keys.
+- Added fixture-backed assertions across inherited body, route, and heartbeat serialization cases, including the existing Java expected outputs for populated DTOs.
+- Committed implementation as `de2d1a8f feat(protocol): support long writer feature`.
+- `TZ=UTC cargo test -p rocketmq-classic-protocol --all-features --locked`: passed, 122 unit tests, all Protocol integration targets, and 42 doctests.
+- `cargo clippy -p rocketmq-classic-protocol --all-targets --all-features --locked -- -D warnings`: passed.
+- `TZ=UTC mvn -o -q -f compat/java-reference/pom.xml verify`: passed, including all 37 scenarios and Java/Rust cross-decodes.
+- `cargo fmt --all -- --check` and `git diff --check`: passed.
+- Updated the compatibility API/config map and release checklist for `WriteNonStringKeyAsString` and `WriteLongAsString`; corrected the stale 9/48 and 39-unmapped inventory to 11/48 and 37-unmapped.
+
+## Remaining phase work
+
+The full-workspace P18-V02 suite has not yet been rerun after the writer-feature commits. Broad bidirectional P18-V01 API/settings/input/error/flow/reverse-export reconciliation remains open; 37 writer features are still unmapped. Current-revision Ubuntu/Windows CI evidence, Phase 19 local Docker/Broker automation, owner-validation handoff, and pre-publication version/registry resolution remain outstanding. No live Broker or Docker verification was attempted.
+
+## Follow-up local gate completion
+
+The code revision remains `de2d1a8f`; documentation HEAD is `15f9705c`.
+
+- Confirmed the pending protocol test session completed successfully. Its sole
+  selected unit test passed; remaining listed integration targets had no
+  matching test and exited successfully.
+- `TZ=Asia/Taipei cargo test -p rocketmq-classic-consumer --all-features
+  --locked
+  query_consume_time_span_queries_fresh_route_in_order_and_uses_vip_addresses`:
+  passed (1 selected unit test), covering fresh route lookup, broker order and
+  VIP addresses.
+- `cargo build -p rocketmq-classic --examples --release --locked`: passed.
+- `cargo bench -p rocketmq-classic --bench offline --no-run --locked`: passed;
+  the release benchmark executable compiled without running measurements.
+- `cargo metadata --locked --format-version 1 --no-deps`: passed and reports
+  all seven workspace packages at `0.1.0` with `Apache-2.0` metadata.
+- `cargo package --workspace --list --locked --allow-dirty`: passed and lists
+  package contents for all seven crates, including per-package `LICENSE` and
+  `NOTICE` files.
+- Together with the already recorded final-revision default/all-feature
+  workspace tests, strict workspace Clippy/check, 37-scenario Maven oracle,
+  comparator/manifest checks, race/leak smoke and fuzz smoke, the server-free
+  local P18-V02 gate is complete on this code revision. These results do not
+  close P18-V01 or the current-revision GitHub Ubuntu CI item in P18-V04.
+
+## Remaining work
+
+- P18-V01 remains open: broad Java/Rust API, settings, overload/input/error/
+  flow and reverse-export reconciliation is incomplete; 37 of 48 Java writer
+  features remain without behavior mappings.
+- P18-V04 remains open until current-revision GitHub Ubuntu evidence for the
+  Linux address profile and native Windows stack-runtime evidence are available.
+- Phase 19 local Docker/Broker automation and scenario execution remain
+  required automatic work; they are not manual-validation exceptions.
+- `docs/owner-validation.md` and owner-provided deployment/environment inputs
+  remain outstanding for the final non-local handoff.
+- Before any publication, confirm the intended `0.1.0` version set and
+  validate registry dependency resolution. No Docker/Broker verification,
+  push, tag, publication or deployment was performed.

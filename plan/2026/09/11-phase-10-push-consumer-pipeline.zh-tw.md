@@ -73,11 +73,11 @@ FOUND 更新 next pull offset、插入 message，提交有界 consume work。NO_
 
 先寫對應失敗測試／Oracle fixture，再依序實作；以下 case 必須成為可執行檢查，而非人工勾選。以下檢查不依賴 Docker 或 live Broker，使用 Java fixture、可控時鐘及 scripted peer；共通命令與證據規則見執行索引。
 
-- [ ] **P10-V01** — ProcessQueue duplicate/gap/out-of-order completion 證明 counter 正確，且不 commit 越過 unresolved offset。
-- [ ] **P10-V02** — paused-time scheduler 證明 task 有界、threshold 正確、拒絕 dropped generation，send-back 失敗仍保留 retry。
-- [ ] **P10-V04** — 每個 startup step 的 failure injection 及 slow callback shutdown，不丟失 unacknowledged work，也無 owned-task leak。
+- [x] **P10-V01** — ProcessQueue duplicate/gap/out-of-order completion 證明 counter 正確，且不 commit 越過 unresolved offset。
+- [x] **P10-V02** — paused-time scheduler 證明 task 有界、threshold 正確、拒絕 dropped generation，send-back 失敗仍保留 retry。
+- [x] **P10-V04** — 每個 startup step 的 failure injection 及 slow callback shutdown，不丟失 unacknowledged work，也無 owned-task leak。
 
-- [ ] **P10-U01** — private fixed-assignment test 注入 Java message fixture 與 scripted send-back response，驗證 listener success/partial/failure、retry 及 DLQ decision。
+- [x] **P10-U01** — private fixed-assignment test 注入 Java message fixture 與 scripted send-back response，驗證 listener success/partial/failure、retry 及 DLQ decision。
 
 ### 5.1 實作完成後的本機命令
 

@@ -1,0 +1,41 @@
+P18-V01 Java batch decoder malformed-tail parity — 2026-10-22 20:53 UTC
+
+Pinned source inspected: RocketMQ Java 5.5.1 commit
+efa1be59d6fc747ad220f036c86030f05f0419f9. `MessageDecoder.decode` catches
+record exceptions, advances the input buffer to its limit, and returns null;
+`decodesBatch` stops at that null and returns its valid prefix. Production Rust
+batch owners matching those Java call paths are pull result, POP reply, and two
+admin query methods. One-record `view_message` remains separate.
+
+Changed Rust to retain successful message prefixes in a new client-compatible
+batch decoder while preserving strict `decode_many` errors. Wired pull, POP,
+and both admin query owners to the compatible path. Pull processing reapplies
+client IDs after compact expansion; this preserves inner `UNIQ_KEY` and
+physical offset-ID behavior. Added a Java fixture with one valid record and a
+malformed trailing byte, plus Common, pull, POP, and admin regressions.
+Regenerated `fixtures/messages/records.json`; SHA-256:
+d96af9e17c6a06adb1519eefcb66b546cea5c0e6bda52b3233a6b2fe5440ee6c.
+
+Validation:
+- Focused Common batch-prefix regression passed.
+- Focused consumer pull and POP prefix regressions passed.
+- Focused admin RPC prefix regression passed.
+- `cargo test --offline --workspace --locked --quiet` passed.
+- `cargo test --offline --workspace --all-features --locked --quiet` passed.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` passed.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` passed, including 37
+  scenarios, 36 route/VIP cases, 106 typed headers, 19 typed bodies and 11
+  message decode fixtures.
+
+During validation, the first Maven verify detected the expected new-fixture
+drift; regenerated the fixture with the existing `message-decode-fixtures`
+entry point and reran the complete Maven gate successfully. The first full
+workspace run also caught pull compact-expansion ID ordering; corrected ID
+reattachment to preserve an existing subtype offset ID, then reran default and
+all-feature workspace suites successfully. Code commit: `4e718e35`.
+
+The batch malformed-tail slice is closed only. Broad P18-V01 reconciliation,
+current-revision remote Ubuntu CI, native Windows runtime, and Phase 19
+Broker/Docker evidence remain open. Protected Phase 19 working-tree paths were
+not staged; no external CI or push was run.

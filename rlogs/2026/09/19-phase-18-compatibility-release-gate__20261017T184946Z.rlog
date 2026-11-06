@@ -1,0 +1,77 @@
+# P18-V02 current-revision gate and SEND response header mapping — 2026-10-17T18:49:46Z
+
+- Repository: `/Users/bruce.tsai/Projects/trio/rocketmq-classic`.
+- Branch: `phase/19-phase-18-compatibility-release-gate`.
+- Code commit: `01e02a5c fix(remoting): match Java send response decode modes`.
+- Java oracle: RocketMQ client 5.5.1, inspected read-only.
+- Fixture `fixtures/remoting/send-message-response-header-decode-modes.json`
+  SHA-256: `c2962fc0c34868c36dd67ef7ef33e4694c59904b679de665ef401d302fe3818a`.
+
+## Changes recorded
+
+- `SendMessageResponseHeader` uses nullable values for `msgId`, `queueId`, and
+  `queueOffset`, matching direct Java decoding. Fast decoding reports
+  malformed numeric strings; reflective decoding ignores an individual field
+  conversion failure and retains null for that field.
+- The send owner requires queueId and queueOffset before producing a
+  `SendResult`. Missing response `msgId` remains nullable through
+  `SendResult.offset_msg_id`.
+- Updated the Phase 6 API map and request-code inventory to record field
+  nullability and the owner-level queue requirements.
+
+## Verification
+
+- `mvn -q -f compat/java-reference/pom.xml verify`: PASS; 37 scenarios,
+  fixture drift checks, Java/Rust cross-decodes, including SEND fast/reflection
+  cases. Maven printed existing JDK `Unsafe` and reflective-final-field
+  warnings and exited successfully.
+- `python3 tests/differential/compare.py --self-test`: PASS.
+- `python3 tests/differential/compare.py --validate-manifest`: PASS; 37 rows.
+- `bash tests/stress/run-offline-smoke.sh`: PASS; 16 deterministic race/leak
+  cases × 3 repetitions.
+- `cargo run --locked -p rocketmq-classic-remoting --example fuzz_smoke`:
+  PASS; 105 frame seeds, 11 message seeds, 1,856 mutations, 146 frame decodes,
+  and 113 message decodes.
+- Clean Linux ARM64 `rust:1.85.0-bookworm` container with `--init`:
+  `cargo test --workspace --locked -- --test-threads=1` PASS and
+  `cargo test --workspace --all-features --locked -- --test-threads=1` PASS.
+  Final output is retained at `target/phase18-default-final.log` and
+  `target/phase18-all-features-final.log` (untracked build artifacts).
+- One initial full workspace test run reported a failure in
+  `stack::tests::concurrent_jstack_captures_are_serialized_without_losing_threads`
+  because that run found no unblocked candidate signal. The isolated test, the
+  full all-feature consumer library suite, and subsequent full default and
+  all-feature workspace runs passed. No signal-related failure reproduced.
+- `cargo check --workspace --all-targets --all-features --locked`: PASS on
+  macOS ARM64, Rust 1.85.0.
+- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`:
+  PASS on macOS ARM64, Rust 1.85.0.
+- `cargo fmt --all -- --check` and `git diff --check`: PASS.
+- `cargo build -p rocketmq-classic --examples --release --locked`: PASS.
+- `cargo bench --workspace --no-run --locked`: PASS.
+- `cargo bench -p rocketmq-classic --bench offline --locked`: PASS on macOS
+  ARM64, Apple M5 Max, Rust 1.85.0. Observations per iteration: frame
+  encode/decode 2,226.7 ns; Zstandard message decode 1,181.5 ns; Producer send
+  construction 1,307.5 ns; 128-entry route lookup 14.4 ns; pending completion
+  63,418.7 ns. These observations are not acceptance thresholds. Allocation
+  observations were 4,676; 197,493; 3,665; 0; and 9,546 bytes respectively.
+- `cargo metadata --format-version 1 --locked --no-deps` and
+  `python3 scripts/check-workspace-metadata.py`: PASS.
+- `cargo package --workspace --list --locked --allow-dirty`: PASS; all seven
+  published product package listings include `LICENSE` and `NOTICE`.
+- Four Core Unique ID tests: PASS with both `TZ=UTC` and `TZ=Asia/Taipei`.
+
+## Remaining work
+
+- Broad bidirectional P18-V01 source/API/settings/overload input/error/flow
+  reconciliation and Rust reverse-export audit remain open.
+- Current-revision GitHub Ubuntu/native Windows evidence for P18-V04 remains
+  open.
+- Phase 19 still has 30 locally runnable Docker/Broker scenarios, full-runner
+  work, and multi-Broker/TLS/ACL and feature-specific profiles outstanding.
+- Release version intent and registry dependency-resolution checks remain
+  open.
+- Owner-only production connectivity, credentials/CA, approved HA/fault
+  injection, and capacity/soak checks remain the separate final manual items.
+- No plan, Java oracle, remote branch, tag, publication, Broker operation, or
+  deployment was changed.

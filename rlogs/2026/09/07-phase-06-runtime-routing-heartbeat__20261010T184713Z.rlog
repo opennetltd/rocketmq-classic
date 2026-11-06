@@ -1,0 +1,6 @@
+# Phase 6 API compatibility session — 2026-10-10T18:47Z
+
+- Pinned Java 5.5.1 `ConcurrentHashMap` entry probes confirm `Map.Entry.setValue(null)` throws `NullPointerException` for the factory, producer, and consumer tables. The captured entry and backing table mapping remain unchanged.
+- Code/fixture commit: `80d34846` (`Match nullable entry setValue failures`). Rust adds `set_value_nullable` on factory, producer, and consumer entry handles, mapping a null value to typed `InvalidRoute`. Fixture SHA-256: `2a7e7c96c8eb449f172a4f3e2a4ebd392de1b9f6b38349f10d6d1d1276725244`.
+- Validation passed: manager-table 14/14, registry-table 17/17, strict workspace/all-target/all-feature Clippy, full locked workspace/all-target tests, pinned offline Maven verify (22 scenarios, fixture drift, and Java cross-decodes), comparator self-test/manifest22, formatting, and diff checks. The first full-suite attempt hit one unrelated transport callback-order assertion; that test passed independently and the full suite passed on retry.
+- API map and requirement audit updated. Broader Phase 6 source/API/input/reverse-export reconciliation and source-map traversal variants remain open; P6-V04 remains a Phase 19 handoff.

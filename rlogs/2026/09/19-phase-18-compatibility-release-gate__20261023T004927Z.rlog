@@ -1,0 +1,51 @@
+# Phase 18 compatibility gate log — ProcessQueue try-unlock overflow
+# Recorded: 2026-10-23 00:49:27 UTC
+# Code revision: 47cfbf13
+
+## Oracle finding
+
+Pinned Java 5.5.1 `ProcessQueue.tryUnlockTimes` is an `AtomicLong`. Both
+`incTryUnlockTimes()` and the Push rebalance retry branch use
+`incrementAndGet()`, which wraps from `Long.MAX_VALUE` to `Long.MIN_VALUE`.
+Rust previously stored the value as `u64`, clamped getter/reporting values,
+and saturated the runtime retry counter. Changed the private state and
+snapshot to `i64` and used `wrapping_add(1)` in both Rust increment paths.
+
+The invoked `ConsumerFacadeApiFixtures` now seeds the Java atomic counter at
+`Long.MAX_VALUE`, increments it through the public API, and records the result
+in `implementationBehaviors.processQueueTryUnlockOverflow`. Rust unit coverage
+compares that oracle across the public increment, queue-info fill, internal
+retry increment, and snapshot. Fixture SHA-256:
+`9b14dc24b4f3214bfb9fab7d83ebe966083685c327409c7e76b1303de63d00db`.
+
+## Commits
+
+- Code and fixture: `47cfbf13 fix(consumer): match ProcessQueue unlock counter overflow`.
+- Compatibility audit and benchmark evidence are in the following docs-only
+  commit.
+
+## Validation on code revision 47cfbf13
+
+- `cargo test --offline --workspace --locked --quiet` — PASS.
+- `cargo test --offline --workspace --all-features --locked --quiet` — PASS.
+- `cargo clippy --offline --workspace --all-targets --all-features --locked -- -D warnings` — PASS.
+- `cargo fmt --all -- --check` and `git diff --check` — PASS.
+- `mvn -o -q -f compat/java-reference/pom.xml verify` — PASS: 37 scenarios,
+  11 message fixture/runtime cases, 36 route/VIP cases, 106 typed headers,
+  and 19 typed bodies.
+- `python3 tests/differential/compare.py --self-test` — PASS.
+- `python3 tests/differential/compare.py --validate-manifest` — PASS: 37 scenarios.
+- `cargo run --offline -p rocketmq-classic-remoting --example fuzz_smoke --locked` —
+  PASS: 163 frame seeds, 11 message seeds, 2,784 mutations, 245 frame decodes,
+  and 192 message decodes.
+- `bash tests/stress/run-offline-smoke.sh` — PASS: 17 cases x 3 repetitions.
+- `cargo build --offline --workspace --examples --release --locked` — PASS.
+- `cargo bench --offline -p rocketmq-classic --bench offline --locked` — PASS;
+  observation appended to `PHASE_18_OFFLINE_BENCHMARK_BASELINE.md`.
+
+## Remaining Phase 18 status
+
+Broad P18-V01 Java source/API/settings/input/error/control-flow and reverse-
+export reconciliation remains PARTIAL. Thirty live handoff scenarios remain
+`PENDING_PHASE_19`; current-revision remote Ubuntu CI, native Windows runtime,
+and Phase 19 Broker/Docker evidence remain open.

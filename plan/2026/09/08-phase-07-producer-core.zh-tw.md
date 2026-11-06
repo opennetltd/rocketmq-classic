@@ -82,9 +82,9 @@ examples/producer.rs
 
 先寫對應失敗測試／Oracle fixture，再依序實作；以下 case 必須成為可執行檢查，而非人工勾選。以下檢查不依賴 Docker 或 live Broker，使用 Java fixture、可控時鐘及 scripted peer；共通命令與證據規則見執行索引。
 
-- [ ] **P7-V01** — 預設值與 validation 邊界符合 Java，包含 threshold−1/threshold/threshold+1 與 max-size ±1。
+- [x] **P7-V01** — 預設值與 validation 邊界符合 Java，包含 threshold−1/threshold/threshold+1 與 max-size ±1。
 
-- [ ] **P7-U01** — scripted 雙位址失敗與 Java decision fixture 驗證 retry、status、deadline、body/ID 保留及反覆 lifecycle cleanup。
+- [x] **P7-U01** — scripted 雙位址失敗與 Java decision fixture 驗證 retry、status、deadline、body/ID 保留及反覆 lifecycle cleanup。
 
 ### 5.1 實作完成後的本機命令
 
