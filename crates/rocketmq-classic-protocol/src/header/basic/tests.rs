@@ -169,7 +169,7 @@ fn request_header_equality_and_hash_match_rpc_base_fields() {
     assert_eq!(fixture["serverContacted"], false);
     let cases = fixture["identityCases"].as_object().unwrap();
     assert_eq!(cases.len(), 50);
-    let rpc_semantics_types: std::collections::BTreeSet<_> = include_str!("../basic.rs")
+    let rpc_semantics_types: std::collections::BTreeSet<_> = include_str!("requests.rs")
         .split_once("impl_rpc_request_header_semantics!(")
         .unwrap()
         .1
