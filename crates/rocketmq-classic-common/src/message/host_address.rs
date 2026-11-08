@@ -91,13 +91,15 @@ impl MessageHostAddress {
         }
     }
 
-    /// Parse Java `NetworkUtil.string2SocketAddress` input, including Java's
+    /// Parse Java `NetworkUtil.string2SocketAddress` input, with ASCII
     /// signed decimal port syntax and socket port bounds.
     pub fn parse_java_socket_address(value: &str) -> Result<Self, MessageHostAddressError> {
         let (host, raw_port) = value
             .rsplit_once(':')
             .ok_or(MessageHostAddressError::MissingPortSeparator)?;
-        let port = parse_java_i32(raw_port).ok_or(MessageHostAddressError::InvalidPort)?;
+        let port = raw_port
+            .parse::<i32>()
+            .map_err(|_| MessageHostAddressError::InvalidPort)?;
         let port = u16::try_from(port).map_err(|_| MessageHostAddressError::PortOutOfRange)?;
         Ok(Self::new(host, port))
     }
@@ -319,16 +321,6 @@ impl<'de> Deserialize<'de> for MessageHostAddress {
         let value = String::deserialize(deserializer)?;
         Self::from_java_to_string(&value).map_err(serde::de::Error::custom)
     }
-}
-
-pub(super) fn parse_java_i32(value: &str) -> Option<i32> {
-    crate::utils::java_number::parse_long(value)?
-        .try_into()
-        .ok()
-}
-
-pub(super) fn parse_java_i64(value: &str) -> Option<i64> {
-    crate::utils::java_number::parse_long(value)
 }
 
 fn java_ip_string(address: IpAddr) -> String {

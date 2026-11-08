@@ -70,8 +70,9 @@ fn java_rebalance_lock_settings() -> Result<JavaRebalanceLockSettings, String> {
 
 fn java_long_property(name: &str, default: i64) -> Result<i64, String> {
     match std::env::var(name) {
-        Ok(value) => parse_java_long(&value)
-            .ok_or_else(|| format!("invalid Java-compatible long property {name}={value:?}")),
+        Ok(value) => value
+            .parse::<i64>()
+            .map_err(|_| format!("invalid Java-compatible long property {name}={value:?}")),
         Err(std::env::VarError::NotPresent) => Ok(default),
         Err(std::env::VarError::NotUnicode(value)) => Err(format!(
             "non-Unicode Java-compatible long property {name}={value:?}"
@@ -81,15 +82,11 @@ fn java_long_property(name: &str, default: i64) -> Result<i64, String> {
 
 fn parse_pull_max_idle_time(value: Option<&str>) -> Result<i64, String> {
     match value {
-        Some(value) => parse_java_long(value).ok_or_else(|| {
+        Some(value) => value.parse::<i64>().map_err(|_| {
             format!("invalid Java-compatible long property {PULL_MAX_IDLE_TIME_PROPERTY}={value:?}")
         }),
         None => Ok(PULL_MAX_IDLE_TIME_MILLIS),
     }
-}
-
-pub(crate) fn parse_java_long(value: &str) -> Option<i64> {
-    rocketmq_classic_common::utils::java_number::parse_long(value)
 }
 
 use rocketmq_classic_common::message::{
@@ -146,9 +143,9 @@ fn consume_start_timestamp(message: &MessageExt) -> ConsumeStartTimestamp {
     match message.get_property(PROPERTY_CONSUME_START_TIMESTAMP) {
         None => ConsumeStartTimestamp::Missing,
         Some(value) if value.is_empty() => ConsumeStartTimestamp::Missing,
-        Some(value) => match parse_java_long(&value) {
-            Some(timestamp) => ConsumeStartTimestamp::Parsed(timestamp),
-            None => ConsumeStartTimestamp::Invalid(value),
+        Some(value) => match value.parse::<i64>() {
+            Ok(timestamp) => ConsumeStartTimestamp::Parsed(timestamp),
+            Err(_) => ConsumeStartTimestamp::Invalid(value),
         },
     }
 }
@@ -486,7 +483,7 @@ pub enum ProcessQueueError {
     InvalidConsumeStartTimestamp { offset: i64, value: String },
 }
 
-/// Failure raised when an expired-message timestamp cannot be parsed like Java's `Long.parseLong`.
+/// Failure raised when an expired-message timestamp is not a valid ASCII signed decimal `i64`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ExpiredMessageCleanupError {
     #[error("java.lang.NullPointerException")]
@@ -1302,7 +1299,7 @@ impl ProcessQueue {
 
         let mut invalid_max_offset = None;
         if let Some((message_offset, max_offset)) = max_offset {
-            if let Some(max_offset) = parse_java_long(&max_offset) {
+            if let Ok(max_offset) = max_offset.parse::<i64>() {
                 let accumulated = max_offset.wrapping_sub(message_offset);
                 if accumulated > 0 {
                     state.msg_acc_cnt = accumulated;
@@ -2074,7 +2071,8 @@ mod tests {
         assert_eq!(parse_pull_max_idle_time(None).unwrap(), 120_000);
         assert_eq!(parse_pull_max_idle_time(Some("+2500")).unwrap(), 2_500);
         assert_eq!(parse_pull_max_idle_time(Some("-1")).unwrap(), -1);
-        assert_eq!(parse_pull_max_idle_time(Some("٢٠٢٤")).unwrap(), 2_024);
+        assert!(parse_pull_max_idle_time(Some("٢٠٢٤")).is_err());
+        assert!(parse_pull_max_idle_time(Some("２０２４")).is_err());
         assert!(parse_pull_max_idle_time(Some(" 120000")).is_err());
         assert!(parse_pull_max_idle_time(Some("9223372036854775808")).is_err());
     }

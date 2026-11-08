@@ -9,8 +9,10 @@ Run locked workspace all-feature tests, strict all-target/all-feature Clippy, fo
 metadata checks and offline Maven verify as listed in the plan. Rust tests use local
 unit/scripted loopback peers and fixtures; Maven uses the pinned local Java oracle.
 Test moves preserve names and assertions; source-reading inventories now include the
-request/response and Push child modules. Hidden Common `utils::java_number` and
-`utils::fastjson_number` exports are cross-crate implementation helpers, not Java API additions.
+request/response and Push child modules. The later ASCII-only scope removes the `java_number` helpers entirely; numeric text
+now uses standard Rust parsing. Hidden Common `utils::fastjson_number` exports remain
+cross-crate implementation helpers, not Java API additions. See the
+[ASCII numeric policy](../compatibility/KNOWN_DIFFERENCES.md#ascii-numeric-text-policy--2026-11-08).
 Raw-token Fastjson handling remains specialized; its shared numeric primitives were
 byte-identical before extraction. Admin first-result/time helpers remain local because
 extracting these small functions would add cross-crate API surface for trivial code.

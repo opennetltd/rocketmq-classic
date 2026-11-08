@@ -2,8 +2,6 @@
 
 #[doc(hidden)]
 pub mod fastjson_number;
-#[doc(hidden)]
-pub mod java_number;
 pub mod name_server_address;
 #[doc(hidden)]
 pub mod system_properties;

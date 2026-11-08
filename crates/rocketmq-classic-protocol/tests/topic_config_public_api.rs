@@ -205,13 +205,14 @@ fn topic_config_methods_and_type_helpers_match_invoked_java_551() {
     assert_config(&trailing, &fixture["trailingState"]);
 
     let mut unicode_numbers = TopicConfig::new("retained");
-    assert_eq!(
-        unicode_numbers
-            .decode(fixture["unicodeNumberInput"].as_str().unwrap())
-            .unwrap(),
-        fixture["unicodeNumberResult"]
-    );
-    assert_config(&unicode_numbers, &fixture["unicodeNumberState"]);
+    let original_read_queues = unicode_numbers.read_queue_nums();
+    assert!(matches!(
+        unicode_numbers.decode(fixture["unicodeNumberInput"].as_str().unwrap()),
+        Err(TopicConfigError::InvalidInteger { .. })
+    ));
+    // Decode still applies fields in order: topic is applied before the invalid count.
+    assert_eq!(unicode_numbers.topic_name(), Some("unicode"));
+    assert_eq!(unicode_numbers.read_queue_nums(), original_read_queues);
 
     let mut invalid_filter = TopicConfig::new("retained");
     assert!(matches!(

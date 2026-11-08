@@ -30,7 +30,7 @@ impl RebalanceSignal {
             default: i64,
         ) -> Result<Duration, RuntimeError> {
             let value = match properties.get(key) {
-                Some(value) => crate::java_number::parse_long(value).ok_or_else(|| {
+                Some(value) => value.parse::<i64>().map_err(|_| {
                     rocketmq_classic_remoting::TransportError::InvalidConfiguration(format!(
                         "invalid Java long property {key}"
                     ))
@@ -247,6 +247,10 @@ mod tests {
             for key in [WAIT_PROPERTY, MIN_PROPERTY] {
                 let properties =
                     HashMap::from([(key.into(), case["input"].as_str().unwrap().into())]);
+                if !case["input"].as_str().unwrap().is_ascii() {
+                    assert!(RebalanceSignal::from_properties(&properties).is_err());
+                    continue;
+                }
                 match RebalanceSignal::from_properties(&properties) {
                     Ok(signal) => {
                         assert_eq!(case["outcome"], "OK", "{case}");

@@ -1185,15 +1185,15 @@ impl CommandHeader for ChangeInvisibleTimeResponseHeader {
         Ok(Self {
             pop_time: fields
                 .get("popTime")
-                .and_then(|value| parse_java_i64(value))
+                .and_then(|value| value.parse::<i64>().ok())
                 .unwrap_or_default(),
             invisible_time: fields
                 .get("invisibleTime")
-                .and_then(|value| parse_java_i64(value))
+                .and_then(|value| value.parse::<i64>().ok())
                 .unwrap_or_default(),
             revive_qid: fields
                 .get("reviveQid")
-                .and_then(|value| parse_java_i32(value))
+                .and_then(|value| value.parse::<i32>().ok())
                 .unwrap_or_default(),
         })
     }

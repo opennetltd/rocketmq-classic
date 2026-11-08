@@ -1185,8 +1185,35 @@ fn optional_numeric_header_reflection_failures_match_java_551() {
         for (mode_name, use_fast_encode) in [("fast", true), ("reflection", false)] {
             let expected_mode = &case[mode_name];
             assert_eq!(expected_mode["outcome"], "OK", "{case_name} {mode_name}");
-            let expected: HeaderMap =
+            let mut expected: HeaderMap =
                 serde_json::from_value(expected_mode["encodedFields"].clone()).unwrap();
+            // Non-ASCII numeric text follows the existing malformed-number path.
+            for (field, value) in &fields {
+                if [
+                    "groupSysFlag",
+                    "topicSysFlag",
+                    "maxReconsumeTimes",
+                    "popTime",
+                    "invisibleTime",
+                    "reviveQid",
+                    "restNum",
+                    "bornTime",
+                    "pollTime",
+                    "maxMsgNums",
+                    "maxMsgNum",
+                    "initMode",
+                    "queueId",
+                ]
+                .contains(&field.as_str())
+                    && !value.is_ascii()
+                {
+                    if header_type.starts_with("pop") {
+                        expected.insert(field.clone(), "0".into());
+                    } else {
+                        expected.remove(field);
+                    }
+                }
+            }
             let actual = match header_type {
                 "send-back" => encode_decoded_header::<ConsumerSendMsgBackRequestHeader>(
                     &fields,
@@ -1377,8 +1404,15 @@ fn change_invisible_time_header_decode_modes_match_java_551() {
                     .unwrap_or_else(|error| panic!("{case_name} {mode_name}: {error}"));
             let mut encoded = HeaderMap::new();
             header.encode_fields(&mut encoded);
-            let expected: HeaderMap =
+            let mut expected: HeaderMap =
                 serde_json::from_value(expected_mode["encodedFields"].clone()).unwrap();
+            let mut expected_values = expected_mode["values"].clone();
+            for field in ["queueId", "offset", "invisibleTime"] {
+                if fields.get(field).is_some_and(|value| !value.is_ascii()) {
+                    expected.remove(field);
+                    expected_values[field] = serde_json::Value::Null;
+                }
+            }
             assert_eq!(encoded, expected, "{case_name} {mode_name}");
             assert_eq!(
                 serde_json::json!({
@@ -1391,7 +1425,7 @@ fn change_invisible_time_header_decode_modes_match_java_551() {
                     "liteTopic": header.get_lite_topic(),
                     "suspend": header.is_suspend(),
                 }),
-                expected_mode["values"],
+                expected_values,
                 "{case_name} {mode_name} values"
             );
         }
@@ -3630,4 +3664,40 @@ fn header_validation_matrix() {
             }
         }
     }
+}
+
+#[test]
+fn required_numeric_headers_require_ascii_and_preserve_signed_limits() {
+    use rocketmq_classic_protocol::header::ProtocolError;
+    let mut fields = HeaderMap::from([
+        ("topic".into(), "訂單".into()),
+        ("queueId".into(), i32::MIN.to_string()),
+        ("timestamp".into(), i64::MAX.to_string()),
+    ]);
+    let header = SearchOffsetRequestHeader::decode_fields(&fields).unwrap();
+    assert_eq!(header.get_topic(), Some("訂單"));
+    assert_eq!(header.get_queue_id(), Some(i32::MIN));
+    assert_eq!(header.get_timestamp(), Some(i64::MAX));
+    for (field, input) in [
+        ("queueId", "１２"),
+        ("queueId", "١٢"),
+        ("queueId", "2147483648"),
+        ("timestamp", "１２"),
+        ("timestamp", "١٢"),
+        ("timestamp", "9223372036854775808"),
+        ("timestamp", " 12"),
+    ] {
+        let mut invalid = fields.clone();
+        invalid.insert(field.into(), input.into());
+        assert!(
+            matches!(SearchOffsetRequestHeader::decode_fields(&invalid),
+            Err(ProtocolError::InvalidField { field: actual, .. }) if actual == field),
+            "{field}={input:?}"
+        );
+    }
+    fields.insert("queueId".into(), "+12".into());
+    fields.insert("timestamp".into(), i64::MIN.to_string());
+    let header = SearchOffsetRequestHeader::decode_fields(&fields).unwrap();
+    assert_eq!(header.get_queue_id(), Some(12));
+    assert_eq!(header.get_timestamp(), Some(i64::MIN));
 }

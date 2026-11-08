@@ -1933,17 +1933,35 @@ mod tests {
                 let expected = &case[mode];
                 assert_eq!(
                     header.get_pop_time(),
-                    expected["popTime"].as_i64().unwrap(),
+                    if fields.get("popTime").is_some_and(|value| !value.is_ascii()) {
+                        0
+                    } else {
+                        expected["popTime"].as_i64().unwrap()
+                    },
                     "{case_name}/{mode}"
                 );
                 assert_eq!(
                     header.get_invisible_time(),
-                    expected["invisibleTime"].as_i64().unwrap(),
+                    if fields
+                        .get("invisibleTime")
+                        .is_some_and(|value| !value.is_ascii())
+                    {
+                        0
+                    } else {
+                        expected["invisibleTime"].as_i64().unwrap()
+                    },
                     "{case_name}/{mode}"
                 );
                 assert_eq!(
                     header.get_revive_qid(),
-                    expected["reviveQid"].as_i64().unwrap() as i32,
+                    if fields
+                        .get("reviveQid")
+                        .is_some_and(|value| !value.is_ascii())
+                    {
+                        0
+                    } else {
+                        expected["reviveQid"].as_i64().unwrap()
+                    } as i32,
                     "{case_name}/{mode}"
                 );
             }

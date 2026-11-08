@@ -2959,15 +2959,17 @@ impl CommandHeader for CreateTopicRequestHeader {
             default_topic: optional_string(fields, "defaultTopic"),
             read_queue_nums: fields
                 .get("readQueueNums")
-                .and_then(|value| parse_java_i32(value)),
+                .and_then(|value| value.parse::<i32>().ok()),
             write_queue_nums: fields
                 .get("writeQueueNums")
-                .and_then(|value| parse_java_i32(value)),
-            perm: fields.get("perm").and_then(|value| parse_java_i32(value)),
+                .and_then(|value| value.parse::<i32>().ok()),
+            perm: fields
+                .get("perm")
+                .and_then(|value| value.parse::<i32>().ok()),
             topic_filter_type: optional_string(fields, "topicFilterType"),
             topic_sys_flag: fields
                 .get("topicSysFlag")
-                .and_then(|value| parse_java_i32(value)),
+                .and_then(|value| value.parse::<i32>().ok()),
             order: Some(
                 fields
                     .get("order")
@@ -3396,13 +3398,13 @@ impl CommandHeader for EndTransactionRequestHeader {
             producer_group: optional_string(fields, "producerGroup"),
             transaction_state_table_offset: fields
                 .get("tranStateTableOffset")
-                .and_then(|value| parse_java_i64(value)),
+                .and_then(|value| value.parse::<i64>().ok()),
             commit_log_offset: fields
                 .get("commitLogOffset")
-                .and_then(|value| parse_java_i64(value)),
+                .and_then(|value| value.parse::<i64>().ok()),
             commit_or_rollback: fields
                 .get("commitOrRollback")
-                .and_then(|value| parse_java_i32(value)),
+                .and_then(|value| value.parse::<i32>().ok()),
             from_transaction_check: Some(
                 fields
                     .get("fromTransactionCheck")
@@ -4598,10 +4600,12 @@ impl CommandHeader for GetLiteClientInfoRequestHeader {
         let max_count = fields
             .get("maxCount")
             .map(|value| {
-                parse_java_i32(value).ok_or_else(|| ProtocolError::InvalidField {
-                    field: "maxCount",
-                    reason: format!("not a Java int: {value}"),
-                })
+                value
+                    .parse::<i32>()
+                    .map_err(|_| ProtocolError::InvalidField {
+                        field: "maxCount",
+                        reason: format!("not a Java int: {value}"),
+                    })
             })
             .transpose()?
             .unwrap_or(1000);
@@ -4684,10 +4688,12 @@ impl CommandHeader for GetLiteGroupInfoRequestHeader {
         let top_k = fields
             .get("topK")
             .map(|value| {
-                parse_java_i32(value).ok_or_else(|| ProtocolError::InvalidField {
-                    field: "topK",
-                    reason: format!("not a Java int: {value}"),
-                })
+                value
+                    .parse::<i32>()
+                    .map_err(|_| ProtocolError::InvalidField {
+                        field: "topK",
+                        reason: format!("not a Java int: {value}"),
+                    })
             })
             .transpose()?
             .unwrap_or_default();

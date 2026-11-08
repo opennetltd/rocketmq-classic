@@ -18,7 +18,8 @@ fn assert_public_type<T: ?Sized>() {}
 async fn phase_owned_public_types_are_available_from_the_facade_crate() {
     assert_eq!(DEFAULT_CONSUMER_GROUP, "DEFAULT_CONSUMER");
     assert_eq!(DEFAULT_PRODUCER_GROUP, "DEFAULT_PRODUCER");
-    assert!(PermName::is_valid_string("٧").unwrap());
+    assert!(PermName::is_valid_string("7").unwrap());
+    assert!(PermName::is_valid_string("٧").is_err());
     assert_public_type::<PermName>();
     assert_public_type::<PermissionParseError>();
     assert_public_type::<PopProcessQueue>();

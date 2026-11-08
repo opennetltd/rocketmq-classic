@@ -7184,23 +7184,28 @@ async fn expired_concurrent_messages_match_java_process_queue_cleanup() {
         .unwrap()
         .broker_results
         .push_back(Ok(()));
-    unicode_process_queue
-        .clean_expired_msg(&consumer)
-        .await
-        .unwrap();
+    let attempts_before = consumer
+        .scripted_retry_transport
+        .lock()
+        .unwrap()
+        .broker_headers
+        .len();
+    assert!(matches!(
+        unicode_process_queue.clean_expired_msg(&consumer).await,
+        Err(ExpiredMessageCleanupError::InvalidConsumeStartTimestamp { offset: 40, .. })
+    ));
     let unicode_snapshot = unicode_process_queue.snapshot(109).unwrap();
+    assert_eq!(unicode_snapshot.cached_count, 1);
+    assert_eq!(unicode_snapshot.cached_bytes, 4);
+    assert_eq!(unicode_snapshot.minimum_offset, Some(40));
     assert_eq!(
-        unicode_snapshot.cached_count,
-        fixture["unicodeTimestamp"]["cachedCount"]
-    );
-    assert_eq!(
-        unicode_snapshot.cached_bytes,
-        fixture["unicodeTimestamp"]["cachedBytes"]
-    );
-    assert_eq!(unicode_snapshot.minimum_offset, None);
-    assert_eq!(
-        fixture["unicodeTimestamp"]["attempts"],
-        serde_json::json!(["40:3"])
+        consumer
+            .scripted_retry_transport
+            .lock()
+            .unwrap()
+            .broker_headers
+            .len(),
+        attempts_before
     );
 
     consumer.shutdown().await.unwrap();

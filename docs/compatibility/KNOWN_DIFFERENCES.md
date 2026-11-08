@@ -1,5 +1,27 @@
 # Known differences and evidence gaps
 
+## ASCII numeric text policy — 2026-11-08
+
+Per the user's revised scope, signed integer text is parsed with Rust standard
+`str::parse::<i32/i64>()`. Only ASCII decimal digits are supported. Leading `+`/`-`,
+signed minima/maxima and overflow checks remain; whitespace, fullwidth digits,
+Arabic-Indic digits and other non-ASCII digits are rejected. This intentionally
+differs from Java `Integer.parseInt` / `Long.parseLong`.
+
+This applies to message numeric properties and flags, permissions, remoting
+ports/settings, route queue counts/VIP ports, header numeric text, TopicConfig text,
+Consumer timing properties and consume timestamp fields. Existing callers retain
+their error or fallback behavior for invalid numeric input (for example priority
+uses its existing default); failed expired-message timestamp parsing retains the
+message instead of sending it back. Timestamp calendar normalization remains lenient.
+
+Java fixtures continue to describe Java behavior. Rust tests compare supported ASCII
+cases and explicitly assert rejection/fallback for out-of-scope Unicode numbers.
+Historical Unicode parity records below and in dated inventories are superseded for
+this scope. Ordinary Unicode topics, message text and host names are unaffected.
+JSON scalar/coercion rules, arbitrary decimal truncation and integer wrapping remain
+specialized; substituting ordinary integer parsing would change more than this policy.
+
 ## Current status — 2026-10-27
 
 The R01–R09 parity-review fixes are recorded against source revision

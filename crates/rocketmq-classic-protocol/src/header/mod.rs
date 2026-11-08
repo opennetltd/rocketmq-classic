@@ -113,17 +113,6 @@ pub trait FastCodesHeader: CommandHeader {
     }
 }
 
-/// Parses the signed decimal form accepted by Java's `Long.parseLong`,
-/// including decimal digits from BMP Unicode scripts.
-pub(crate) fn parse_java_i64(value: &str) -> Option<i64> {
-    rocketmq_classic_common::utils::java_number::parse_long(value)
-}
-
-/// Parses the signed decimal form accepted by Java's `Integer.parseInt`.
-pub(crate) fn parse_java_i32(value: &str) -> Option<i32> {
-    parse_java_i64(value)?.try_into().ok()
-}
-
 fn required_string<'a>(
     fields: &'a HeaderMap,
     field: &'static str,
@@ -139,24 +128,28 @@ fn optional_string(fields: &HeaderMap, field: &str) -> Option<String> {
 }
 
 fn required_i32(fields: &HeaderMap, field: &'static str) -> Result<i32, ProtocolError> {
-    parse_java_i32(required_string(fields, field)?).ok_or_else(|| invalid_number(field))
+    required_string(fields, field)?
+        .parse::<i32>()
+        .map_err(|_| invalid_number(field))
 }
 
 fn optional_i32(fields: &HeaderMap, field: &'static str) -> Result<Option<i32>, ProtocolError> {
     fields
         .get(field)
-        .map(|value| parse_java_i32(value).ok_or_else(|| invalid_number(field)))
+        .map(|value| value.parse::<i32>().map_err(|_| invalid_number(field)))
         .transpose()
 }
 
 fn required_i64(fields: &HeaderMap, field: &'static str) -> Result<i64, ProtocolError> {
-    parse_java_i64(required_string(fields, field)?).ok_or_else(|| invalid_number(field))
+    required_string(fields, field)?
+        .parse::<i64>()
+        .map_err(|_| invalid_number(field))
 }
 
 fn optional_i64(fields: &HeaderMap, field: &'static str) -> Result<Option<i64>, ProtocolError> {
     fields
         .get(field)
-        .map(|value| parse_java_i64(value).ok_or_else(|| invalid_number(field)))
+        .map(|value| value.parse::<i64>().map_err(|_| invalid_number(field)))
         .transpose()
 }
 

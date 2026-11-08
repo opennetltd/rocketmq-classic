@@ -49,11 +49,12 @@ impl PermName {
         permission >= 0 && permission < Self::PERM_PRIORITY
     }
 
-    /// Parses and validates the Java `isValid(String)` overload.
+    /// Parses ASCII signed decimal text and validates the permission mask.
     pub fn is_valid_string(permission: &str) -> Result<bool, PermissionParseError> {
-        parse_java_i32(permission)
+        permission
+            .parse::<i32>()
             .map(Self::is_valid)
-            .ok_or_else(|| PermissionParseError(permission.to_owned()))
+            .map_err(|_| PermissionParseError(permission.to_owned()))
     }
 
     pub const fn is_priority(permission: i32) -> bool {
@@ -63,12 +64,6 @@ impl PermName {
     pub const fn is_accessible(permission: i32) -> bool {
         Self::is_readable(permission) || Self::is_writeable(permission)
     }
-}
-
-fn parse_java_i32(value: &str) -> Option<i32> {
-    crate::utils::java_number::parse_long(value)?
-        .try_into()
-        .ok()
 }
 
 #[cfg(test)]
@@ -93,10 +88,10 @@ mod tests {
 
     #[test]
     fn permission_string_parser_matches_java_integer_inputs() {
-        for (input, expected) in [("0", true), ("+7", true), ("٧", true), ("8", false)] {
+        for (input, expected) in [("0", true), ("+7", true), ("8", false)] {
             assert_eq!(PermName::is_valid_string(input), Ok(expected), "{input:?}");
         }
-        for input in ["", " 7", "2147483648", "--1"] {
+        for input in ["", " 7", "2147483648", "--1", "٧", "７"] {
             assert_eq!(
                 PermName::is_valid_string(input),
                 Err(PermissionParseError(input.to_owned())),

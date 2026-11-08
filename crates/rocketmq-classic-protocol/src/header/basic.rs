@@ -4,8 +4,8 @@ use rocketmq_classic_common::message::TopicFilterType;
 
 use super::{
     CommandHeader, HeaderMap, ProtocolError, java_boolean, optional_i32, optional_i32_with_mode,
-    optional_i64, optional_i64_with_mode, optional_java_boolean, optional_string, parse_java_i32,
-    parse_java_i64, required_i32, required_i64, required_string,
+    optional_i64, optional_i64_with_mode, optional_java_boolean, optional_string, required_i32,
+    required_i64, required_string,
 };
 use crate::codes::JavaEnumLookupError;
 

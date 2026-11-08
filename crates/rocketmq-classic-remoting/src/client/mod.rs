@@ -3,7 +3,6 @@ mod connection;
 mod connection_manager;
 mod dispatch;
 mod invocation;
-mod java_number;
 mod pending;
 mod processor;
 mod response_future;
