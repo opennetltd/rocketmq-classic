@@ -1,5 +1,7 @@
 //! Public utilities shared by RocketMQ Classic client components.
 
+#[doc(hidden)]
+pub mod java_number;
 pub mod name_server_address;
 #[doc(hidden)]
 pub mod system_properties;

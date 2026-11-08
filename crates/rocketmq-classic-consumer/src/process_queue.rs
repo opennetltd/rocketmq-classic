@@ -89,46 +89,7 @@ fn parse_pull_max_idle_time(value: Option<&str>) -> Result<i64, String> {
 }
 
 pub(crate) fn parse_java_long(value: &str) -> Option<i64> {
-    let mut units = value.encode_utf16().peekable();
-    let negative = match units.peek().copied()? {
-        0x002d => {
-            units.next();
-            true
-        }
-        0x002b => {
-            units.next();
-            false
-        }
-        _ => false,
-    };
-    units.peek()?;
-    let limit = if negative { i64::MIN } else { -i64::MAX };
-    let multiply_limit = limit / 10;
-    let mut result = 0_i64;
-    for unit in units {
-        let digit = i64::from(java_decimal_digit(unit)?);
-        if result < multiply_limit {
-            return None;
-        }
-        result *= 10;
-        if result < limit + digit {
-            return None;
-        }
-        result -= digit;
-    }
-    Some(if negative { result } else { -result })
-}
-
-fn java_decimal_digit(unit: u16) -> Option<u16> {
-    const ZEROS: &[u16] = &[
-        0x0030, 0x0660, 0x06f0, 0x07c0, 0x0966, 0x09e6, 0x0a66, 0x0ae6, 0x0b66, 0x0be6, 0x0c66,
-        0x0ce6, 0x0d66, 0x0de6, 0x0e50, 0x0ed0, 0x0f20, 0x1040, 0x1090, 0x17e0, 0x1810, 0x1946,
-        0x19d0, 0x1a80, 0x1a90, 0x1b50, 0x1bb0, 0x1c40, 0x1c50, 0xa620, 0xa8d0, 0xa900, 0xa9d0,
-        0xa9f0, 0xaa50, 0xabf0, 0xff10,
-    ];
-    ZEROS
-        .iter()
-        .find_map(|zero| unit.checked_sub(*zero).filter(|digit| *digit < 10))
+    rocketmq_classic_common::utils::java_number::parse_long(value)
 }
 
 use rocketmq_classic_common::message::{
