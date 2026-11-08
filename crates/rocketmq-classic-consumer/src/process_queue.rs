@@ -1,7 +1,3 @@
-// P10-06 attaches these queue operations to bounded consume requests. Keep
-// this owner private until the callback lifecycle is complete.
-#![allow(dead_code)]
-
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     ops::{Deref, DerefMut},
@@ -1800,6 +1796,7 @@ impl ProcessQueue {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn set_lock_state(
         &self,
         generation: u64,

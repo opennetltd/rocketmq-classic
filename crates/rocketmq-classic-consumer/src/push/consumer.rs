@@ -2858,9 +2858,8 @@ impl PushConsumer {
         }
     }
 
-    /// Internal assignment activation used by Phase 11 and private pipeline
-    /// tests. It is deliberately not part of the public Push API.
-    #[allow(dead_code)] // Activated by Phase 11; exercised through private tests in this phase.
+    /// Activates an assignment without a Broker lock for private pipeline tests.
+    #[cfg(test)]
     pub(crate) async fn activate_process_queue(
         &self,
         input_queue: &MessageQueue,

@@ -220,7 +220,6 @@ pub(crate) fn build_class_filter_subscription_data(
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
-#[allow(dead_code)] // Used by the pull request path added in the following consumer phase.
 pub(crate) enum FilterServerError {
     #[error("Find Filter Server Failed, Broker Addr: {broker_address} topic: {topic}")]
     NotFound {
@@ -230,7 +229,6 @@ pub(crate) enum FilterServerError {
 }
 
 /// Choose a filter server using the broker address keys carried by route data.
-#[allow(dead_code)] // Kept crate-internal for the pull request path added in the following consumer phase.
 pub(crate) fn select_filter_server(
     route: &TopicRouteData,
     topic: &str,
@@ -253,7 +251,6 @@ pub(crate) fn select_filter_server(
 }
 
 /// Apply class-filter routing only when the Java pull class-filter bit is set.
-#[allow(dead_code)] // Kept crate-internal for the pull request path added in the following consumer phase.
 pub(crate) fn resolve_pull_broker_address(
     route: &TopicRouteData,
     topic: &str,

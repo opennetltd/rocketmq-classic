@@ -1,0 +1,6 @@
+2026-11-08 Cleanup execution; plan committed as 10c26578.
+Toolchain pinned to Rust 1.85.0. Plan remains immutable.
+Baseline forced dead-code diagnostics from review: Consumer three test helpers; Core clear/entry cancellation field; Remoting intentional malformed-proxy credentials retained.
+Phase A: scoped Consumer test helpers and Core registry cleanup/entry flag to cfg(test); removed broad/obsolete Consumer suppressions. Retained malformed-proxy credentials and platform exceptions.
+Rust 1.85.0; Java 21.0.13. cargo fmt and Consumer production cargo check passed. Consumer/Core all-target/all-feature strict Clippy passed. Consumer unit suite: 296 passed; local scripted integration suites still running at commit time; final result will be appended.
+Phase B pre-migration comparison: standalone Rust harness compiled exact original functions from five modules; all 65,536 UTF-16 digit values agree; 20,023 decimal/sign/Unicode/boundary cases agree across old long/int parsers. Harness in /tmp (not source artifact).
