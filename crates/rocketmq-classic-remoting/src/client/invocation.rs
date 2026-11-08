@@ -31,7 +31,7 @@ impl RemotingClient {
         self.invoke_name_server_mode(command, deadline, true).await
     }
 
-    pub(super) async fn invoke_name_server_mode(
+    async fn invoke_name_server_mode(
         &self,
         command: RemotingCommand,
         deadline: Instant,
@@ -407,7 +407,7 @@ impl RemotingClient {
             .await
     }
 
-    pub(super) async fn invoke_sync_deadline_inner(
+    async fn invoke_sync_deadline_inner(
         &self,
         addr: &str,
         command: RemotingCommand,
@@ -432,7 +432,7 @@ impl RemotingClient {
         .await
     }
 
-    pub(super) async fn invoke_inner(
+    async fn invoke_inner(
         &self,
         addr: &str,
         mut command: RemotingCommand,
