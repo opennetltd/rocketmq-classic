@@ -947,7 +947,13 @@ fn response_header_accessors_match_java_inventory_and_null_defaults() {
     ))
     .unwrap();
     let inventories = &fixture["apiInventories"];
-    let source = include_str!("../src/header/basic.rs");
+    let source = concat!(
+        include_str!("../src/header/basic.rs"),
+        "\n",
+        include_str!("../src/header/basic/requests.rs"),
+        "\n",
+        include_str!("../src/header/basic/responses.rs")
+    );
     let trait_source = include_str!("../src/header/mod.rs");
 
     for (class, inventory) in inventories.as_object().unwrap() {
@@ -3249,7 +3255,13 @@ fn header_validation_matrix() {
         Ok(())
     };
     // Keep the matrix tied to the public implementations, not just to fixture names.
-    let source = include_str!("../src/header/basic.rs");
+    let source = concat!(
+        include_str!("../src/header/basic.rs"),
+        "\n",
+        include_str!("../src/header/basic/requests.rs"),
+        "\n",
+        include_str!("../src/header/basic/responses.rs")
+    );
     let implementations: BTreeSet<_> = source
         .lines()
         .filter_map(|line| {

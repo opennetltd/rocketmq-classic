@@ -145,7 +145,7 @@ macro_rules! cases {
 
         #[test]
         fn inventory_matches_public_source_and_reverse_evidence() {
-            let source = include_str!("../src/header/basic.rs");
+            let source = concat!(include_str!("../src/header/basic.rs"), "\n", include_str!("../src/header/basic/requests.rs"), "\n", include_str!("../src/header/basic/responses.rs"));
             let exports = include_str!("../src/header/mod.rs");
             let generator = include_str!("../../rocketmq-classic-remoting/examples/generate_fixtures.rs");
             let java = include_str!("../../../compat/java-reference/src/main/java/compat/Main.java");
@@ -262,7 +262,13 @@ fn request_header_api_inventories_match_java_fields_and_accessors() {
         "../../../fixtures/protocol/request-header-identity.json"
     ))
     .unwrap();
-    let source = include_str!("../src/header/basic.rs");
+    let source = concat!(
+        include_str!("../src/header/basic.rs"),
+        "\n",
+        include_str!("../src/header/basic/requests.rs"),
+        "\n",
+        include_str!("../src/header/basic/responses.rs")
+    );
     let trait_source = include_str!("../src/header/mod.rs");
     let inventories = fixture["apiInventories"].as_object().unwrap();
     let identities = fixture["identityCases"].as_object().unwrap();
@@ -279,7 +285,13 @@ fn remaining_request_header_api_inventories_match_java_fields_constructors_and_a
         "../../../fixtures/protocol/remaining-header-api.json"
     ))
     .unwrap();
-    let source = include_str!("../src/header/basic.rs");
+    let source = concat!(
+        include_str!("../src/header/basic.rs"),
+        "\n",
+        include_str!("../src/header/basic/requests.rs"),
+        "\n",
+        include_str!("../src/header/basic/responses.rs")
+    );
     let trait_source = include_str!("../src/header/mod.rs");
     let inventories = fixture["apiInventories"].as_object().unwrap();
     assert_eq!(inventories.len(), 25);
@@ -291,7 +303,13 @@ fn remaining_request_header_api_inventories_match_java_fields_constructors_and_a
 
 #[test]
 fn all_public_command_headers_have_java_api_inventory_coverage() {
-    let source = include_str!("../src/header/basic.rs");
+    let source = concat!(
+        include_str!("../src/header/basic.rs"),
+        "\n",
+        include_str!("../src/header/basic/requests.rs"),
+        "\n",
+        include_str!("../src/header/basic/responses.rs")
+    );
     let rust_types: BTreeSet<_> = source
         .lines()
         .filter_map(|line| {
@@ -460,7 +478,13 @@ fn get_topics_by_cluster_header_api_matches_java_inventory() {
         ])
     );
 
-    let source = include_str!("../src/header/basic.rs");
+    let source = concat!(
+        include_str!("../src/header/basic.rs"),
+        "\n",
+        include_str!("../src/header/basic/requests.rs"),
+        "\n",
+        include_str!("../src/header/basic/responses.rs")
+    );
     let trait_source = include_str!("../src/header/mod.rs");
     assert!(rust_header_method_exists(
         source,
@@ -524,7 +548,13 @@ fn get_subscription_group_config_header_api_matches_java_inventory() {
         }));
     }
 
-    let source = include_str!("../src/header/basic.rs");
+    let source = concat!(
+        include_str!("../src/header/basic.rs"),
+        "\n",
+        include_str!("../src/header/basic/requests.rs"),
+        "\n",
+        include_str!("../src/header/basic/responses.rs")
+    );
     let trait_source = include_str!("../src/header/mod.rs");
     for method in [
         "get_group",
@@ -556,7 +586,13 @@ fn get_all_subscription_group_headers_match_java_public_api_inventory() {
         "../../../fixtures/remoting/query-admin-header-decode-modes.json"
     ))
     .unwrap();
-    let source = include_str!("../src/header/basic.rs");
+    let source = concat!(
+        include_str!("../src/header/basic.rs"),
+        "\n",
+        include_str!("../src/header/basic/requests.rs"),
+        "\n",
+        include_str!("../src/header/basic/responses.rs")
+    );
     let trait_source = include_str!("../src/header/mod.rs");
     for (rust_type, methods) in [
         (
@@ -668,7 +704,13 @@ fn query_consume_queue_header_matches_java_public_api_inventory() {
         );
     }
 
-    let source = include_str!("../src/header/basic.rs");
+    let source = concat!(
+        include_str!("../src/header/basic.rs"),
+        "\n",
+        include_str!("../src/header/basic/requests.rs"),
+        "\n",
+        include_str!("../src/header/basic/responses.rs")
+    );
     let trait_source = include_str!("../src/header/mod.rs");
     for method in [
         "get_topic",
@@ -725,7 +767,13 @@ fn reset_master_flush_offset_header_api_matches_java_inventory() {
         ])
     );
 
-    let source = include_str!("../src/header/basic.rs");
+    let source = concat!(
+        include_str!("../src/header/basic.rs"),
+        "\n",
+        include_str!("../src/header/basic/requests.rs"),
+        "\n",
+        include_str!("../src/header/basic/responses.rs")
+    );
     let trait_source = include_str!("../src/header/mod.rs");
     for method in [
         "get_master_flush_offset",
@@ -779,7 +827,13 @@ fn export_rocksdb_config_header_and_enum_api_match_java_inventory() {
         }));
     }
 
-    let source = include_str!("../src/header/basic.rs");
+    let source = concat!(
+        include_str!("../src/header/basic.rs"),
+        "\n",
+        include_str!("../src/header/basic/requests.rs"),
+        "\n",
+        include_str!("../src/header/basic/responses.rs")
+    );
     let trait_source = include_str!("../src/header/mod.rs");
     for method in [
         "fetch_config_type",
@@ -839,7 +893,13 @@ fn check_rocksdb_cq_write_progress_header_matches_java_public_api_inventory() {
         );
     }
 
-    let source = include_str!("../src/header/basic.rs");
+    let source = concat!(
+        include_str!("../src/header/basic.rs"),
+        "\n",
+        include_str!("../src/header/basic/requests.rs"),
+        "\n",
+        include_str!("../src/header/basic/responses.rs")
+    );
     let exports = include_str!("../src/header/mod.rs");
     for method in [
         "get_topic",
@@ -863,7 +923,13 @@ fn write_permission_headers_match_java_public_api_inventory() {
         "../../../fixtures/remoting/query-admin-header-decode-modes.json"
     ))
     .unwrap();
-    let source = include_str!("../src/header/basic.rs");
+    let source = concat!(
+        include_str!("../src/header/basic.rs"),
+        "\n",
+        include_str!("../src/header/basic/requests.rs"),
+        "\n",
+        include_str!("../src/header/basic/responses.rs")
+    );
     let trait_source = include_str!("../src/header/mod.rs");
     for (java_type, rust_type, methods) in [
         (
@@ -926,7 +992,13 @@ fn write_permission_headers_match_java_public_api_inventory() {
 fn broker_management_headers_match_java_public_api_inventory() {
     let fixture: serde_json::Value =
         serde_json::from_str(include_str!("../../../fixtures/producer/core.json")).unwrap();
-    let source = include_str!("../src/header/basic.rs");
+    let source = concat!(
+        include_str!("../src/header/basic.rs"),
+        "\n",
+        include_str!("../src/header/basic/requests.rs"),
+        "\n",
+        include_str!("../src/header/basic/responses.rs")
+    );
     let trait_source = include_str!("../src/header/mod.rs");
     struct Case {
         fixture_key: &'static str,
