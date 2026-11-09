@@ -71,6 +71,17 @@ unsafe impl GlobalAlloc for CountingAllocator {
 static GLOBAL_ALLOCATOR: CountingAllocator = CountingAllocator;
 
 fn main() {
+    // Cargo passes --bench for measurements, but not when cargo test runs this
+    // harness=false target (including cargo test --release --all-targets).
+    if !std::env::args_os()
+        .skip(1)
+        .any(|argument| argument == "--bench")
+    {
+        eprintln!(
+            "offline benchmark skipped in test mode; run cargo bench -p rocketmq-classic --bench offline"
+        );
+        return;
+    }
     assert!(
         !cfg!(debug_assertions),
         "run this fixed-input microbenchmark with `cargo bench` in release mode"

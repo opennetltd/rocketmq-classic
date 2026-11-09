@@ -61,3 +61,12 @@ stack/address/property regressions. No external hosts were accessed.
 
 MAN-01–MAN-04 remain separate owner-specific network/security/HA/workload validation
 under [owner validation](../owner-validation.md); this cleanup does not record approval.
+
+## Custom benchmark target under cargo test
+
+`cargo test --all-features --all-targets --workspace` includes the `offline`
+custom benchmark executable. Its entry point skips measurement when Cargo does
+not pass `--bench`, including release-profile test runs. This keeps all-target
+unit/integration test commands usable without running performance measurements.
+Use `cargo bench -p rocketmq-classic --bench offline` for measurements; this path
+still requires release mode and reports the existing timing/allocation observations.
