@@ -158,8 +158,9 @@ fn property_result(
     value: Result<String, env::VarError>,
 ) -> Result<i64, String> {
     match value {
-        Ok(value) => crate::process_queue::parse_java_long(&value)
-            .ok_or_else(|| format!("invalid Java-compatible long property {name}={value:?}")),
+        Ok(value) => value
+            .parse::<i64>()
+            .map_err(|_| format!("invalid Java-compatible long property {name}={value:?}")),
         Err(env::VarError::NotPresent) => Ok(default),
         Err(env::VarError::NotUnicode(value)) => Err(format!(
             "non-Unicode Java-compatible long property {name}={value:?}"
@@ -517,14 +518,13 @@ mod tests {
             )
             .is_err()
         );
-        assert_eq!(
+        assert!(
             property_result(
                 ORDERLY_LOCK_INTERVAL_PROPERTY,
                 20_000,
                 Ok("١٢٣٤".to_owned())
             )
-            .unwrap(),
-            1_234
+            .is_err()
         );
         assert_eq!(
             property_result(

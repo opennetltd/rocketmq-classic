@@ -2984,6 +2984,10 @@ fn pinned_java_producer_core_fixture_matches_defaults_and_validation() {
             HashMap::from([("brokerPermission".to_owned(), permission.to_owned())])
         };
         let actual = check_broker_config(&properties);
+        if !permission.is_ascii() {
+            assert!(matches!(actual, Err(ProducerError::PermissionParse(_))));
+            continue;
+        }
         assert_eq!(
             actual.is_ok(),
             row["accepted"],

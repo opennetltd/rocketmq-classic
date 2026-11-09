@@ -39,7 +39,6 @@ pub(crate) struct PullRequest {
 }
 
 impl PullRequest {
-    #[allow(dead_code)] // Constructed by the private Phase 11 assignment activation path.
     pub(crate) fn new(
         consumer_group: impl Into<String>,
         process_queue: Arc<ProcessQueue>,
@@ -443,7 +442,6 @@ impl PullScheduler {
         );
     }
 
-    #[allow(dead_code)] // Used by Phase 11 assignment transitions.
     pub(crate) fn pause(&self, queue: &MessageQueue, generation: u64) {
         let key = PullIdentity {
             queue: queue.clone(),
@@ -461,7 +459,7 @@ impl PullScheduler {
         self.inner.changed.notify_one();
     }
 
-    #[allow(dead_code)] // Used by Phase 11 assignment transitions.
+    #[cfg(test)]
     pub(crate) fn resume(&self, queue: &MessageQueue, generation: u64) {
         let key = PullIdentity {
             queue: queue.clone(),

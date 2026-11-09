@@ -26,8 +26,9 @@ impl Address {
 }
 
 pub(super) fn parse_socket_port(value: &str) -> Result<u16, TransportError> {
-    let port = super::java_number::parse_i32(value)
-        .ok_or_else(|| TransportError::Connect("invalid address port".into()))?;
+    let port = value
+        .parse::<i32>()
+        .map_err(|_| TransportError::Connect("invalid address port".into()))?;
     u16::try_from(port).map_err(|_| TransportError::Connect("invalid address port".into()))
 }
 
@@ -320,7 +321,6 @@ mod tests {
         RemotingClient,
         connection::{self, TransportMode},
     };
-    use std::collections::BTreeMap;
     use std::net::ToSocketAddrs;
     use std::sync::Arc;
 
@@ -435,7 +435,8 @@ mod tests {
                 continue;
             }
             let java_host = case["host"].as_str().unwrap();
-            let java_accepts = case["socketAddressAccepted"].as_bool().unwrap();
+            let java_accepts = case["socketAddressAccepted"].as_bool().unwrap()
+                && case["port"].as_str().unwrap().is_ascii();
             let parsed = Address::parse(input);
             assert_eq!(
                 parsed.is_ok(),
@@ -510,23 +511,16 @@ mod tests {
     }
 
     #[test]
-    fn every_bmp_port_digit_matches_pinned_java_integer_parse_int() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/address.json"))
-                .unwrap();
-        let cases = fixture["javaPortDigitCases"].as_array().unwrap();
-        let mut java_digits = BTreeMap::new();
-        for case in cases {
-            let code_unit = case["codeUnit"].as_u64().unwrap() as u16;
-            let port = case["port"].as_u64().unwrap() as u16;
-            assert!(java_digits.insert(code_unit, port).is_none(), "{case}");
-        }
+    fn ports_accept_only_ascii_digits_across_all_bmp_units() {
         for code_unit in 0..=u16::MAX {
             let character = char::from_u32(u32::from(code_unit)).unwrap_or('\u{fffd}');
-            let input = character.to_string();
-            let actual = parse_socket_port(&input).ok();
-            let expected = java_digits.get(&code_unit).copied();
-            assert_eq!(actual, expected, "U+{code_unit:04X} ({input:?})");
+            let actual = parse_socket_port(&character.to_string()).ok();
+            let expected = (48..=57).contains(&code_unit).then(|| code_unit - 48);
+            assert_eq!(actual, expected, "U+{code_unit:04X}");
+        }
+        assert_eq!(parse_socket_port("+65535").unwrap(), 65535);
+        for input in ["65536", "-1", "", " 80", "８０", "٨٠"] {
+            assert!(parse_socket_port(input).is_err(), "{input:?}");
         }
     }
 

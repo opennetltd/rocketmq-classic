@@ -690,7 +690,10 @@ fn convert_topic_route_data(
             .split(';')
             .filter(|_| !ordered.trim_end_matches(';').is_empty())
         {
-            let count = entry.split(':').nth(1).and_then(java_integer);
+            let count = entry
+                .split(':')
+                .nth(1)
+                .and_then(|value| value.parse::<i32>().ok());
             let count = count.ok_or(RuntimeError::InvalidRoute("invalid ordered queue count"))?;
             normalized.push(format!(
                 "{}:{count}",
@@ -809,7 +812,10 @@ fn validate_conversion_size(topic: &str, route: &TopicRouteData) -> Result<(), R
         for item in ordered.split(';') {
             let mut parts = item.split(':');
             let broker = parts.next().unwrap_or_default();
-            let count = parts.next().and_then(java_integer).unwrap_or(0);
+            let count = parts
+                .next()
+                .and_then(|value| value.parse::<i32>().ok())
+                .unwrap_or(0);
             add(count, broker)?;
         }
     }
@@ -873,18 +879,6 @@ fn validate_conversion_size(topic: &str, route: &TopicRouteData) -> Result<(), R
     Ok(())
 }
 
-// Integer.parseInt iterates Java char/UTF-16 units and Character.digit(10),
-// accepting BMP decimal scripts but not supplementary mathematical digits.
-// Accumulate negatively so i32::MIN is representable without widening/range loss.
-fn java_integer(value: &str) -> Option<i32> {
-    crate::java_number::parse_long(value)?.try_into().ok()
-}
-
-#[cfg(test)]
-fn java_decimal_digit(unit: u16) -> Option<u16> {
-    crate::java_number::decimal_digit(unit)
-}
-
 fn routes_equal(left: &TopicRouteData, right: &TopicRouteData) -> Result<bool, RuntimeError> {
     let changed = left
         .java_topic_route_data_changed(Some(right))
@@ -921,9 +915,9 @@ pub fn broker_vip_channel(enabled: bool, address: &str) -> Result<String, Runtim
     let (host, port) = address
         .rsplit_once(':')
         .ok_or(RuntimeError::InvalidBrokerAddress)?;
-    let port = crate::java_number::parse_long(port)
-        .and_then(|port| i32::try_from(port).ok())
-        .ok_or(RuntimeError::InvalidBrokerPort)?;
+    let port = port
+        .parse::<i32>()
+        .map_err(|_| RuntimeError::InvalidBrokerPort)?;
     Ok(format!("{host}:{}", port.wrapping_sub(2)))
 }
 
@@ -1528,28 +1522,20 @@ mod tests {
     }
 
     #[test]
-    fn ordered_integer_parser_matches_invoked_java_digits_and_signed_boundaries() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        let zeros = fixture["integerDigitZeroCodeUnits"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|value| value.as_u64().unwrap() as u16)
-            .collect::<Vec<_>>();
-        for unit in 0..=u16::MAX {
-            let expected = zeros
-                .iter()
-                .find_map(|zero| unit.checked_sub(*zero).filter(|digit| *digit < 10));
-            assert_eq!(java_decimal_digit(unit), expected, "UTF-16 unit {unit:x}");
-        }
-        for case in fixture["integers"].as_array().unwrap() {
-            let expected = case["value"].as_i64().map(|value| value as i32);
-            assert_eq!(
-                java_integer(case["input"].as_str().unwrap()),
-                expected,
-                "{case}"
-            );
+    fn vip_ports_require_ascii_and_preserve_signed_boundaries() {
+        assert_eq!(
+            broker_vip_channel(true, "broker:+10911").unwrap(),
+            "broker:10909"
+        );
+        assert_eq!(
+            broker_vip_channel(true, "broker:-2147483648").unwrap(),
+            "broker:2147483646"
+        );
+        for port in ["١٢٣", "１２３", "2147483648", "", " 10911"] {
+            assert!(matches!(
+                broker_vip_channel(true, &format!("broker:{port}")),
+                Err(RuntimeError::InvalidBrokerPort)
+            ));
         }
     }
 
@@ -2407,6 +2393,14 @@ mod tests {
         for case in fixture["vipCases"].as_array().unwrap() {
             let address = case["address"].as_str().unwrap();
             let actual = broker_vip_channel(true, address);
+            if address
+                .rsplit_once(':')
+                .is_some_and(|(_, port)| !port.is_ascii())
+            {
+                assert!(matches!(actual, Err(RuntimeError::InvalidBrokerPort)));
+                assert_eq!(broker_vip_channel(false, address).unwrap(), address);
+                continue;
+            }
             let java_accepts = case["enabledOutcome"] == "OK";
             assert_eq!(actual.is_ok(), java_accepts, "{address}: {actual:?}");
             match actual {
@@ -2465,7 +2459,14 @@ mod tests {
         for case in cases {
             let cache = RouteCache::default();
             let route = serde_json::from_value(case["input"].clone()).unwrap();
-            if case["outcome"] == "OK" {
+            let ascii_counts = case["input"]["orderTopicConf"]
+                .as_str()
+                .is_none_or(|order| {
+                    order
+                        .split(';')
+                        .all(|entry| entry.split(':').nth(1).is_none_or(str::is_ascii))
+                });
+            if case["outcome"] == "OK" && ascii_counts {
                 let converted = TopicSnapshot::from_route_data("topic", &route).unwrap();
                 assert_eq!(
                     serde_json::to_value(&converted.publish_queues).unwrap(),
@@ -2525,6 +2526,10 @@ mod tests {
             }
         }
         for (input, output) in fixture["vip"].as_object().unwrap() {
+            if !input.rsplit_once(':').unwrap().1.is_ascii() {
+                assert!(broker_vip_channel(true, input).is_err());
+                continue;
+            }
             assert_eq!(
                 broker_vip_channel(true, input).unwrap(),
                 output.as_str().unwrap()

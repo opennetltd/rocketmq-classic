@@ -1430,10 +1430,21 @@ mod tests {
                 case["bornHost"].as_str().unwrap(),
                 case["storeHost"].as_str().unwrap(),
             );
-            let expected = match case["outcome"].as_str().unwrap() {
-                "SUCCESS" => response::SUCCESS,
-                "SYSTEM_ERROR" => response::SYSTEM_ERROR,
-                other => panic!("unexpected Java reply-address outcome: {other}"),
+            let ascii_ports = ["bornHost", "storeHost"].iter().all(|field| {
+                case[field]
+                    .as_str()
+                    .unwrap()
+                    .rsplit_once(':')
+                    .is_none_or(|(_, port)| port.is_ascii())
+            });
+            let expected = if !ascii_ports {
+                response::SYSTEM_ERROR
+            } else {
+                match case["outcome"].as_str().unwrap() {
+                    "SUCCESS" => response::SUCCESS,
+                    "SYSTEM_ERROR" => response::SYSTEM_ERROR,
+                    other => panic!("unexpected Java reply-address outcome: {other}"),
+                }
             };
             assert_eq!(response.code, expected, "case {}", case["case"]);
             if expected == response::SYSTEM_ERROR {

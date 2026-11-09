@@ -3011,7 +3011,7 @@ impl TopicConfig {
             })
             .flatten()
             .as_deref()
-            .and_then(crate::header::parse_java_i32)
+            .and_then(|value| value.parse::<i32>().ok())
             .unwrap_or(-1))
     }
 
@@ -3045,21 +3045,23 @@ impl TopicConfig {
             return Ok(false);
         }
         self.topic_name = Some(fields[0].to_owned());
-        self.read_queue_nums = crate::header::parse_java_i32(fields[1]).ok_or_else(|| {
-            TopicConfigError::InvalidInteger {
-                input: fields[1].to_owned(),
-            }
-        })?;
-        self.write_queue_nums = crate::header::parse_java_i32(fields[2]).ok_or_else(|| {
-            TopicConfigError::InvalidInteger {
-                input: fields[2].to_owned(),
-            }
-        })?;
-        self.perm = crate::header::parse_java_i32(fields[3]).ok_or_else(|| {
-            TopicConfigError::InvalidInteger {
+        self.read_queue_nums =
+            fields[1]
+                .parse::<i32>()
+                .map_err(|_| TopicConfigError::InvalidInteger {
+                    input: fields[1].to_owned(),
+                })?;
+        self.write_queue_nums =
+            fields[2]
+                .parse::<i32>()
+                .map_err(|_| TopicConfigError::InvalidInteger {
+                    input: fields[2].to_owned(),
+                })?;
+        self.perm = fields[3]
+            .parse::<i32>()
+            .map_err(|_| TopicConfigError::InvalidInteger {
                 input: fields[3].to_owned(),
-            }
-        })?;
+            })?;
         self.topic_filter_type = Some(match fields[4] {
             "SINGLE_TAG" => TopicConfigFilterType::SingleTag,
             "MULTI_TAG" => TopicConfigFilterType::MultiTag,

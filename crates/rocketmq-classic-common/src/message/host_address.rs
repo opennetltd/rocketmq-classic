@@ -91,13 +91,15 @@ impl MessageHostAddress {
         }
     }
 
-    /// Parse Java `NetworkUtil.string2SocketAddress` input, including Java's
+    /// Parse Java `NetworkUtil.string2SocketAddress` input, with ASCII
     /// signed decimal port syntax and socket port bounds.
     pub fn parse_java_socket_address(value: &str) -> Result<Self, MessageHostAddressError> {
         let (host, raw_port) = value
             .rsplit_once(':')
             .ok_or(MessageHostAddressError::MissingPortSeparator)?;
-        let port = parse_java_i32(raw_port).ok_or(MessageHostAddressError::InvalidPort)?;
+        let port = raw_port
+            .parse::<i32>()
+            .map_err(|_| MessageHostAddressError::InvalidPort)?;
         let port = u16::try_from(port).map_err(|_| MessageHostAddressError::PortOutOfRange)?;
         Ok(Self::new(host, port))
     }
@@ -319,80 +321,6 @@ impl<'de> Deserialize<'de> for MessageHostAddress {
         let value = String::deserialize(deserializer)?;
         Self::from_java_to_string(&value).map_err(serde::de::Error::custom)
     }
-}
-
-pub(super) fn parse_java_i32(value: &str) -> Option<i32> {
-    let mut units = value.encode_utf16().peekable();
-    let negative = match units.peek().copied()? {
-        0x2d => {
-            units.next();
-            true
-        }
-        0x2b => {
-            units.next();
-            false
-        }
-        _ => false,
-    };
-    units.peek()?;
-    let limit = if negative { i32::MIN } else { -i32::MAX };
-    let multiply_limit = limit / 10;
-    let mut result = 0_i32;
-    for unit in units {
-        let digit = i32::from(java_decimal_digit(unit)?);
-        if result < multiply_limit {
-            return None;
-        }
-        result *= 10;
-        if result < limit + digit {
-            return None;
-        }
-        result -= digit;
-    }
-    Some(if negative { result } else { -result })
-}
-
-pub(super) fn parse_java_i64(value: &str) -> Option<i64> {
-    let mut units = value.encode_utf16().peekable();
-    let negative = match units.peek().copied()? {
-        0x2d => {
-            units.next();
-            true
-        }
-        0x2b => {
-            units.next();
-            false
-        }
-        _ => false,
-    };
-    units.peek()?;
-    let limit = if negative { i64::MIN } else { -i64::MAX };
-    let multiply_limit = limit / 10;
-    let mut result = 0_i64;
-    for unit in units {
-        let digit = i64::from(java_decimal_digit(unit)?);
-        if result < multiply_limit {
-            return None;
-        }
-        result *= 10;
-        if result < limit + digit {
-            return None;
-        }
-        result -= digit;
-    }
-    Some(if negative { result } else { -result })
-}
-
-fn java_decimal_digit(unit: u16) -> Option<u16> {
-    const ZEROS: &[u16] = &[
-        0x0030, 0x0660, 0x06f0, 0x07c0, 0x0966, 0x09e6, 0x0a66, 0x0ae6, 0x0b66, 0x0be6, 0x0c66,
-        0x0ce6, 0x0d66, 0x0de6, 0x0e50, 0x0ed0, 0x0f20, 0x1040, 0x1090, 0x17e0, 0x1810, 0x1946,
-        0x19d0, 0x1a80, 0x1a90, 0x1b50, 0x1bb0, 0x1c40, 0x1c50, 0xa620, 0xa8d0, 0xa900, 0xa9d0,
-        0xa9f0, 0xaa50, 0xabf0, 0xff10,
-    ];
-    ZEROS
-        .iter()
-        .find_map(|zero| unit.checked_sub(*zero).filter(|digit| *digit < 10))
 }
 
 fn java_ip_string(address: IpAddr) -> String {

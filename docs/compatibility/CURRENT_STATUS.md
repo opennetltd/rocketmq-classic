@@ -1,4 +1,43 @@
-# Current compatibility status — 2026-10-27
+# Current compatibility status
+
+## ASCII numeric scope follow-up — 2026-11-08
+
+The user's revised scope intentionally replaces Java Unicode integer parsing with
+Rust standard ASCII integer parsing. It covers numeric properties, permissions,
+headers, route counts/ports, remoting settings and consume timestamps; Unicode
+message/topic text remains supported. See the [numeric policy](KNOWN_DIFFERENCES.md#ascii-numeric-text-policy--2026-11-08)
+and [follow-up execution log](../../rlogs/2026/11/01-project-cleanup-modernization__20261108TASCII.rlog)
+for regression results and the distinction from historical Java Unicode parity claims.
+The final follow-up tree passed 2,074 tests across 94 workspace test/doc suites,
+strict all-target/all-feature Clippy, formatting and metadata checks. Windows GNU
+and Linux ARM64 offline Docker compilation checks passed. Supplemental portable
+Maven verification passed; the standard exact-JDK environment limitation described
+below remains unchanged. Broker live/owner validation was not repeated.
+The original cleanup plan remains unchanged; this later scope supersedes its
+Unicode numeric compatibility constraint. Release/owner approval remains open.
+
+## Cleanup execution — 2026-11-08
+
+The November cleanup preserves the pinned Java client, Rust MSRV and Broker baseline.
+It scopes test helpers, consolidates numeric primitives and reorganizes modules.
+The final cleanup source commit is `785a0294` on `feat/remove_legacy_code`.
+On `781ec756`, locked offline workspace all-feature tests and doctests passed
+(2,075 tests); strict all-target/all-feature Clippy passed again after the final
+visibility-only narrowing. Windows GNU cross-checks and Linux ARM64 offline Docker
+workspace checks passed before that narrowing. Formatting and metadata checks passed.
+The standard offline Maven gate encountered exact address-fixture drift with
+Homebrew JDK `27.0.1.0.3` versus the fixture runtime `27`; fixtures remain unchanged.
+Supplemental offline Maven verification with the existing
+`-Druntime.address.fixture.verify.mode=--verify-portable` mode passed, including
+106 Rust-generated header fixtures and 19 typed body fixtures. This does not
+turn the standard exact-environment Maven gate into a pass.
+The [execution log](../../rlogs/2026/11/01-project-cleanup-modernization__20261108.rlog)
+records phase commits and final local validation. The
+[regression handoff](../testing/cleanup-validation.md) records owner-run and platform
+verification separately. These changes do not extend the dated live evidence below;
+MAN-01–MAN-04 and final compatibility/release approval remain open.
+
+## Parity-remediation evidence — 2026-10-27
 
 The Java oracle is Apache RocketMQ client 5.5.1, source commit
 `efa1be59d6fc747ad220f036c86030f05f0419f9`. The latest parity-remediation

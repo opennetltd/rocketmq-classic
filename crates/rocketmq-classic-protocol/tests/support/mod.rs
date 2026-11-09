@@ -34,7 +34,9 @@ pub fn rust_header_method_exists(
             .unwrap_or_default();
         return (trait_methods.contains(&format!("fn {method}("))
             || trait_methods.contains(&format!("fn {method}<")))
-            && source.contains(&format!("impl super::FastCodesHeader for {rust_type} {{}}"));
+            && source.contains(&format!(
+                "impl crate::header::FastCodesHeader for {rust_type} {{}}"
+            ));
     }
 
     if matches!(method, "encode_fields" | "decode_fields" | "check_fields") {

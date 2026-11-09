@@ -204,6 +204,7 @@ struct PendingReplyEntry {
     deadline: Instant,
     send_succeeded: bool,
     sender: Option<oneshot::Sender<PendingReplyCompletion>>,
+    #[cfg(test)]
     cancelled: Option<Arc<AtomicBool>>,
     _admission: Option<OwnedSemaphorePermit>,
     future: Arc<RequestResponseFuture>,
@@ -271,6 +272,7 @@ impl RequestFutureTable {
                         + Duration::from_millis(future.timeout_millis().max(0) as u64),
                     send_succeeded: future.send_request_ok(),
                     sender: None,
+                    #[cfg(test)]
                     cancelled: None,
                     _admission: None,
                     future,
@@ -769,7 +771,7 @@ impl GroupRegistry {
                 .any(|group| group != inner_producer))
     }
 
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn clear(&self) -> Result<(), RuntimeError> {
         let (previous, producer_ids) = {
             let mut entries = self
@@ -887,6 +889,7 @@ impl GroupRegistry {
                     deadline,
                     send_succeeded: false,
                     sender: Some(sender),
+                    #[cfg(test)]
                     cancelled: Some(cancelled.clone()),
                     _admission: Some(admission),
                     future: future.clone(),

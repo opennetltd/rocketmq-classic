@@ -600,14 +600,16 @@ fn validate_optional_range(
 }
 
 pub(crate) fn parse_java_timestamp_millis(value: &str) -> Option<i64> {
-    let units = value.encode_utf16().collect::<Vec<_>>();
+    if !value.is_ascii() {
+        return None;
+    }
     let mut cursor = 0usize;
-    let year = parse_fixed_java_number(&units, &mut cursor, 4)?;
-    let month = parse_fixed_java_number(&units, &mut cursor, 2)?;
-    let day = parse_fixed_java_number(&units, &mut cursor, 2)?;
-    let hour = parse_fixed_java_number(&units, &mut cursor, 2)?;
-    let minute = parse_fixed_java_number(&units, &mut cursor, 2)?;
-    let second = parse_java_number_prefix(units.get(cursor..)?)?;
+    let year = parse_fixed_ascii_number(value, &mut cursor, 4)?;
+    let month = parse_fixed_ascii_number(value, &mut cursor, 2)?;
+    let day = parse_fixed_ascii_number(value, &mut cursor, 2)?;
+    let hour = parse_fixed_ascii_number(value, &mut cursor, 2)?;
+    let minute = parse_fixed_ascii_number(value, &mut cursor, 2)?;
+    let second = parse_ascii_number_prefix(value.get(cursor..)?)?;
 
     #[cfg(unix)]
     {
@@ -652,51 +654,22 @@ pub(crate) fn parse_java_timestamp_millis(value: &str) -> Option<i64> {
     }
 }
 
-fn parse_fixed_java_number(units: &[u16], cursor: &mut usize, width: usize) -> Option<i32> {
+fn parse_fixed_ascii_number(value: &str, cursor: &mut usize, width: usize) -> Option<i32> {
     let end = cursor.checked_add(width)?;
-    let value = parse_java_number_prefix(units.get(*cursor..end)?)?;
+    let result = parse_ascii_number_prefix(value.get(*cursor..end)?)?;
     *cursor = end;
-    Some(value)
+    Some(result)
 }
 
-fn parse_java_number_prefix(units: &[u16]) -> Option<i32> {
-    let mut cursor = 0;
-    while units
-        .get(cursor)
-        .is_some_and(|unit| char::from_u32(u32::from(*unit)).is_some_and(char::is_whitespace))
-    {
-        cursor += 1;
-    }
-    let negative = units.get(cursor) == Some(&u16::from(b'-'));
-    if negative {
-        cursor += 1;
-    }
-    let mut value = 0i64;
-    let mut digits = 0;
-    for unit in &units[cursor..] {
-        let Some(digit) = java_decimal_digit(*unit) else {
-            break;
-        };
-        value = value.checked_mul(10)?.checked_add(i64::from(digit))?;
-        digits += 1;
-    }
-    if digits == 0 {
+fn parse_ascii_number_prefix(value: &str) -> Option<i32> {
+    let value = value.trim_start();
+    let digits = value.strip_prefix('-').unwrap_or(value);
+    let length = digits.bytes().take_while(u8::is_ascii_digit).count();
+    if length == 0 {
         return None;
     }
-    let value = if negative { -value } else { value };
-    i32::try_from(value).ok()
-}
-
-fn java_decimal_digit(unit: u16) -> Option<u16> {
-    const ZEROS: &[u16] = &[
-        0x0030, 0x0660, 0x06f0, 0x07c0, 0x0966, 0x09e6, 0x0a66, 0x0ae6, 0x0b66, 0x0be6, 0x0c66,
-        0x0ce6, 0x0d66, 0x0de6, 0x0e50, 0x0ed0, 0x0f20, 0x1040, 0x1090, 0x17e0, 0x1810, 0x1946,
-        0x19d0, 0x1a80, 0x1a90, 0x1b50, 0x1bb0, 0x1c40, 0x1c50, 0xa620, 0xa8d0, 0xa900, 0xa9d0,
-        0xa9f0, 0xaa50, 0xabf0, 0xff10,
-    ];
-    ZEROS
-        .iter()
-        .find_map(|zero| unit.checked_sub(*zero).filter(|digit| *digit < 10))
+    let end = length + usize::from(value.starts_with('-'));
+    value.get(..end)?.parse().ok()
 }
 
 pub(crate) fn default_consume_timestamp() -> String {
@@ -999,8 +972,8 @@ mod tests {
         assert!(parse_java_timestamp_millis("20240229010203xyz").is_some());
         assert!(parse_java_timestamp_millis("2024022901020x").is_some());
         assert!(parse_java_timestamp_millis("2026010112000").is_some());
-        assert!(parse_java_timestamp_millis("٢٠٢٤٠٢٢٩٠١٠٢٠٣").is_some());
-        assert!(parse_java_timestamp_millis("２０２４０２２９０１０２０３").is_some());
+        assert!(parse_java_timestamp_millis("٢٠٢٤٠٢٢٩٠١٠٢٠٣").is_none());
+        assert!(parse_java_timestamp_millis("２０２４０２２９０１０２０３").is_none());
         assert!(parse_java_timestamp_millis("2024022901").is_none());
         assert!(parse_java_timestamp_millis("+20240229010203").is_none());
         assert!(parse_java_timestamp_millis("not-a-date").is_none());
@@ -1018,8 +991,8 @@ mod tests {
             let input = case["input"].as_str().unwrap();
             assert_eq!(
                 parse_java_timestamp_millis(input).is_some(),
-                case["accepted"].as_bool().unwrap(),
-                "Java parseDate acceptance for {input:?}"
+                input.is_ascii() && case["accepted"].as_bool().unwrap(),
+                "ASCII parseDate acceptance for {input:?}"
             );
         }
     }

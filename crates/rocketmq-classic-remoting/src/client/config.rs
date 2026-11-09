@@ -49,7 +49,7 @@ struct JavaClientDefaults {
 
 fn read_java_int_property(property: &str, default: i32) -> Result<i32, String> {
     match std::env::var(property) {
-        Ok(value) => super::java_number::parse_i32(&value).ok_or_else(|| {
+        Ok(value) => value.parse::<i32>().map_err(|_| {
             format!("Java system property {property} is not a signed decimal integer")
         }),
         Err(std::env::VarError::NotPresent) => Ok(default),
@@ -132,7 +132,7 @@ fn read_java_frame_max_length() -> Result<usize, String> {
 }
 
 fn parse_java_frame_max_length(value: &str) -> Result<usize, String> {
-    let length = super::java_number::parse_i32(value).ok_or_else(|| {
+    let length = value.parse::<i32>().map_err(|_| {
         format!("Java property {JAVA_FRAME_MAX_LENGTH_PROPERTY} is not a signed decimal integer")
     })?;
     usize::try_from(length)
@@ -2220,7 +2220,8 @@ mod tests {
     #[test]
     fn frame_max_length_property_uses_java_integer_and_positive_limit_rules() {
         assert_eq!(super::parse_java_frame_max_length("4096").unwrap(), 4096);
-        assert_eq!(super::parse_java_frame_max_length("١٢٣").unwrap(), 123);
+        assert!(super::parse_java_frame_max_length("١٢٣").is_err());
+        assert!(super::parse_java_frame_max_length("１２３").is_err());
         assert!(super::parse_java_frame_max_length("0").is_err());
         assert!(super::parse_java_frame_max_length("-1").is_err());
         assert!(super::parse_java_frame_max_length(" 4096").is_err());

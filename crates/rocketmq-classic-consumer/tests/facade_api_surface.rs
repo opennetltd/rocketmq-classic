@@ -437,6 +437,12 @@ fn every_pinned_java_rebalance_method_has_an_owner_mapping_or_disposition() {
     let owners = [
         include_str!("../src/pull/consumer.rs"),
         include_str!("../src/push/consumer.rs"),
+        include_str!("../src/push/consumer/admin.rs"),
+        include_str!("../src/push/consumer/assignment.rs"),
+        include_str!("../src/push/consumer/processing.rs"),
+        include_str!("../src/push/consumer/query.rs"),
+        include_str!("../src/push/consumer/rebalance.rs"),
+        include_str!("../src/push/consumer/runtime.rs"),
     ]
     .join("\n");
     let mappings = [

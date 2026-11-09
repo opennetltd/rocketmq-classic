@@ -25,7 +25,9 @@ fn perm_name_string_overload_matches_java_parse_and_validation() {
     let fixture = java_fixture();
     for row in fixture["permNameStringCases"].as_array().unwrap() {
         let input = row["input"].as_str().unwrap();
-        if let Some(valid) = row["valid"].as_bool() {
+        if !input.is_ascii() {
+            assert!(PermName::is_valid_string(input).is_err(), "{input:?}");
+        } else if let Some(valid) = row["valid"].as_bool() {
             assert_eq!(
                 PermName::is_valid_string(input).unwrap(),
                 valid,

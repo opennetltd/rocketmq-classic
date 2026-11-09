@@ -10,9 +10,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
-use super::host_address::{
-    MessageHostAddress, MessageHostAddressBytesError, parse_java_i32, parse_java_i64,
-};
+use super::host_address::{MessageHostAddress, MessageHostAddressBytesError};
 
 pub const NAME_VALUE_SEPARATOR: char = '\u{1}';
 pub const PROPERTY_SEPARATOR: char = '\u{2}';
@@ -1225,7 +1223,7 @@ impl Message {
     }
     pub fn priority(&self) -> i32 {
         self.get_property(crate::message::constants::PROPERTY_PRIORITY)
-            .and_then(|value| parse_java_i32(&value))
+            .and_then(|value| value.parse::<i32>().ok())
             .unwrap_or(-1)
     }
     pub fn set_priority(&mut self, priority: i32) -> Result<(), MessagePropertyError> {
@@ -2446,7 +2444,7 @@ impl MessageExt {
             .and_then(|subtype| subtype.priority())
             .unwrap_or_else(|| {
                 self.get_property(crate::message::constants::PROPERTY_PRIORITY)
-                    .and_then(|value| parse_java_i32(&value))
+                    .and_then(|value| value.parse::<i32>().ok())
                     .unwrap_or(-1)
             })
     }
@@ -3533,9 +3531,10 @@ fn parse_transient_sys_flag(value: Option<&str>) -> Result<Option<i32>, MessageS
     let Some(value) = value.filter(|value| !value.is_empty()) else {
         return Ok(None);
     };
-    parse_java_i32(value)
+    value
+        .parse::<i32>()
         .map(Some)
-        .ok_or_else(|| MessageSysFlagParseError {
+        .map_err(|_| MessageSysFlagParseError {
             value: value.to_owned(),
         })
 }
@@ -3547,7 +3546,9 @@ fn parse_i32_property_value(
     let Some(value) = value else {
         return Ok(0);
     };
-    parse_java_i32(&value).ok_or(MessagePropertyParseError { property, value })
+    value
+        .parse::<i32>()
+        .map_err(|_| MessagePropertyParseError { property, value })
 }
 
 fn parse_i64_property_value(
@@ -3557,7 +3558,9 @@ fn parse_i64_property_value(
     let Some(value) = value else {
         return Ok(0);
     };
-    parse_java_i64(&value).ok_or(MessagePropertyParseError { property, value })
+    value
+        .parse::<i64>()
+        .map_err(|_| MessagePropertyParseError { property, value })
 }
 
 fn set_transient_sys_flag(message: &mut Message, key: &str, value: Option<i32>) {
