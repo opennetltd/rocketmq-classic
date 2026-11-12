@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="620" viewBox="0 0 1040 620" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#37474f"/>
+    </marker>
+  </defs>
+
+  <style>
+    .lane { font-size: 15px; font-weight: bold; fill: #263238; }
+    .box  { fill: #ffffff; stroke: #546e7a; stroke-width: 1.4; rx: 6; }
+    .warn { fill: #fdecea; stroke: #c62828; stroke-width: 1.6; rx: 6; }
+    .good { fill: #ecf5ed; stroke: #2e7d32; stroke-width: 1.6; rx: 6; }
+    .t    { font-size: 12px; fill: #212121; }
+    .ts   { font-size: 11px; fill: #546e7a; }
+    .note { font-size: 12.5px; fill: #212121; font-weight: bold; }
+    .line { stroke: #37474f; stroke-width: 1.4; fill: none; marker-end: url(#arrow); }
+    .band { fill: #f5f7f9; stroke: #cfd8dc; stroke-width: 1; rx: 8; }
+  </style>
+
+  <text x="20" y="26" font-size="17" font-weight="bold" fill="#263238">Push pull dispatch fan-out (N assigned queues, mostly idle topic)</text>
+
+  <!-- Lane 1: Java -->
+  <rect class="band" x="20" y="44" width="1000" height="150"/>
+  <text class="lane" x="36" y="68">Java 5.5.1 - async callback hand-off</text>
+
+  <rect class="box" x="36" y="84" width="180" height="58"/>
+  <text class="t" x="50" y="106">PullMessageService</text>
+  <text class="ts" x="50" y="122">one ServiceThread</text>
+
+  <rect class="box" x="266" y="84" width="190" height="58"/>
+  <text class="t" x="280" y="106">LinkedBlockingQueue</text>
+  <text class="ts" x="280" y="122">unbounded MessageRequest FIFO</text>
+
+  <rect class="box" x="506" y="84" width="230" height="58"/>
+  <text class="t" x="520" y="106">pullMessage(PullRequest)</text>
+  <text class="ts" x="520" y="122">CommunicationMode.ASYNC, returns at once</text>
+
+  <rect class="box" x="786" y="84" width="218" height="58"/>
+  <text class="t" x="800" y="106">response callback pool</text>
+  <text class="ts" x="800" y="122">publicExecutor = availableProcessors()</text>
+
+  <line class="line" x1="216" y1="113" x2="262" y2="113"/>
+  <line class="line" x1="456" y1="113" x2="502" y2="113"/>
+  <line class="line" x1="736" y1="113" x2="782" y2="113"/>
+
+  <text class="note" x="36" y="166">Outstanding PULL_MESSAGE at the same time: N (one long poll per assigned queue, 20 s suspend)</text>
+
+  <!-- Lane 2: Rust current -->
+  <rect class="band" x="20" y="214" width="1000" height="176"/>
+  <text class="lane" x="36" y="238">Rust today - fixed private pool</text>
+
+  <rect class="box" x="36" y="254" width="180" height="58"/>
+  <text class="t" x="50" y="276">PullScheduler</text>
+  <text class="ts" x="50" y="292">one due-time task, in-flight set</text>
+
+  <rect class="box" x="266" y="254" width="190" height="58"/>
+  <text class="t" x="280" y="276">ClientRuntime FIFO</text>
+  <text class="ts" x="280" y="292">unbounded VecDeque (Java match)</text>
+
+  <rect class="warn" x="506" y="254" width="230" height="58"/>
+  <text class="t" x="520" y="276">PullRpcWorkers</text>
+  <text class="ts" x="520" y="292">PULL_RPC_WORKER_COUNT = 4, mpsc(64)</text>
+
+  <rect class="warn" x="786" y="254" width="218" height="58"/>
+  <text class="t" x="800" y="276">await pull RPC in the worker</text>
+  <text class="ts" x="800" y="292">task held for the whole 20 s poll</text>
+
+  <line class="line" x1="216" y1="283" x2="262" y2="283"/>
+  <line class="line" x1="456" y1="283" x2="502" y2="283"/>
+  <line class="line" x1="736" y1="283" x2="782" y2="283"/>
+
+  <text class="note" x="36" y="336">Outstanding PULL_MESSAGE: min(N, 4); channel full means reschedule plus 50 ms delay (no Java counterpart)</text>
+  <text class="ts" x="36" y="358">Observable effect: idle queue first message about ceil(N / 4) times the broker suspend window</text>
+
+  <!-- Lane 3: Rust target -->
+  <rect class="band" x="20" y="410" width="1000" height="176"/>
+  <text class="lane" x="36" y="434">Rust target - per-request owned task, admission immediate</text>
+
+  <rect class="box" x="36" y="450" width="180" height="58"/>
+  <text class="t" x="50" y="472">PullScheduler</text>
+  <text class="ts" x="50" y="488">unchanged delay, pause, cancel rules</text>
+
+  <rect class="box" x="266" y="450" width="190" height="58"/>
+  <text class="t" x="280" y="472">ClientRuntime FIFO</text>
+  <text class="ts" x="280" y="488">unchanged single dispatch order</text>
+
+  <rect class="good" x="506" y="450" width="230" height="58"/>
+  <text class="t" x="520" y="472">try_submit: spawn plus register</text>
+  <text class="ts" x="520" y="488">returns without waiting, no capacity limit</text>
+
+  <rect class="good" x="786" y="450" width="218" height="58"/>
+  <text class="t" x="800" y="472">live task per queue generation</text>
+  <text class="ts" x="800" y="488">completion guard releases scheduler slot</text>
+
+  <line class="line" x1="216" y1="479" x2="262" y2="479"/>
+  <line class="line" x1="456" y1="479" x2="502" y2="479"/>
+  <line class="line" x1="736" y1="479" x2="782" y2="479"/>
+
+  <text class="note" x="36" y="532">Outstanding PULL_MESSAGE: N, bounded by assigned queue generations through the in-flight set</text>
+  <text class="ts" x="36" y="554">Shutdown contract unchanged: close admission, cancel, join within awaitTerminationMillisWhenShutdown, then abort</text>
+
+  <text class="ts" x="20" y="600">Legend: grey boxes are Java-mapped stages kept as is; red boxes mark the fixed pool being removed; green boxes mark the replacement dispatch.</text>
+</svg>
