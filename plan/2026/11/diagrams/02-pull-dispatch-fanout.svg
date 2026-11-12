@@ -47,7 +47,7 @@
 
   <!-- Lane 2: Rust current -->
   <rect class="band" x="20" y="214" width="1000" height="176"/>
-  <text class="lane" x="36" y="238">Rust today - fixed private pool</text>
+  <text class="lane" x="36" y="238">Rust before this change - fixed private pool (removed)</text>
 
   <rect class="box" x="36" y="254" width="180" height="58"/>
   <text class="t" x="50" y="276">PullScheduler</text>
@@ -63,18 +63,18 @@
 
   <rect class="warn" x="786" y="254" width="218" height="58"/>
   <text class="t" x="800" y="276">await pull RPC in the worker</text>
-  <text class="ts" x="800" y="292">RPC occupies a worker; 20 s suspend</text>
+  <text class="ts" x="800" y="292">sync RPC; Pull header reused POP's 20 s</text>
 
   <line class="line" x1="216" y1="283" x2="262" y2="283"/>
   <line class="line" x1="456" y1="283" x2="502" y2="283"/>
   <line class="line" x1="736" y1="283" x2="782" y2="283"/>
 
-  <text class="note" x="36" y="336">Outstanding PULL_MESSAGE: min(N, 4); channel full means reschedule plus 50 ms delay (no Java counterpart)</text>
-  <text class="ts" x="36" y="358">Illustration: last initial poll waits about (ceil(N / 4) - 1) x 20 s; delivery depends on publish timing</text>
+  <text class="note" x="36" y="336">Outstanding PULL_MESSAGE: min(N, 4); channel full meant reschedule plus 50 ms delay (no Java counterpart)</text>
+  <text class="ts" x="36" y="358">Illustration only: an empty queue holds its worker for the whole suspend window; real delivery depends on publish timing</text>
 
   <!-- Lane 3: Rust target -->
   <rect class="band" x="20" y="410" width="1000" height="176"/>
-  <text class="lane" x="36" y="434">Rust target - per-request owned task, admission immediate</text>
+  <text class="lane" x="36" y="434">Rust after this change - per-request owned task, admission immediate</text>
 
   <rect class="box" x="36" y="450" width="180" height="58"/>
   <text class="t" x="50" y="472">PullScheduler</text>
@@ -90,14 +90,15 @@
 
   <rect class="good" x="786" y="450" width="218" height="58"/>
   <text class="t" x="800" y="472">owned task per admitted identity</text>
-  <text class="ts" x="800" y="488">pre-spawn guard; 15 s Pull suspend</text>
+  <text class="ts" x="800" y="488">pre-spawn guard; future RPC; 15 s / 30 s</text>
 
   <line class="line" x1="216" y1="479" x2="262" y2="479"/>
   <line class="line" x1="456" y1="479" x2="502" y2="479"/>
   <line class="line" x1="736" y1="479" x2="782" y2="479"/>
 
   <text class="note" x="36" y="532">Stable N eligible queues: N outstanding polls while transport permits remain available</text>
-  <text class="ts" x="36" y="554">Retiring generations may overlap. Stop: close, cancel, join to deadline, then abort and drain all tasks.</text>
+  <text class="ts" x="36" y="554">Retiring generations may overlap. Closed admission releases the slot and drops the request; no overflow retry.</text>
+  <text class="ts" x="36" y="572">Stop: close admission, cancel, join to the existing wait budget, then abort and drain every task (guard releases once).</text>
 
   <text class="ts" x="20" y="600">Legend: grey boxes are Java-mapped stages kept as is; red boxes mark the fixed pool being removed; green boxes mark the replacement dispatch.</text>
 </svg>
