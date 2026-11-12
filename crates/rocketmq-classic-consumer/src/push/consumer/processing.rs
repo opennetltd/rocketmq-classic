@@ -276,7 +276,8 @@ impl PushConsumer {
             __phase18_header_1.set_max_msg_nums(Some(self.config.pull_batch_size()));
             __phase18_header_1.set_sys_flag(Some(sys_flag));
             __phase18_header_1.set_commit_offset(Some(commit_offset));
-            __phase18_header_1.set_suspend_timeout_millis(Some(BROKER_SUSPEND_MAX_TIME_MILLIS));
+            __phase18_header_1
+                .set_suspend_timeout_millis(Some(PULL_BROKER_SUSPEND_MAX_TIME_MILLIS));
             __phase18_header_1.set_subscription(sub_expression);
             __phase18_header_1.set_sub_version(Some(subscription.get_sub_version()));
             __phase18_header_1
@@ -286,10 +287,12 @@ impl PushConsumer {
             __phase18_header_1
         };
         let pull_started = Instant::now();
+        // Java ASYNC pull: the admitted dispatcher task awaits this future
+        // directly instead of occupying a shared PullMessageService worker.
         let pull_result = context
             .runtime
             .api()
-            .pull_message(&broker_address, &header, deadline)
+            .pull_message_future(&broker_address, &header, deadline)
             .await
             .map_err(|error| self.pull_retry_error_from_rpc(error))?;
         let mut processed = self

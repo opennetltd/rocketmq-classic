@@ -6450,6 +6450,11 @@ async fn push_pull_request_uses_live_batch_settings_from_consumer_config() {
         assert_eq!(fields.get("maxMsgBytes"), Some(&"12345".to_owned()));
         assert_eq!(fields.get("subscription"), Some(&"tagA".to_owned()));
         assert_eq!(fields.get("commitOffset"), Some(&"42".to_owned()));
+        // Java simple-consumer suspend value; the POP path keeps 20000.
+        assert_eq!(
+            fields.get("suspendTimeoutMillis"),
+            Some(&"15000".to_owned())
+        );
         assert!(
             rocketmq_classic_common::sysflag::pull::has_commit_offset_flag(
                 fields.get("sysFlag").unwrap().parse().unwrap()
@@ -6522,6 +6527,279 @@ async fn push_pull_request_uses_live_batch_settings_from_consumer_config() {
         .fetch_push_result(&context, &request, &subscription)
         .await;
     assert!(pull_result.is_ok());
+    broker_peer.await.unwrap();
+    runtime.shutdown().await.unwrap();
+}
+
+#[test]
+fn pull_and_pop_keep_separate_broker_suspend_values() {
+    // The Pull header carries the private simple-consumer suspend value; the
+    // POP worker keeps its own long-poll wait and `pollTime + 10s` deadline.
+    assert_eq!(PULL_BROKER_SUSPEND_MAX_TIME_MILLIS, 15_000);
+    assert_eq!(BROKER_SUSPEND_MAX_TIME_MILLIS, 20_000);
+    assert_eq!(CONSUMER_TIMEOUT_MILLIS_WHEN_SUSPEND, 30_000);
+}
+
+#[tokio::test]
+async fn closed_pull_admission_releases_the_slot_without_an_rpc_attempt() {
+    let config = PushConsumerConfig::new("closed-pull-admission").unwrap();
+    let consumer = Arc::new(PushConsumer::new(config));
+    let store: Arc<dyn OffsetStore> = Arc::new(RecordingOffsetStore::default());
+    let scheduler = Arc::new(PullScheduler::new());
+    // Never started, so admission is closed and no dispatcher task exists.
+    let pull_rpc_workers = Arc::new(PullRpcWorkers::new());
+    let queue = MessageQueue::new("orders", "broker-a", 0);
+    scheduler
+        .schedule(
+            Arc::new(PullRequest::new(
+                "closed-pull-admission",
+                Arc::new(ProcessQueue::new_for_assignment(queue.clone(), 1)),
+                7,
+            )),
+            0,
+        )
+        .unwrap();
+    let admitted = scheduler.take_due().expect("one admitted request");
+    assert_eq!(scheduler.in_flight_count(), 1);
+
+    let registration = PushConsumerRegistration {
+        group: "closed-pull-admission".to_owned(),
+        message_model: consumer.message_model(),
+        consume_from_where: consumer.consume_from_where(),
+        unit_mode: consumer.is_unit_mode(),
+        subscriptions: consumer.subscriptions.clone(),
+        topic_queues: consumer.topic_queues.clone(),
+        pull_scheduler: scheduler.clone(),
+        pull_rpc_workers: pull_rpc_workers.clone(),
+        offset_store: Arc::downgrade(&store),
+        consumer: Arc::downgrade(&consumer),
+        runtime: std::sync::Weak::new(),
+    };
+
+    let request: Arc<dyn rocketmq_classic_core::runtime::MessageRequest> = admitted;
+    ConsumerRuntime::pull_message(&registration, request)
+        .expect("closed admission still consumes the pull submission")
+        .await;
+
+    // The queue-generation slot is released and no retry is re-queued.
+    assert_eq!(scheduler.in_flight_count(), 0);
+    assert_eq!(scheduler.scheduled_pull_count(), 0);
+    assert!(scheduler.take_due().is_none());
+    assert_eq!(pull_rpc_workers.active_admissions(), 0);
+}
+
+#[tokio::test]
+async fn one_pull_attempt_is_made_per_admission_and_a_follow_up_waits_for_release() {
+    let nameserver = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let nameserver_address = nameserver.local_addr().unwrap().to_string();
+    let broker_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let broker_address = broker_listener.local_addr().unwrap().to_string();
+    let broker_route = pop_test_route(&broker_address);
+
+    let nameserver_peer = tokio::spawn(async move {
+        let mut stream = None;
+        for _ in 0..4 {
+            let incoming = accept_remoting_request(&nameserver, &mut stream).await;
+            if incoming.code != request::GET_ROUTEINFO_BY_TOPIC {
+                continue;
+            }
+            write_remoting_reply_with_body(
+                stream.as_mut().unwrap(),
+                &incoming,
+                response::SUCCESS,
+                None,
+                Some(broker_route.clone()),
+            )
+            .await;
+        }
+    });
+
+    let pull_attempts = Arc::new(AtomicUsize::new(0));
+    let attempts = pull_attempts.clone();
+    let broker_peer = tokio::spawn(async move {
+        let mut stream = None;
+        while attempts.load(Ordering::Acquire) < 3 {
+            let incoming = accept_remoting_request(&broker_listener, &mut stream).await;
+            assert_eq!(incoming.code, request::PULL_MESSAGE);
+            let fields = incoming.ext_fields.as_ref().unwrap();
+            // Java simple-consumer suspend value, not the POP long-poll value.
+            assert_eq!(
+                fields.get("suspendTimeoutMillis"),
+                Some(&"15000".to_owned())
+            );
+            attempts.fetch_add(1, Ordering::AcqRel);
+            write_remoting_reply(
+                stream.as_mut().unwrap(),
+                &incoming,
+                response::SYSTEM_ERROR,
+                None,
+            )
+            .await;
+        }
+    });
+
+    let mut config = PushConsumerConfig::new("pull-single-attempt").unwrap();
+    config
+        .client_config_mut()
+        .set_namesrv_addr(Some(nameserver_address));
+    config
+        .client_config_mut()
+        .set_instance_name(Some("pull-single-attempt".into()));
+    let manager = ClientRuntimeManager::new();
+    let consumer = Arc::new(PushConsumer::with_manager(config, manager.clone()));
+    consumer.subscribe("orders", "tagA").await.unwrap();
+    let scheduler = Arc::new(PullScheduler::new());
+    let runtime = install_started_consumer(
+        &consumer,
+        &manager,
+        Arc::new(RecordingOffsetStore::default()),
+        idle_consume_service(),
+        scheduler.clone(),
+        Arc::new(PullRpcWorkers::new()),
+    )
+    .await;
+    runtime.remoting().start().unwrap();
+    runtime
+        .update_topic_route("orders", Instant::now() + Duration::from_secs(3))
+        .await
+        .unwrap();
+
+    let queue = MessageQueue::new("orders", "broker-a", 0);
+    let process_queue = Arc::new(ProcessQueue::new_for_assignment(queue.clone(), 1));
+    write_lock(&consumer.process_queues).insert(queue.clone(), process_queue.clone());
+    scheduler
+        .schedule(
+            Arc::new(PullRequest::new("pull-single-attempt", process_queue, 5)),
+            0,
+        )
+        .unwrap();
+    let admitted = scheduler.take_due().expect("one admitted request");
+
+    consumer
+        .clone()
+        .run_pull_worker_request(admitted.clone())
+        .await;
+
+    // One admission issues exactly one Pull RPC even though the broker failed.
+    assert_eq!(pull_attempts.load(Ordering::Acquire), 1);
+    // The follow-up waits while the slot is held, then becomes due on release.
+    assert_eq!(scheduler.scheduled_pull_count(), 0);
+    scheduler.finish(&admitted);
+    assert_eq!(scheduler.in_flight_count(), 0);
+    assert_eq!(scheduler.scheduled_pull_count(), 1);
+
+    consumer.shutdown().await.unwrap();
+    runtime.shutdown().await.unwrap();
+    broker_peer.abort();
+    nameserver_peer.abort();
+}
+
+#[tokio::test(start_paused = true)]
+async fn push_pull_uses_the_future_rpc_mode_within_the_thirty_second_deadline() {
+    let nameserver = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let nameserver_address = nameserver.local_addr().unwrap().to_string();
+    let broker_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let broker_address = broker_listener.local_addr().unwrap().to_string();
+    let broker_route = pop_test_route(&broker_address);
+
+    let nameserver_peer = tokio::spawn(async move {
+        let (mut stream, _) = nameserver.accept().await.unwrap();
+        let incoming = read_remoting_command(&mut stream).await;
+        assert_eq!(incoming.code, request::GET_ROUTEINFO_BY_TOPIC);
+        write_remoting_reply_with_body(
+            &mut stream,
+            &incoming,
+            response::SUCCESS,
+            None,
+            Some(broker_route),
+        )
+        .await;
+    });
+
+    // The scripted peer answers after the 30 s client deadline but inside the
+    // future-mode transport grace window. A synchronous pull attempt would have
+    // been cut off at the deadline itself.
+    let broker_peer = tokio::spawn(async move {
+        let (mut stream, _) = broker_listener.accept().await.unwrap();
+        let incoming = read_remoting_command(&mut stream).await;
+        assert_eq!(incoming.code, request::PULL_MESSAGE);
+        assert_eq!(
+            incoming
+                .ext_fields
+                .as_ref()
+                .unwrap()
+                .get("suspendTimeoutMillis"),
+            Some(&"15000".to_owned())
+        );
+        tokio::time::sleep(Duration::from_millis(
+            CONSUMER_TIMEOUT_MILLIS_WHEN_SUSPEND as u64 + 500,
+        ))
+        .await;
+        write_remoting_reply(
+            &mut stream,
+            &incoming,
+            response::PULL_NOT_FOUND,
+            Some(HeaderMap::from([
+                ("nextBeginOffset".into(), "9".into()),
+                ("minOffset".into(), "0".into()),
+                ("maxOffset".into(), "9".into()),
+                ("suggestWhichBrokerId".into(), "0".into()),
+            ])),
+        )
+        .await;
+    });
+
+    let mut config = PushConsumerConfig::new("pull-future-mode").unwrap();
+    config
+        .client_config_mut()
+        .set_namesrv_addr(Some(nameserver_address));
+    config
+        .client_config_mut()
+        .set_instance_name(Some("pull-future-mode".into()));
+    let manager = ClientRuntimeManager::new();
+    let consumer = Arc::new(PushConsumer::with_manager(config, manager.clone()));
+    let runtime = manager
+        .get_or_create(consumer.config().client_config())
+        .await
+        .unwrap();
+    runtime.remoting().start().unwrap();
+    runtime
+        .update_topic_route("orders", Instant::now() + Duration::from_secs(3))
+        .await
+        .unwrap();
+    nameserver_peer.await.unwrap();
+
+    let queue = MessageQueue::new("orders", "broker-a", 0);
+    let request = PullRequest::new(
+        "pull-future-mode",
+        Arc::new(ProcessQueue::new_for_assignment(queue.clone(), 1)),
+        4,
+    );
+    let context = PullContext {
+        runtime: runtime.clone(),
+        offset_store: Arc::new(RecordingOffsetStore::default()),
+        scheduler: Arc::new(PullScheduler::new()),
+        consume_service: ConsumeService::Concurrent(idle_consume_service()),
+    };
+    consumer.subscribe("orders", "tagA").await.unwrap();
+    let subscription = read_lock(&consumer.subscriptions)
+        .get("orders")
+        .cloned()
+        .expect("subscribed topic");
+
+    let pull_result = match consumer
+        .fetch_push_result(&context, &request, &subscription)
+        .await
+    {
+        Ok(result) => result,
+        Err(error) => panic!(
+            "future-mode pull should complete inside the deadline grace: {}",
+            error.reason
+        ),
+    };
+    assert_eq!(pull_result.result.next_begin_offset, 9);
+    assert_eq!(pull_result.result.status, PullStatus::NoNewMessage);
+
     broker_peer.await.unwrap();
     runtime.shutdown().await.unwrap();
 }

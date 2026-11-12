@@ -232,7 +232,11 @@ struct OrderlyLockBatchResult {
     uncertain: HashSet<MessageQueue>,
 }
 
+/// Java `POP` long-polling wait; the POP path keeps this value.
 const BROKER_SUSPEND_MAX_TIME_MILLIS: i64 = 20_000;
+/// Java simple-consumer `PULL_BROKER_SUSPEND_MAX_TIME_MILLIS`, used for the
+/// Push Pull request's `suspendTimeoutMillis`.
+const PULL_BROKER_SUSPEND_MAX_TIME_MILLIS: i64 = 15_000;
 const CONSUMER_TIMEOUT_MILLIS_WHEN_SUSPEND: i64 = 30_000;
 const CONSUME_RETRY_DELAY_MILLIS: i64 = 5_000;
 const CONSUMER_SEND_BACK_TIMEOUT_MILLIS: u64 = 5_000;

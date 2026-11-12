@@ -623,8 +623,14 @@ impl PullScheduler {
     }
 
     #[cfg(test)]
-    fn scheduled_pull_count(&self) -> usize {
+    pub(crate) fn scheduled_pull_count(&self) -> usize {
         self.lock_state().scheduled.len()
+    }
+
+    /// Queue-generation identities holding an admitted pull slot.
+    #[cfg(test)]
+    pub(crate) fn in_flight_count(&self) -> usize {
+        self.lock_state().in_flight.len()
     }
 
     fn logical_pull_count(&self) -> usize {
