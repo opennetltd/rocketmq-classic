@@ -17,7 +17,7 @@
     .band { fill: #f5f7f9; stroke: #cfd8dc; stroke-width: 1; rx: 8; }
   </style>
 
-  <text x="20" y="26" font-size="17" font-weight="bold" fill="#263238">Push pull dispatch fan-out (N assigned queues, mostly idle topic)</text>
+  <text x="20" y="26" font-size="17" font-weight="bold" fill="#263238">Push Pull dispatch fan-out (stable assignment, empty target topic)</text>
 
   <!-- Lane 1: Java -->
   <rect class="band" x="20" y="44" width="1000" height="150"/>
@@ -33,17 +33,17 @@
 
   <rect class="box" x="506" y="84" width="230" height="58"/>
   <text class="t" x="520" y="106">pullMessage(PullRequest)</text>
-  <text class="ts" x="520" y="122">CommunicationMode.ASYNC, returns at once</text>
+  <text class="ts" x="520" y="122">ASYNC: no wait for the whole long poll</text>
 
   <rect class="box" x="786" y="84" width="218" height="58"/>
   <text class="t" x="800" y="106">response callback pool</text>
-  <text class="ts" x="800" y="122">publicExecutor = availableProcessors()</text>
+  <text class="ts" x="800" y="122">callback width != live RPC count</text>
 
   <line class="line" x1="216" y1="113" x2="262" y2="113"/>
   <line class="line" x1="456" y1="113" x2="502" y2="113"/>
   <line class="line" x1="736" y1="113" x2="782" y2="113"/>
 
-  <text class="note" x="36" y="166">Outstanding PULL_MESSAGE at the same time: N (one long poll per assigned queue, 20 s suspend)</text>
+  <text class="note" x="36" y="166">Up to N eligible queue polls, subject to transport permits; 15 s suspend / 30 s timeout</text>
 
   <!-- Lane 2: Rust current -->
   <rect class="band" x="20" y="214" width="1000" height="176"/>
@@ -55,22 +55,22 @@
 
   <rect class="box" x="266" y="254" width="190" height="58"/>
   <text class="t" x="280" y="276">ClientRuntime FIFO</text>
-  <text class="ts" x="280" y="292">unbounded VecDeque (Java match)</text>
+  <text class="ts" x="280" y="292">unbounded VecDeque</text>
 
   <rect class="warn" x="506" y="254" width="230" height="58"/>
   <text class="t" x="520" y="276">PullRpcWorkers</text>
-  <text class="ts" x="520" y="292">PULL_RPC_WORKER_COUNT = 4, mpsc(64)</text>
+  <text class="ts" x="520" y="292">4 owned tasks + mpsc(64)</text>
 
   <rect class="warn" x="786" y="254" width="218" height="58"/>
   <text class="t" x="800" y="276">await pull RPC in the worker</text>
-  <text class="ts" x="800" y="292">task held for the whole 20 s poll</text>
+  <text class="ts" x="800" y="292">RPC occupies a worker; 20 s suspend</text>
 
   <line class="line" x1="216" y1="283" x2="262" y2="283"/>
   <line class="line" x1="456" y1="283" x2="502" y2="283"/>
   <line class="line" x1="736" y1="283" x2="782" y2="283"/>
 
   <text class="note" x="36" y="336">Outstanding PULL_MESSAGE: min(N, 4); channel full means reschedule plus 50 ms delay (no Java counterpart)</text>
-  <text class="ts" x="36" y="358">Observable effect: idle queue first message about ceil(N / 4) times the broker suspend window</text>
+  <text class="ts" x="36" y="358">Illustration: last initial poll waits about (ceil(N / 4) - 1) x 20 s; delivery depends on publish timing</text>
 
   <!-- Lane 3: Rust target -->
   <rect class="band" x="20" y="410" width="1000" height="176"/>
@@ -78,26 +78,26 @@
 
   <rect class="box" x="36" y="450" width="180" height="58"/>
   <text class="t" x="50" y="472">PullScheduler</text>
-  <text class="ts" x="50" y="488">unchanged delay, pause, cancel rules</text>
+  <text class="ts" x="50" y="488">same delay / pause / cancel</text>
 
   <rect class="box" x="266" y="450" width="190" height="58"/>
   <text class="t" x="280" y="472">ClientRuntime FIFO</text>
   <text class="ts" x="280" y="488">unchanged single dispatch order</text>
 
   <rect class="good" x="506" y="450" width="230" height="58"/>
-  <text class="t" x="520" y="472">try_submit: spawn plus register</text>
-  <text class="ts" x="520" y="488">returns without waiting, no capacity limit</text>
+  <text class="t" x="520" y="472">try_submit: register in JoinSet</text>
+  <text class="ts" x="520" y="488">no additional fixed Pull dispatch cap</text>
 
   <rect class="good" x="786" y="450" width="218" height="58"/>
-  <text class="t" x="800" y="472">live task per queue generation</text>
-  <text class="ts" x="800" y="488">completion guard releases scheduler slot</text>
+  <text class="t" x="800" y="472">owned task per admitted identity</text>
+  <text class="ts" x="800" y="488">pre-spawn guard; 15 s Pull suspend</text>
 
   <line class="line" x1="216" y1="479" x2="262" y2="479"/>
   <line class="line" x1="456" y1="479" x2="502" y2="479"/>
   <line class="line" x1="736" y1="479" x2="782" y2="479"/>
 
-  <text class="note" x="36" y="532">Outstanding PULL_MESSAGE: N, bounded by assigned queue generations through the in-flight set</text>
-  <text class="ts" x="36" y="554">Shutdown contract unchanged: close admission, cancel, join within awaitTerminationMillisWhenShutdown, then abort</text>
+  <text class="note" x="36" y="532">Stable N eligible queues: N outstanding polls while transport permits remain available</text>
+  <text class="ts" x="36" y="554">Retiring generations may overlap. Stop: close, cancel, join to deadline, then abort and drain all tasks.</text>
 
   <text class="ts" x="20" y="600">Legend: grey boxes are Java-mapped stages kept as is; red boxes mark the fixed pool being removed; green boxes mark the replacement dispatch.</text>
 </svg>

@@ -1,146 +1,183 @@
-# Plan 02 — 以「每請求自有任務」對齊 Java 的 Pull-RPC 併發扇出
+# 計畫 02 — 以每請求自有的 Push 派發對齊 Java Pull-RPC 扇出
 
 ## 1. 目標與範圍
 
-把 Push consumer 中固定的 `PULL_RPC_WORKER_COUNT = 4` / `PULL_RPC_QUEUE_CAPACITY = 64` Pull-RPC worker 池，替換為**送件即返回、每個請求一個自有任務**的派發模型，使同時在途的 `PULL_MESSAGE` 數量像 Java 5.5.1 非同步回呼扇出那樣隨指派佇列數擴展。
+將 Push consumer 固定的 `PULL_RPC_WORKER_COUNT = 4` / `PULL_RPC_QUEUE_CAPACITY = 64` 執行池，替換為送件即返回的自有任務派發。在穩定指派 `N` 個符合拉取條件的 Pull 佇列、且 transport 許可充足時，全部 `N` 個佇列都必須能同時發出長輪詢，與 Java 5.5.1 一致。
 
-範圍內：
+範圍內：`crates/rocketmq-classic-consumer/src/push/pull_service.rs` 的 Pull 派發、`src/push/consumer/runtime.rs` 的送件呼叫點、既有 async Pull API 選擇與私有 Pull 掛起常數、生命週期/回歸測試、一個腳本 peer 整合測試、文件/ADR/rlog，以及永久 Phase 19 場景 `P10-V05` 的完整 runner。下文以 `src/push/` 開頭的路徑均相對於 consumer crate。
 
-- `crates/rocketmq-classic-consumer/src/push/pull_service.rs` 的 Pull-RPC 派發內部實作；
-- `src/push/consumer/runtime.rs` 中一個送件呼叫點；
-- 單元測試與一個新增的腳本地端（scripted-peer）整合測試；
-- 相容性文件、一份 ADR 與執行日誌。
+範圍外：POP 派發與輪詢行為、consume-service 執行池、Phase 6 runtime FIFO 所有權、公開 API/設定、transport 送件政策，以及實作期間執行 live Broker 場景。§4.2 明確納入小幅掛起常數修正；不得改變 POP 對共用常數的使用。
 
-範圍外：POP worker 模型（已是每佇列自有任務）、consume-service 執行緒池、Phase 6 runtime 的 `PullMessageService` FIFO worker 及其無界佇列、公開 API/設定（不新增也不移除）、實際 Broker 場景（Phase 19）。
+## 2. 現況分析
 
-## 2. 背景脈絡
+### 2.1 Java 5.5.1 參考行為
 
-### 2.1 Java 5.5.1 參考行為（錨定原始碼）
+參考 commit：`efa1be59d6fc747ad220f036c86030f05f0419f9`。
 
-| Java 元素 | 錨定事實 |
+| 元素 | 已確認行為 |
 | --- | --- |
-| `PullMessageService` | 一條 `ServiceThread` 加上**無界**的 `LinkedBlockingQueue<MessageRequest>`；延遲請求由單執行緒排程器（`PullMessageServiceScheduledThread`）重新塞回同一條 FIFO。 |
-| `DefaultMQPushConsumerImpl.pullMessage(PullRequest)` | 結尾是 `pullAPIWrapper.pullKernelImpl(..., BROKER_SUSPEND_MAX_TIME_MILLIS = 20_000, CONSUMER_TIMEOUT_MILLIS_WHEN_SUSPEND = 30_000, CommunicationMode.ASYNC, pullCallback)`。派發執行緒立即返回，因此**每個指派佇列都能同時各持有一個在途長輪詢**。 |
-| 回應處理 | `NettyRemotingAbstract.processResponseCommand` → `executeInvokeCallback` → client `getCallbackExecutor()`，即 `callbackExecutor ?: publicExecutor`；而 `publicExecutor = Executors.newFixedThreadPool(clientCallbackExecutorThreads)`，`ClientConfig.clientCallbackExecutorThreads = Runtime.getRuntime().availableProcessors()`。 |
-| 設定項 | Java **沒有**任何 pull worker 數量設定。`consumeThreadMin/Max` 等屬於消費端，不是拉取端。 |
+| `PullMessageService` | 一條服務執行緒從無界 `LinkedBlockingQueue<MessageRequest>` 取件；單執行緒排程器重新送入延遲請求。 |
+| `DefaultMQPushConsumerImpl.pullMessage` | 使用 `CommunicationMode.ASYNC`、**15,000 ms** Broker 掛起與 **30,000 ms** client timeout。長輪詢期間不會持續佔用派發執行緒。 |
+| Transport 限制 | `NettyRemotingAbstract.invokeImpl` 取得 `semaphoreAsync`；`NettySystemConfig.CLIENT_ASYNC_SEMAPHORE_VALUE` 預設 **65,535**，可透過 `com.rocketmq.remoting.clientAsyncSemaphoreValue` 設定。Java 沒有額外的四 worker Pull 上限，但 async RPC 總併發並非無限。建立連線與取得許可都可能延遲交接。 |
+| 回應處理 | 通常使用 callback executor 或 `publicExecutor`；callback 執行緒數不等於在途長輪詢數。預設 callback 執行緒設定在 `NettyClientConfig`；`ClientConfig` 可設定它。 |
+| 已停止的服務 | `executePullRequestLater` 檢查 `isStopped()`。`executePullRequestImmediately` 直接放入 FIFO，沒有停止防護。不得用不存在的 Java 防護來解釋 Rust 關閉行為。 |
 
-### 2.2 目前 Rust 行為（現行程式樹）
+錨定原始碼：[PullMessageService](https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/client/src/main/java/org/apache/rocketmq/client/impl/consumer/PullMessageService.java)、[DefaultMQPushConsumerImpl](https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/client/src/main/java/org/apache/rocketmq/client/impl/consumer/DefaultMQPushConsumerImpl.java)、[NettyRemotingAbstract](https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/remoting/src/main/java/org/apache/rocketmq/remoting/netty/NettyRemotingAbstract.java)、[NettySystemConfig](https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/remoting/src/main/java/org/apache/rocketmq/remoting/netty/NettySystemConfig.java)、[NettyClientConfig](https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/remoting/src/main/java/org/apache/rocketmq/remoting/netty/NettyClientConfig.java)。
 
-1. `PullScheduler` 只有一條自有到期任務（`run`，`src/push/pull_service.rs:581`），把到期請求交給 `ClientRuntime::execute_pull_request_immediately`（`crates/rocketmq-classic-core/src/runtime/runtime.rs:561`），其 FIFO 是無界 `VecDeque`（`crates/rocketmq-classic-core/src/runtime/pull.rs:55`）—這一段已經與 Java 一致。
-2. `PushConsumerRegistration::pull_message`（`src/push/consumer/runtime.rs:111-125`）不會 await，只呼叫 `PullRpcWorkers::try_submit`。
-3. `PullRpcWorkers` 是 **4 條任務加上有界 `mpsc(64)` 通道**（`src/push/pull_service.rs:107-190`）。每條任務會 await `PushConsumer::run_pull_worker_request` → `fetch_push_result` → `runtime.api().pull_message(...).await`，也就是整個長輪詢期間都佔用該任務（Broker 掛起 20 秒、client 期限 30 秒；常數在 `src/push/consumer.rs:235-236`，RPC await 在 `src/push/consumer/processing.rs:292`）。
-4. 當 64 個槽位滿時 `try_submit` 失敗，請求會被以 `PULL_TIME_DELAY_MILLIS_WHEN_CACHE_FLOW_CONTROL = 50 ms` 重新排程（`src/push/consumer/runtime.rs:118-124`）。Java 因為佇列無界而沒有這條路徑。
+### 2.2 目前 Rust 行為
 
-對 `N` 個指派且大致空閒的佇列而言（每次輪詢都會掛到 Broker 20 秒掛起到期，然後以延遲 0 重新排程 — `src/push/consumer/processing.rs:366, 397`）：
+1. `PullScheduler::{run,take_due_inner}` 將到期請求交給 `ClientRuntime::execute_pull_request_immediately`。core runtime FIFO 使用無界 `VecDeque`；此階段不需變更。
+2. `PushConsumerRegistration::pull_message` 立即呼叫 `PullRpcWorkers::try_submit`；不在共用 runtime worker 上 await RPC。
+3. `PullRpcWorkers` 擁有四條任務與 `mpsc(64)`。每個 worker 在整段 RPC 期間 await `PushConsumer::run_pull_worker_request`。目前 Rust Pull header 使用 **20,000 ms** Broker 掛起；client timeout 為 30,000 ms。
+4. 通道溢位後以 50 ms 快取流控延遲重新排程。只有容量耗盡時才發生，並非只要 `N > 4` 就會發生；16 個佇列不會填滿通道。
+5. `fetch_push_result` 目前呼叫 `MQClientApi::pull_message`，採同步等待/socket-timeout 語意。既有 `pull_message_future` 對應 Java ASYNC Pull，包含清理寬限期（見 `docs/architecture/ADR-0003-typed-rpc-invocation-modes.md`）。Push 應選用此既有路徑；同步 Pull API 呼叫端不變。
+6. remoting crate 已有可設定的 async 送件控制（`client/config.rs`、`client/invocation.rs`）與取消清理（`client/pending.rs::PendingGuard`）。保留這些保護。
 
-| | 同時在途的 `PULL_MESSAGE` | 空閒佇列的首條訊息延遲 |
-| --- | --- | --- |
-| Java 5.5.1 | `N`（每個指派佇列一個） | ≈ 網路 RTT |
-| 目前 Rust | `min(N, 4)` 在途 + 最多 64 個排隊 | ≈ `ceil(N / 4) × 20 秒`（16 佇列 → 約 80 秒、32 佇列 → 約 160 秒） |
+對穩定的空佇列而言，若每次輪詢都等待完整掛起視窗 `S`，最後一個佇列的**初始請求**可能等待約 `(ceil(N / 4) - 1) × S`：以目前 Rust `S = 20 s` 計算，16 個佇列約 60 s、32 個約 140 s，不含初始化與排程。這是說明用估算，不是保證的首條訊息延遲。發布訊息可能立即完成前面的輪詢並釋放 worker，因此對全部佇列發布訊息、只測送達時間，可能漏掉缺陷。Java 在許可充足時，能為每個符合條件的佇列維持一個在途輪詢。
 
-### 2.3 差異的由來與其契約狀態
+### 2.3 契約與所有權
 
-- 根本原因：Rust 在呼叫端任務內 await RPC。若直接在共用的 runtime FIFO worker 上 await，同一個 `ClientRuntime` 的所有 consumer 與佇列會被序列化；因此實作把 await 搬進私有執行緒池 — 但選了 Java 沒有的固定寬度。
-- 造成此選擇的計畫壓力：主計畫 P10-04 —「Do not create an unbounded Tokio task for every pull iteration.」；Phase 10 計畫 §4.3 —「Use a bounded worker set and due-time queue rather than detached spawn per iteration.」
-- 來源紀錄：commit `62253614 feat(consumer): wire bounded push pull pipeline`；唯一記載是 `rlogs/2026-09-11-phase-10-push-consumer-pipeline__20261011T135145Z.rlog:46` —「Added bounded pull RPC workers so broker long polls do not occupy the shared runtime pull-dispatch worker.」
-- 目前契約狀態：**沒有 ADR、沒有 `KNOWN_DIFFERENCES.md` 條目**；相容性文件只把它當作證據文字提及（`docs/compatibility/PHASE_10_OFFLINE_METHOD_MATRIX.md:56`、`docs/compatibility/JAVA_5_5_1_COMPATIBILITY.md:844`）。主計畫契約写明 Tokio 原語「may replace JVM internals, not change observable semantics」、內部類別結構為「Not required」必須對照，且「no observable difference may be waived」。由於這個上限改變了可觀察量（同時在途的 pull 數量 → 多佇列下的送達延遲），此處視為應修正的相容性缺陷，而非已接受的框架差異。
+Phase 10 選用有界執行池的紀錄位於 commit `62253614` 與 `rlogs/2026/09/11-phase-10-push-consumer-pipeline__20261011T135145Z.rlog`。主計畫禁止無界 detached task 的限制，並不要求固定四個 RPC 上限：透過 scheduler 識別碼送件的自有任務符合所有權要求。保留歷史計畫/日誌原文，以文件記錄此取代原設計的決策。
 
-### 2.4 本倉庫已有的先例
+`PullScheduler` 以 `PullIdentity { queue, generation }` 合併工作。執行中的 pull 還可保留一個 deferred 後續請求，由 `finish` 釋放。rebalance 取消會標記舊世代，但不會立即終止其 RPC。因此精確上限是每個已送件的佇列世代最多一個 active 請求，**包含退役中的世代**，而非 rebalance 期間嚴格受目前指派數限制。`logical_pull_count()` 排除已取消的識別碼，scheduler 關閉時也會清空；單憑它為零，無法證明任務已 join。
 
-POP 路徑已經使用自有、可 join、可取消的每指派任務：`pop_workers: Mutex<HashMap<MessageQueue, JoinHandle<()>>>` 與 `pop_retired_workers`（`src/push/consumer.rs:665-666`）、rebalance 期間的生成/退役（`src/push/consumer/rebalance.rs:305-317, 470-485, 520-528`），以及關閉時透過 `shutdown_pop_worker_handles` 進行 abort/join（`src/push/consumer.rs:336-352`）。新的 Pull 派發沿用這個所有權模式，也符合主計畫「Implement these as cancellable tasks owned by [the owner], not detached Tokio tasks.」的要求。
+POP 路徑提供所有權先例，但任務不得自行移除/丟棄尚未完成的 `JoinHandle`：那會使執行尾端脫離管理，關閉時也看不到它。只在 async body 內建立 completion guard，則會漏掉首次 poll 前的 abort。以下目標設計避開這兩個問題。
 
-Java / 目前 Rust / 目標的對照見 `diagrams/02-pull-dispatch-fanout.svg`。
+見[派發對照圖](diagrams/02-pull-dispatch-fanout.svg)。
 
 ## 3. 目標設計
 
-- **送件即返回**：`try_submit` 登記請求識別碼並生成一條自有任務後立即返回，不做等待 — 這是 Java `CommunicationMode.ASYNC` 交接的 Rust 對應物。
-- **扇出上限** = 在途識別碼數 ≤ 指派佇列世代數。這已由 `PullScheduler` 保證：每個 `PullIdentity {queue, generation}` 最多持有一個已排程/在途請求（`in_flight: HashSet<PullIdentity>`，`src/push/pull_service.rs:301-305`；由 `PullScheduler::finish`（第 512 行）釋放）。沒有固定 worker 數、沒有通道容量、也沒有送件退避延遲。
-- **恰好一次的槽位釋放**由任務內建立的 RAII guard 負責：完成、取消、panic 或 abort 時都要 (a) 從 live map 移除自己的識別碼並 (b) 呼叫 `PullScheduler::finish`。guard 在 pull future 之後才解構，因此目前「先重新排程、再 finish」的順序（`src/push/pull_service.rs:170-178`）不變。
-- **保留的生命週期**：`watch` 取消；`stop(wait_millis)` = 關閉送件 → 發出取消 → 在剩餘期限內 join 每條 live 任務 → abort 落後者並 await；`Drop` 會 abort。啟動取得順序、回滾路徑與 `StartupStage::PullRpcWorkersStarted`（含 `"pull-rpc-workers-started"` 字串）保持不變，因為這些名稱已出現在既有證據中。
-- **已拒絕的替代方案**：每個指派 Pull 佇列一條長期迴圈任務（POP 式）。那會重複 Phase 6 `PullMessageService` 的所有權，並繞過 Java 單一服務執行緒所提供的 `PullScheduler` 延遲/合併/暫停/取消不變量。
+- 保留 scheduler 與 runtime FIFO。`try_submit` 同步登記一條任務後返回；不額外加入固定 Pull 併發/通道上限。transport 許可、快取流控、暫停及過期指派檢查仍具效力。
+- 使用自有 `tokio::task::JoinSet<()>` 管理任務 handle。送件時回收已完成結果，停止時全部 drain；任務本身不擁有也不修改 handle 集合。現有 Tokio 相依已足夠。已完成的項目可保留到下次送件或停止，但不得隨 pull 總迭代次數累積。
+- **spawn 前**建立 `PullCompletionGuard`，移入 future，涵蓋整段 pull/取消作用域。它只擁有 request、scheduler 與獨立 active 計數器。在 pull future 已被丟棄後，呼叫一次 `scheduler.finish`；涵蓋 `Weak` 升級失敗、panic 展開、取消，以及首次 poll 前的 abort。guard 不取得 dispatcher 狀態鎖，也不保留強引用的 `PushConsumer`/dispatcher。
+- 保留先重新排程、再 finish 的順序：`run_pull_worker_request` 可記錄 deferred 後續請求；只有 guard 釋放 scheduler 槽位。下一條任務送件時，已完成的上一條任務可能仍等待 join；由於前一條 pull future 已結束，這是安全的。
+- 停止時原子關閉送件、發出取消，再於既有局部等待預算內 join。期限到達後 abort 全部剩餘任務並 drain join 結果，讓取消清理完成。`Drop` 透過自有集合 abort；runtime poll 到 abort 後才可觀察到非同步清理。不得宣稱同步 `Drop` 會 join，或 abort 清理具有嚴格實際時間上限。
+- 保留啟動/關閉取得順序、回滾、`PullRpcWorkers`、`pull_rpc_workers`，以及 `StartupStage::PullRpcWorkersStarted` / `"pull-rpc-workers-started"`。不需每佇列永久迴圈，否則會重複 scheduler 所有權。
 
 ## 4. 實作計畫
 
-### 4.1 替換執行緒池內部 — `src/push/pull_service.rs`
+### 4.1 替換執行池內部 — `src/push/pull_service.rs`
 
-- 刪除 `PULL_RPC_WORKER_COUNT` 與 `PULL_RPC_QUEUE_CAPACITY`（第 107-108 行），並移除不再使用的 `tokio::sync::mpsc` import。
-- `PullRpcWorkerSet` 改為 `{ live: HashMap<PullIdentity, JoinHandle<()>>, cancellation: watch::Sender<bool> }`；保留 `PullRpcWorkers { state: Mutex<Option<PullRpcWorkerSet>> }`。送件關閉的條件就是 `state` 為 `None`。
-- `start(consumer, scheduler)`：簽章不變，`AlreadyStarted` / `Stopped` 結果不變；只安裝狀態（不再生成迴圈）。把 set 包在 `Arc` 中，讓完成 guard 能在後續 `stop()` 取走之後仍然有效。
-- `try_submit(request) -> Result<(), Arc<PullRequest>>`：在狀態鎖內 — 無狀態時返回 `Err(request)`；否則先清除已結束的 handle（`live.retain(|_, handle| !handle.is_finished())`），生成任務並插入 `(identity, handle)`，返回 `Ok(())`。不可跨 `await` 或跨 `PullScheduler` 呼叫持有狀態鎖。
-- 任務主體：先 `upgrade` 那個 `Weak<PushConsumer>`（失敗時釋放槽位並結束）；安裝完成 guard；接著 `tokio::select! { biased; _ = cancellation.changed() => {}, _ = consumer.clone().run_pull_worker_request(request) => {} }`，維持現有「取消即釋放槽位」語意。
-- 新增 `struct PullCompletionGuard`，其 `Drop` 先從 live map 移除自己的識別碼、再呼叫 `scheduler.finish(&request)`；其中不得含 await（只用 std mutex 與 `Notify`），以確保 abort 安全。
-- `stop(wait_millis)` 與 `Drop`：演算法與今日相同，改為迭代 `live.values()` 而非固定向量。
-- 僅供測試的存取器 `worker_count()` 更名為 `active_admissions() -> usize`（回傳 live 任務數），維持 `#[cfg(test)]`。
+1. 移除 `PULL_RPC_WORKER_COUNT`、`PULL_RPC_QUEUE_CAPACITY` 與不再使用的 `mpsc` import。保留 `PullRpcWorkers { state: Mutex<Option<PullRpcWorkerSet>> }`。
+2. `PullRpcWorkerSet` 儲存 `Weak<PushConsumer>`、`Arc<PullScheduler>`、watch sender、`JoinSet<()>` 與 `Arc<AtomicUsize>` active 計數器。不需把整個 set 包進 `Arc`。`None` 表示送件已關閉。
+3. `start(consumer, scheduler)` 安裝空集合，不預先生成 worker。集合存在時仍返回 `AlreadyStarted`。目前 dispatcher 在 `stop` 後**不會**返回 `Stopped`；不要誤套 scheduler 不同的重啟契約。
+4. 在狀態鎖內，`try_submit` 拒絕不存在的狀態、以 `try_join_next` drain 可取的結果（回報非預期 panic）、複製 cancellation/consumer/scheduler/counter、增加 active 計數、建立 guard，並在解鎖前 spawn 進集合。正式請求仍必須透過 `PullScheduler` 進入；不得繞過識別碼送件控制。持有 dispatcher 鎖時不得 await 或呼叫 scheduler 方法。
+5. future 在任何 await 或 `Weak` 升級前，就擁有預先建立的 guard。進入 `changed()` 與 `run_pull_worker_request` 的 biased `select!` 前，先檢查 cancellation receiver 目前值。取消後才首次 poll 的任務不得發出新 RPC。透過作用域確保先丟棄 pull future，再丟棄 guard。guard 解構時減少 active 計數，再呼叫 `scheduler.finish`，不存取 dispatcher 狀態。
+6. `stop(wait_millis)` 在鎖內取走 set、解鎖、發出取消，並在單一期限內反覆 `join_next`。處理成功、取消與 panic 結果，不得遺棄其他任務。到期時 `abort_all`，然後持續 drain `join_next` 直到空集合。`Drop` 發出取消，讓自有 `JoinSet` abort 在途任務。不得引入 set 與 guard 互持的引用循環；set 以弱引用儲存 consumer，只在執行時升級。
+7. 只把 dispatcher 的測試存取器 `worker_count()` 改為 `active_admissions()`。以獨立計數器讀取 active 請求數，不可用 `JoinSet::len()`（包含已完成但尚未 join 的任務）。保留 `PullScheduler::worker_count()`。測試須保留 counter/set 的清理觀察依據，跨越 `stop` 取走狀態的動作；僅因狀態為 `None` 而返回零的存取器，不能證明已清理。
 
-### 4.2 移除 Rust 專有的送件退避 — `src/push/consumer/runtime.rs:111-125`
+### 4.2 對齊交接、async RPC 選擇與私有 Pull 掛起常數
 
-當 `try_submit` 返回錯誤（關閉中或啟動回滾導致送件已關閉）時，改為呼叫 `self.pull_scheduler.finish(&request)` 並丟棄請求，而不是延遲 50 ms 重新排程。這對應 Java 中已停止的 `PullMessageService` 只記錄並丟棄（`executePullRequestLater` / `executePullRequestImmediately` 對 `isStopped()` 的防護）。保留 `PULL_TIME_DELAY_MILLIS_WHEN_CACHE_FLOW_CONTROL` 給 Java 對應的 ProcessQueue 快取流控（`src/push/consumer/processing.rs:134, 462`）。
+- `src/push/consumer/runtime.rs::pull_message` 在送件已關閉時，呼叫 `self.pull_scheduler.finish(&request)` 並丟棄請求；只移除溢位重試。這是 Rust 生命週期清理，不代表 Java 的立即入列具有停止防護。保留 50 ms 常數及真正的 ProcessQueue 快取流控用途。
+- 在 `src/push/consumer/processing.rs::fetch_push_result` 選用 `runtime.api().pull_message_future`，取代 `pull_message`。保留絕對 30 s 請求期限；使用既有 async transport 清理寬限期與失敗映射，不再沿用同步逾時關閉 socket 的行為。參考 core `rpc_modes` 測試新增暫停時間/腳本 peer 模式回歸測試。不得改變 core API 或其他呼叫端。
+- 在 `src/push/consumer.rs` 新增 `PULL_BROKER_SUSPEND_MAX_TIME_MILLIS = 15_000`，並在 `src/push/consumer/processing.rs` 的 Pull header 使用它。既有 20,000 ms 常數保留給 `run_pop_worker`，不得改變；目前 Pull 與 POP 共用此常數。Pull client timeout 維持 30,000 ms。這能修正獨立確認的私有 Pull wire 差異，又不改變 POP 或公開設定。
 
-### 4.3 呼叫點盤點（僅需可編譯）
+### 4.3 盤點生命週期與呼叫點
 
-確認以下位置仍可編譯且順序不變；預期簽章不需改變：`src/push/consumer.rs` 第 377、442、579/595/611、2562、2599、2618、2627-2630（啟動回滾）、2721-2728（start + checkpoint）、2740、3579-3609 、3728 與 3658（關閉）；`src/push/consumer/tests.rs` 有約 40 處 `Arc::new(PullRpcWorkers::new())` fixture（前幾處在第 457、623、961、1012、1806、2284、2491、2753、2848、2926 行），除非斷言改變否則不需修改；完成前用 `rg -n 'PullRpcWorkers::new|worker_count\(\)' crates/rocketmq-classic-consumer/src` 逐一盤點。
+檢查 `PushConsumer::{start,start_registered,shutdown_with_await_termination_millis}`、`start` 的錯誤/回滾分支與測試 fixture；保留既有 scheduler-stop → dispatcher-stop 順序。預期不需改簽章。使用：
 
-### 4.4 單元測試
+```sh
+rg -n 'PullRpcWorkers::new|pull_rpc_workers|worker_count\(\)|BROKER_SUSPEND_MAX_TIME_MILLIS' crates/rocketmq-classic-consumer/src
+```
 
-- 在 `src/push/pull_service.rs`，以 `pull_dispatch_admits_every_distinct_identity_without_a_worker_cap_and_joins_on_stop` 取代 `pull_rpc_workers_have_a_fixed_owned_set_and_join_on_stop`（第 910 行）：提交超過 64 個不同識別碼並斷言每次 `try_submit` 都返回 `Ok`；第二次 `start` 仍返回 `AlreadyStarted`；`stop(100)` 後 `active_admissions() == 0`。
-- 新增 `pull_dispatch_releases_the_scheduler_slot_when_a_pull_future_panics`：用會 panic 的 future 驅動完成 guard，並斷言 scheduler 的邏輯 pull 計數回到 0（不殘留 in-flight 識別碼）。
-- 在 `src/push/consumer/tests.rs` 更新三處 worker 數斷言：`startup_registers_push_consumer_and_shutdown_releases_it`（第 8322 行斷言 `== 4`；改為「無固定上限」的斷言 — 啟動且尚無指派時 `active_admissions() == 0`，且不得是某個固定常數）、第 8381 行（關閉後 `== 0`，換用新存取器）、`shutdown_aborts_a_slow_listener_without_committing_its_batch`（第 9166 行）與 `shutdown_with_explicit_wait_overrides_configured_wait`（第 9275 行）維持「關閉後為 0」的斷言並換用新存取器。
+只改 dispatcher 數量斷言；consume-service 與 scheduler 計數仍有意義。更新描述有界 RPC 執行池的註解。不要機械式更名所有 `worker_count()`。
 
-### 4.5 新增腳本地端扇出測試 — `crates/rocketmq-classic-consumer/tests/push_pull_fanout.rs`
+### 4.4 單元與生命週期測試
 
-沿用 `crates/rocketmq-classic-consumer/tests/pull_consumer.rs` 的既有骨架（`TcpListener::bind("127.0.0.1:0")`、NameServer peer 回傳 route body、`read_command`、`frame::encode`、`respond_empty`）。Route fixture：單一 broker 帶 **16 個佇列**，走 Phase 11 的真實 rebalance 指派。
+將自有任務包裝抽成可搭配受控 future 的私有 helper；測試必須走與正式環境相同的 guard/spawn/join 路徑，不得公開測試 API。
 
-斷言：
+- 替換 `pull_rpc_workers_have_a_fixed_owned_set_and_join_on_stop`：以 `schedule`/`take_due` 送入 **80 個不同、經 scheduler 接納的識別碼**，用 barrier hold 住其任務 future，證明全部 80 條可同時進入。對已失效的 `Weak` 送件並只檢查 `Ok`，不能測出併發能力。斷言第二次 `start` 為 `AlreadyStarted`，再取消/join，檢查保留下來的清理觀察依據。
+- 涵蓋帶 deferred 重新排程的正常完成、失效 `Weak`、panic、watch 取消、對已 poll 且 pending 的 future abort、**首次 poll 前 abort**，以及 dispatcher `Drop`。沒有 deferred 工作的完成路徑，須在 scheduler 仍執行時驗證原始 `in_flight` 集合與 active 計數器歸零；觀察 panic/取消的 join 結果。有 deferred 工作時，驗證恰好一個後續請求到期。
+- 測試送件與停止競爭、零等待預算：每個請求不是被擁有並 drain，就是被拒絕並由呼叫端 finish。檢查首次 poll 前已發出取消，以及重複 stop。abort 測試必須等待 join 或解構觀察依據；不可由 `state == None` 或 `scheduler.stop()` 清空計數推論成功。
+- 驗證相同識別碼快速後續請求，以及不同世代的取消/重新指派；舊請求完成不得釋放新世代槽位。反覆多輪後，證明已完成任務項目會回收，不會每次迭代都保留。
+- 在 `src/push/consumer/tests.rs`，`startup_registers_push_consumer_and_shutdown_releases_it` 於尚未指派前應期待零個 active admission，取代四個閒置 worker。更名其關閉斷言，以及 `shutdown_aborts_a_slow_listener_without_committing_its_batch`、`shutdown_with_explicit_wait_overrides_configured_wait` 的對應斷言；保留未解決訊息/offset 與回滾檢查。原 scheduler/consume-worker 斷言不變。
+- 在腳本請求測試斷言 Pull `suspendTimeoutMillis == 15000` 與 30 s deadline；保留 POP `pollTime == 20000` 的斷言。
 
-1. 在 peer 尚未回應任何請求前，就已觀察到至少 16 個不同 `queueId` 同時在途於 `PULL_MESSAGE`，且每個佇列恰好一個請求 — 證明扇出等於指派數量。
-2. 在同一佇列收到第一個回應之前，不會對同一 `queueId` 重複送出請求（目前會在這裡失敗：只到 4 個，其餘每 50 ms 重新進入）。
-3. 全部回以 `NO_NEW_MSG` 之後，每個佇列都開始第二輪 pull。
+### 4.5 腳本 peer 整合測試 — `crates/rocketmq-classic-consumer/tests/push_pull_fanout.rs`
+
+沿用 `tests/pull_consumer.rs` 的 frame/route helper 與 `src/push/consumer/tests.rs` 的 Push 啟動 helper。一個 broker 提供 16 個讀/寫佇列；單一 clustering Push consumer 經真實 rebalance 取得全部 16 個目標 topic 佇列。處理 route 查詢、heartbeat、consumer-list 查詢、offset 查詢/初始 offset 查詢、client 設定檢查與 unregister；分開過濾 retry-topic pull。不得在等待 hold 住的 Pull 回應時阻塞 peer 讀取。跨連線以 `(connection, opaque)` 及可取得的佇列世代追蹤請求。
+
+1. 回應初始化/控制請求，但 **hold 住全部目標 topic Pull 回應**。在單一短測試期限內（例如 5 s），要求佇列 `0..15` 各恰好一個在途請求，且此前未回應任何目標 Pull。舊四 worker 執行池會卡在此 barrier；不需等待 20 s 或估算送達延遲。對 16 個佇列，舊實作不預期溢位或 50 ms 重試。
+2. 回傳 `response::PULL_NOT_FOUND`（解碼為 `PullStatus::NoNewMessage`），帶有效的 `suggestWhichBrokerId`、`nextBeginOffset`、`minOffset`、`maxOffset` header。空的成功回覆不是有效 Pull 回覆。檢查 15 s 掛起 header。
+3. hold 住第二輪，再次要求每個目標佇列各一個在途請求。除初始扇出外，也證明槽位釋放與重新排程。
+4. 輪詢仍開啟時關閉；確認 consumer shutdown 與全部 peer 任務完成，沒有繼續送件或未結束的測試任務。使用有界等待及明確 peer teardown。
 
 ### 4.6 證據與文件
 
-- 新增 `docs/architecture/ADR-0085-push-pull-dispatch-fanout.md`：決策、§2.1 的 Java 原始碼事實、已拒絕的固定上限與每佇列迴圈替代方案，以及所有權/join 契約。
-- 更新 `docs/compatibility/PHASE_10_OFFLINE_METHOD_MATRIX.md` 第 56 行（把 "bounded RPC workers" 換成「扇出等於指派佇列數的每請求自有派發」）與第 63 行（"pull-RPC … workers" 措辭），以及 `docs/compatibility/JAVA_5_5_1_COMPATIBILITY.md:844` 的證據欄。
-- 在新的執行日誌 `rlogs/2026/11/02-push-pull-dispatch-fanout-parity__<UTC>.rlog` 記錄本次分析、變更與驗證。不得改寫歷史 Phase 10 計畫或 rlog 原文。
+- 若編號仍可用，新增 `docs/architecture/ADR-0085-push-pull-dispatch-fanout.md`；否則選下一個未使用 ADR 編號。解釋取代 Phase 10 設計的所有權決策、transport 限制條件、15 s Pull/20 s POP 區別，以及 join/guard 契約。
+- 更新 `docs/compatibility/PHASE_10_OFFLINE_METHOD_MATRIX.md` 的 Pull 與 shutdown 列、`docs/compatibility/JAVA_5_5_1_COMPATIBILITY.md` 的 Phase 10 證據，以及 `docs/compatibility/CURRENT_STATUS.md`。分開記錄本地證據與待執行 live 結果；不得提升整個 phase 狀態或改寫歷史驗證計數。
+- 在 `rlogs/2026/11/02-push-pull-dispatch-fanout-parity__<UTC>.rlog` 記錄實作與驗證。更新共用 SVG，使上限條件與修正後事實一致。
 
-### 4.7 登記 Phase 19 live 場景 `P10-V05`
+### 4.7 完成永久 Phase 19 場景 `P10-V05`
 
-依負責人決定登記（見 §7）。live 場景清單在 `tests/differential/scenarios.yaml`（目前 37 筆；Push 的 `P10-V03` 在第 33 行），且每個場景 ID 另外硬寫在 `tests/differential/run.sh`。需登記處：
+保留已記錄的場景登記決策。腳本 peer 已能證明併發；live 案例補上真實 Broker/client 證據。只登記 metadata 或命令紀錄並不足夠，因為 `run.sh --all` / `--check-all` 遇到不支援 ID 會 fail closed。
 
-- manifest：在 `P10-V03` 那筆之後新增一筆，欄位為 `"id":"P10-V05"`、`"phase":10`、`"execution_phase":19`、`"profile":"basic"`（單一 Broker）、inputs `{"topic":"compat_p10_fanout","group":"compat_p10_push_fanout","queues":16,"messages_per_queue":1}`、assertions `["every-queue-first-delivery-inside-broker-suspend-window","java-and-rust-per-queue-first-delivery-latency-comparable"]`、該 topic 與 group 的 cleanup、`"normalization":["opaque","timestamps","message_id"]`，以及 `"live_status":"PENDING_PHASE_19"`。
-- `tests/differential/run.sh` 需更新的 ID 清單：manifest 輸入驗證（第 148 行附近的 `by_id` 區塊與第 189-199 行的逐場景輸入防護）；第 343 行的 `implemented=(...)`；第 426 行的 topic 防護 `case "$scenario_id:$topic"`（加入 `P10-V05:compat_p10_fanout`）；第 546 行 `P10-V03:compat_p10_retry)` 旁邊的逐場景 profile/group 防護；第 625 行的長串場景 ID 排除鏈；以及逐場景命令腳本區塊（仿第 1074-1090 行的 `P11-V04` heredoc），其中必須用 `mqadmin updateTopic ... -r 16 -w 16` 建立 topic。第 412 行的 profile 白名單已接受 `basic:*`，第 638 行的雙 Broker 覆寫清單不需改動。
-- 探針：在 `integration-tests/src/bin/live_client.rs` 新增 `p10-fanout <namesrv> <topic> <group> <ready-file>` 子命令（仿 `p10_push_probe`，第 135 與 453 行），為每個指派佇列記錄一筆 `(queueId, 首次送達時間)`；並在 `compat/java-reference/src/main/java/compat/` 新增對應 Java 探針及其在 `compat/java-reference/pom.xml` 的 `exec:java@...` id。
-- 比對器：新增 `tests/differential/check_p10_fanout.py <evidence-dir> <topic>`，比較 Java 與 Rust 每個佇列的首次送達延遲。斷言必須容忍時間抖動（每個佇列都在 20 秒掛起視窗加固定容差內送達；任何佇列不得落後超過中位數的有界倍數），不可斷言精確毫秒值。
-- 把新的比對器與探針路徑加入 `tests/differential/run.sh` 的 `code_dirty_paths` 清單（第 760-775 行），以維持 clean-source 計算正確。
-- 文件：在 `docs/compatibility/PHASE_10_OFFLINE_METHOD_MATRIX.md` 的 "Case ownership and status" 表格（第 213 行之後）新增 `P10-V05` 列，狀態 `PENDING_PHASE_19`，並在 `docs/compatibility/CURRENT_STATUS.md` 記錄新增的待執行場景。`docs/owner-validation.md` 中「37/37 live scenarios」等歷史計數保持原文不動。
+**Manifest 與環境**
+
+- 在 `tests/differential/scenarios.yaml` 新增 `P10-V05`，包含 `source_case_id: P10-V05`、phase 10、execution phase 19、**profile `host-routed`**、inputs `topic: compat_p10_fanout`、`group: compat_p10_push_fanout`、`queues: 16`、`messages_per_queue: 1`、`admission_window_ms: 5000`、`delivery_window_ms: 5000`。在 host 執行的 Java/Rust Push client 必須取得可連線的 route 位址；`basic` Broker 宣告的是僅 Docker 內可用的 `broker`。
+- 使用分開的 `${topic}_java` / `${topic}_rust` topic 與 `${group}_java` / `${group}_rust` group。每次只執行一個 consumer、採真實 rebalance，不使用固定分配策略。在 `broker-host` 以 `-r 16 -w 16` 建立各 topic，並建立兩個訂閱群組（自動建立已停用）。依既有 Push 初始化/清理模式管理場景 retry topic。
+- 斷言：完整目標 topic 指派、任何目標 Pull 回應之前已開始全部 16 個空佇列 pull、每佇列一個 active pull、每個已發布訊息的佇列皆在宣告期限內送達，以及記錄 Java/Rust 各佇列經過時間。包含兩種 client 方向、完整衍生 topic/group 清理，以及 `live_status: PENDING_PHASE_19`。
+
+**探針與量測**
+
+- 在 `integration-tests/src/bin/live_client.rs` 新增 Rust `p10-fanout <namesrv> <topic> <group> <ready-file>`；在 `compat/java-reference/src/main/java/compat/` 新增 Java `LivePullFanoutProbe` 與對應 Maven exec id。使用立即確認成功的 concurrent listener；新 topic 的初始 offset 一致設定為 `ConsumeFromFirstOffset`。
+- 透過既有 `RpcHook::{before_request,after_response}` / Java `RPCHook` 觀察 Pull 開始/回應，依精確 topic 與 group 過濾。記錄指派鍵值、Pull 事件與請求掛起時間。維護 active 佇列計數；重複的 active start 應失敗。hook 觀察的是呼叫邊界，不是實際封包到達；wire 層證據由腳本 peer 測試提供。transport 許可須高於測試需求。
+- 從空 topic 開始。另給指派一段有界啟動期間。從第一個目標 Pull 呼叫起，要求 **5 s 內、且任何目標 Pull 回應之前**，全部 16 個不同佇列都已有 active pull；到此才寫入 ready file。即使所有訊息原本都能快速消費，四 worker 實作仍會在此閘門失敗。不得提前發布訊息，或以無限期的穩定等待取代閘門。
+- 閘門通過後，由同一探針程序內可重用的 producer，明確對每個已指派 `MessageQueue` 各送一則唯一訊息。在該程序內記錄各佇列的單調時鐘送出起點與首次 listener 送達經過時間（Java `System.nanoTime`、Rust `Instant`）。每個佇列從自己的送出起點量測，允許 callback 先於 send 返回；證據包含 client/run/topic/broker/queue/message 鍵值。分開的 topic 避免已消費 offset/積壓污染下一種語言的執行。
+- 新增 `tests/differential/check_p10_fanout.py <evidence-dir> <topic-base>`，要求兩種語言各具完整且唯一的 16 佇列 assignment/send/delivery 集合，驗證事件順序與 5 s 送件/送達界限，並輸出各佇列經過時間及統計摘要。不得跨程序相減時鐘，也不要求精確 Java/Rust 延遲比率或接近零的中位數倍數。barrier 是回歸閘門；延遲是有界的輔助證據。
+
+**Runner 接線**
+
+以 `rg -n 'P10-V03|P11-V04|P9-V03|implemented=|code_dirty_paths|topic_queue_count|group_created' tests/differential/run.sh` 盤點；更新所有適用的派發位置，不可無差別修改每次出現處：
+
+- manifest 輸入防護、`implemented`、profile/topic/group 白名單（`host-routed:P10-V05`），以及支援 ID 拒絕鏈；
+- 實際 host-routed topic/subgroup 建立、16 佇列覆寫、命令紀錄、執行兩個探針與比對器的**可執行**場景分支、退出/結果/狀態記錄，以及失敗與成功時的程序/topic/group 清理；
+- 新比對器的 source-dirty 計算（既有 `compat/java-reference/` 與 `integration-tests/` 目錄項目已涵蓋探針）。
+
+在 Phase 10 matrix 新增 `P10-V05` ownership 列，並在 `CURRENT_STATUS.md` 解釋待執行案例。比對器新增合成證據自測：有效執行、期限前僅四個 pull、送件 barrier 前就收到回應、缺少/重複佇列，以及無效時間，都必須得到預期成功/失敗結果。live runner 必須與 manifest 條目在同一次實作變更完成。
 
 ## 5. 驗證方式
+
+實作檢查（以下是未來實作要求，不代表本次計畫審查已修改程式碼）：
 
 ```sh
 cargo fmt --all -- --check
 cargo test -p rocketmq-classic-consumer push::pull_service::tests --locked
 cargo test -p rocketmq-classic-consumer --test push_pull_fanout --locked
-cargo test -p rocketmq-classic-consumer --all-targets --locked
-cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings
-cargo test --workspace --locked
+cargo test --workspace --all-targets --locked
+cargo test --workspace --doc --locked
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+mvn -f compat/java-reference/pom.xml verify
+bash -n tests/differential/run.sh
+bash tests/differential/run.sh --list
+bash tests/differential/run.sh --check-all
+python3 tests/differential/check_p10_fanout.py --self-test
+git diff --check
 ```
 
-預期：既有 Push 生命週期/關閉測試（`startup_registers_push_consumer_and_shutdown_releases_it`、`shutdown_aborts_a_slow_listener_without_committing_its_batch`、`shutdown_with_explicit_wait_overrides_configured_wait`）不得退步，且新扇出測試通過。
+使用倉庫錨定的 Java/Maven 環境；記錄環境限制，不得宣稱未執行的檢查通過。證明 hold-response 整合測試在舊四 worker dispatcher 下失敗、在替換後通過。保留啟動回滾、慢 listener 關閉、明確等待值、pause/resume、快取流控、rebalance 世代隔離與 transport 清理測試。workspace 檢查包含編譯新 Rust 探針；Maven 驗證編譯 Java 探針。
 
-live 閘門（已登記場景，於 Phase 19 執行）：`ROCKETMQ_CLASSIC_TEST_ENV=local-disposable ROCKETMQ_PROFILE=basic tests/differential/run.sh --scenario P10-V05` 會在可丟棄的 5.3.4 Docker profile 下執行，`bash integration-tests/run-local.sh --all` 則把它併入總覽。該場景對一個靜默的 16 佇列 topic 每佇列發布一則訊息，並比較 Java 與 Rust 各佇列的首次送達延遲；每個佇列都必須在 Broker 掛起視窗內送達，而不是隨佇列數線性增長。該次執行完成前 `P10-V05` 維持 `PENDING_PHASE_19`；由於 `run.sh --all`/`--check-all` 遇到未實作的 ID 會 fail closed，§4.7 的登記工作必須與程式碼變更同一次落地。
+最後由負責人執行的 Phase 19 閘門：
+
+```sh
+ROCKETMQ_CLASSIC_TEST_ENV=local-disposable ROCKETMQ_PROFILE=host-routed bash tests/differential/run.sh --scenario P10-V05
+ROCKETMQ_CLASSIC_TEST_ENV=local-disposable bash integration-tests/run-local.sh --all
+```
+
+透過既有證據機制，在倉庫外封存兩種語言日誌與比對結果。live 執行記錄結果前，`P10-V05` 維持待執行，不得把先前 37/37 live 結果視為涵蓋新案例。live 執行仍屬 Phase 19 義務，不阻擋本地驗證完成的實作合併。
 
 ## 6. 驗收標準
 
-1. `PULL_RPC_WORKER_COUNT` 與 `PULL_RPC_QUEUE_CAPACITY` 不復存在，consumer crate 內不再殘留任何固定 Pull 併發常數。
-2. 面對會 hold 住長輪詢的腳本 peer，`N` 個指派佇列會造成 `N` 個同時在途的 `PULL_MESSAGE`（每佇列一個）；50 ms 送件退避路徑消失。
-3. 每個已提交的請求在完成、取消、panic 與 abort 時都恰好釋放一次其 scheduler 槽位（`active_admissions()` 與 scheduler 邏輯計數都回到 0）。
-4. 關閉維持現有契約：關閉送件、在 `awaitTerminationMillisWhenShutdown` 內 join live 任務、abort 落後者，並如今日保留未處理的佇列內容與 offset。
-5. 不新增、移除或改變任何公開 API、設定或預設值；Java 對應的延遲常數（`20 ms / 50 ms / 1 s / 3 s`）維持現有呼叫點，唯獨刪除送件退避那一處。
-6. ADR-0085 加上 Phase 10 matrix 與上層相容性欄位都描述新的派發模型，且 rlog 補上先前缺失的平行性（parity）論證。
-7. `P10-V05` 已存在於 `tests/differential/scenarios.yaml`、已接進 `tests/differential/run.sh` 每一處場景 ID 清單、兩種語言的探針與 `check_p10_fanout.py` 都已就緒，且在任何 live 執行記錄結果前維持 `PENDING_PHASE_19`。
+1. 不再有額外固定 Pull 派發寬度/通道容量。穩定指派 `N` 個符合條件的佇列且 transport 許可充足時，peer 在任何回應之前看見 `N` 個目標 topic 在途 pull，每佇列一個。移除溢位重試；保留 transport 送件控制與真正的快取流控。
+2. 每個已送件請求擁有一個 guard，並被追蹤到 join。完成、owner 失效、panic、取消、首次 poll 前 abort 都會釋放一次槽位。deferred 後續請求與新舊世代保持隔離；已完成任務保留量不隨迭代次數增長。
+3. stop 關閉送件、取消、於既有局部期限內 join，再 abort/drain 落後者。回滾/關閉保留既有未解決訊息與 offset。測試以仍運作的 scheduler/保留的觀察依據證明清理，不能只靠已清空的狀態計數。
+4. Push 選用既有 async Pull API 及其清理語意。Pull header 使用錨定的 15 s Broker 掛起與 30 s client timeout；POP 保留 20 s 輪詢。公開 API/設定及其他 Java 對應流控/重試延遲不變。
+5. ADR、雙語計畫/SVG、相容性列與 rlog 都描述有條件的扇出及生命週期契約，不宣稱 Java transport 無限併發或整個 phase 已達相容。
+6. `P10-V05` 具完整可執行的 host-routed runner、隔離探針、含負面自測的比對器與清理。離線 manifest/runner 檢查通過；執行前 live 結果保持 `PENDING_PHASE_19`。
 
 ## 7. 決策
 
-- 決策：保留現有名稱 `PullRpcWorkers`、`pull_rpc_workers` 欄位與 `StartupStage::PullRpcWorkersStarted` / `"pull-rpc-workers-started"`。只改內部實作；改名會使相容性文件與歷史日誌已引用的字串失效。
-- 決策：不對 live Pull 任務設固定上限。Java 沒有上限，扇出受指派數量限制，且每條任務都是自有、可 join。較大的固定上限（例如 32）已被拒絕，因為只是在另一個佇列數重現同樣的可觀察差異。
-- 決策（負責人，2026-11-12）：登記一個永久 Phase 19 場景 `P10-V05`，不再只留負責人執行說明。這類缺陷在單元與腳本地端的時間斷言下看不出來，只有 live 長輪詢執行能證明扇出平行性；因此 §4.7 的登記工作屬於本計畫，而該次 live 執行本身仍是 Phase 19 義務，不阻擋程式碼變更合併。
+- 保留既有 dispatcher 與啟動階段名稱，避免無關更動。
+- 移除 Pull 專屬固定上限；保留既有 transport 限制。穩態扇出隨符合條件的指派數擴展；rebalance 期間退役世代可短暫共存。
+- 使用 `JoinSet` 所有權與 spawn 前 guard，取代自行移除的 `HashMap<PullIdentity, JoinHandle<()>>`，避免任務脫離管理或漏掉早期 abort 清理。
+- 保留已記錄的負責人決策（2026-11-12），新增永久 `P10-V05`。修正理由：本地腳本 peer 可確定性地偵測此缺陷；live 案例以真實 Broker 確認相同行為，且必須在發布訊息前先以空佇列併發建立閘門。

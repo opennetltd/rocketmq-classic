@@ -2,145 +2,182 @@
 
 ## 1. Goal and Scope
 
-Replace the fixed `PULL_RPC_WORKER_COUNT = 4` / `PULL_RPC_QUEUE_CAPACITY = 64` Pull-RPC worker pool in the Push consumer with **admission-immediate, per-request owned task dispatch**, so the number of concurrently outstanding `PULL_MESSAGE` requests scales with the assigned queue count the way Java 5.5.1's async-callback fan-out does.
+Replace the Push consumer's fixed `PULL_RPC_WORKER_COUNT = 4` / `PULL_RPC_QUEUE_CAPACITY = 64` pool with admission-immediate, owned task dispatch. With a stable assignment of `N` eligible Pull queues and sufficient transport permits, all `N` queues must be able to issue a long-poll concurrently, as in Java 5.5.1.
 
-In scope:
+In scope: Pull dispatch in `crates/rocketmq-classic-consumer/src/push/pull_service.rs`, its admission call site in `src/push/consumer/runtime.rs`, the existing async Pull API selection and private Pull suspend constant, lifecycle/regression tests, one scripted-peer integration test, documentation/ADR/rlog, and a complete permanent Phase 19 runner for `P10-V05`. Paths beginning `src/push/` below are relative to the consumer crate.
 
-- `crates/rocketmq-classic-consumer/src/push/pull_service.rs` Pull-RPC dispatch internals;
-- one admission call site in `src/push/consumer/runtime.rs`;
-- unit tests plus one new scripted-peer integration test;
-- compatibility docs, one ADR and an execution log.
+Out of scope: POP dispatch and polling behavior, the consume-service pool, Phase 6 runtime FIFO ownership, public API/settings, transport admission policy, and executing the live Broker scenario during implementation. The small suspend-constant correction in §4.2 is explicit; it must not change POP's shared-constant use.
 
-Out of scope: the POP worker model (already per-queue owned tasks), the consume-service pool, the Phase 6 runtime `PullMessageService` FIFO worker and its unbounded queue, public API/settings (none added or removed), live Broker scenarios (Phase 19).
+## 2. Current-State Analysis
 
-## 2. Context
+### 2.1 Java 5.5.1 reference behavior
 
-### 2.1 Java 5.5.1 reference behavior (pinned source)
+Reference commit: `efa1be59d6fc747ad220f036c86030f05f0419f9`.
 
-| Java element | Pinned fact |
+| Element | Confirmed behavior |
 | --- | --- |
-| `PullMessageService` | One `ServiceThread` plus an **unbounded** `LinkedBlockingQueue<MessageRequest>`; delayed requests come from a single-thread scheduler (`PullMessageServiceScheduledThread`) that re-enqueues into the same FIFO. |
-| `DefaultMQPushConsumerImpl.pullMessage(PullRequest)` | Ends in `pullAPIWrapper.pullKernelImpl(..., BROKER_SUSPEND_MAX_TIME_MILLIS = 20_000, CONSUMER_TIMEOUT_MILLIS_WHEN_SUSPEND = 30_000, CommunicationMode.ASYNC, pullCallback)`. The dispatch thread returns immediately, so **every assigned queue can hold one outstanding long-poll at the same time**. |
-| Response handling | `NettyRemotingAbstract.processResponseCommand` → `executeInvokeCallback` → client `getCallbackExecutor()`, which is `callbackExecutor ?: publicExecutor`; `publicExecutor = Executors.newFixedThreadPool(clientCallbackExecutorThreads)` and `ClientConfig.clientCallbackExecutorThreads = Runtime.getRuntime().availableProcessors()`. |
-| Settings | Java exposes **no** pull worker-count setting. Consumer thread knobs (`consumeThreadMin/Max`) belong to the consume side, not the pull side. |
+| `PullMessageService` | One service thread drains an unbounded `LinkedBlockingQueue<MessageRequest>`; a single-thread scheduler re-enqueues delayed requests. |
+| `DefaultMQPushConsumerImpl.pullMessage` | Uses `CommunicationMode.ASYNC`, a **15,000 ms** Broker suspend and **30,000 ms** client timeout. It does not occupy the dispatch thread throughout the long-poll. |
+| Transport limits | `NettyRemotingAbstract.invokeImpl` acquires `semaphoreAsync`; `NettySystemConfig.CLIENT_ASYNC_SEMAPHORE_VALUE` defaults to **65,535**, configurable through `com.rocketmq.remoting.clientAsyncSemaphoreValue`. Java has no separate four-worker Pull limit, but its total async RPC concurrency is not unlimited. Channel establishment and permit acquisition can delay hand-off. |
+| Response processing | Normally uses the callback executor or `publicExecutor`; callback thread count is not the number of outstanding long-polls. The default callback thread setting is in `NettyClientConfig`; `ClientConfig` can configure it. |
+| Stopped service | `executePullRequestLater` checks `isStopped()`. `executePullRequestImmediately` simply puts into the FIFO; it has no stopped guard. Do not justify Rust shutdown behavior with a nonexistent Java guard. |
 
-### 2.2 Current Rust behavior (current tree)
+Pinned sources: [PullMessageService](https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/client/src/main/java/org/apache/rocketmq/client/impl/consumer/PullMessageService.java), [DefaultMQPushConsumerImpl](https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/client/src/main/java/org/apache/rocketmq/client/impl/consumer/DefaultMQPushConsumerImpl.java), [NettyRemotingAbstract](https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/remoting/src/main/java/org/apache/rocketmq/remoting/netty/NettyRemotingAbstract.java), [NettySystemConfig](https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/remoting/src/main/java/org/apache/rocketmq/remoting/netty/NettySystemConfig.java), [NettyClientConfig](https://github.com/apache/rocketmq/blob/efa1be59d6fc747ad220f036c86030f05f0419f9/remoting/src/main/java/org/apache/rocketmq/remoting/netty/NettyClientConfig.java).
 
-1. `PullScheduler` runs one owned due-time worker (`run`, `src/push/pull_service.rs:581`) that hands ready requests to `ClientRuntime::execute_pull_request_immediately` (`crates/rocketmq-classic-core/src/runtime/runtime.rs:561`), whose FIFO is an unbounded `VecDeque` (`crates/rocketmq-classic-core/src/runtime/pull.rs:55`) — this stage already matches Java.
-2. `PushConsumerRegistration::pull_message` (`src/push/consumer/runtime.rs:111-125`) does not await; it calls `PullRpcWorkers::try_submit`.
-3. `PullRpcWorkers` is **4 tasks plus a bounded `mpsc(64)` channel** (`src/push/pull_service.rs:107-190`). Each task awaits `PushConsumer::run_pull_worker_request` → `fetch_push_result` → `runtime.api().pull_message(...).await`, i.e. it holds the task for the whole long-poll (20 s broker suspend, 30 s client deadline; constants at `src/push/consumer.rs:235-236`, RPC await at `src/push/consumer/processing.rs:292`).
-4. When the 64-slot channel is full, `try_submit` fails and the request is rescheduled with `PULL_TIME_DELAY_MILLIS_WHEN_CACHE_FLOW_CONTROL = 50 ms` (`src/push/consumer/runtime.rs:118-124`). Java has no such path because its queue is unbounded.
+### 2.2 Current Rust behavior
 
-Observable consequence for `N` assigned, mostly idle queues (each poll parks at the broker until the 20 s suspend expires, then reschedules with delay 0 — `src/push/consumer/processing.rs:366, 397`):
+1. `PullScheduler::{run,take_due_inner}` submits ready requests into `ClientRuntime::execute_pull_request_immediately`. The core runtime FIFO uses an unbounded `VecDeque`; no change is needed to that stage.
+2. `PushConsumerRegistration::pull_message` immediately calls `PullRpcWorkers::try_submit`; it does not await the RPC on the shared runtime worker.
+3. `PullRpcWorkers` owns four tasks and `mpsc(64)`. Each worker awaits `PushConsumer::run_pull_worker_request` through the whole RPC. Current Rust Pull headers use a **20,000 ms** Broker suspend; the client timeout is 30,000 ms.
+4. Channel overflow reschedules after the 50 ms cache-flow-control delay. This happens only after capacity is exhausted, not merely because `N > 4`; 16 queues do not fill the channel.
+5. `fetch_push_result` currently calls `MQClientApi::pull_message`, which selects synchronous wait/socket-timeout semantics. The existing `pull_message_future` represents Java ASYNC Pull, including cleanup grace (see `docs/architecture/ADR-0003-typed-rpc-invocation-modes.md`). Select that existing path for Push; leave synchronous Pull API callers unchanged.
+6. The remoting crate already has configurable async admission (`client/config.rs`, `client/invocation.rs`) and cancellation cleanup (`client/pending.rs::PendingGuard`). Keep these protections.
 
-| | Concurrent outstanding `PULL_MESSAGE` | First-message latency for an idle queue |
-| --- | --- | --- |
-| Java 5.5.1 | `N` (one per assigned queue) | ≈ network RTT |
-| Rust today | `min(N, 4)` live + up to 64 queued | ≈ `ceil(N / 4) × 20 s` (16 queues → ~80 s, 32 queues → ~160 s) |
+For stable empty queues whose polls last the full suspend window `S`, the last queue's **initial request** can wait approximately `(ceil(N / 4) - 1) × S`: with current Rust `S = 20 s`, 16 queues imply about 60 s and 32 about 140 s, excluding setup and scheduling. This is an illustration, not a guaranteed first-message latency. Publishing messages can complete earlier polls immediately and free workers, so publishing to every queue and measuring delivery alone can miss the defect. Java can maintain one outstanding poll per eligible queue while permits remain available.
 
-### 2.3 Why the difference exists, and its contract status
+### 2.3 Contract and ownership
 
-- Root cause: Rust awaits the RPC inside the calling task. Awaiting on the shared runtime FIFO worker would serialize every consumer and queue of one `ClientRuntime`, so the implementation moved the await into a private pool — but chose a fixed width that Java never had.
-- Plan pressure that produced it: master plan P10-04 — "Do not create an unbounded Tokio task for every pull iteration."; Phase 10 plan §4.3 — "Use a bounded worker set and due-time queue rather than detached spawn per iteration."
-- Provenance: commit `62253614 feat(consumer): wire bounded push pull pipeline`; the only record is `rlogs/2026-09-11-phase-10-push-consumer-pipeline__20261011T135145Z.rlog:46` — "Added bounded pull RPC workers so broker long polls do not occupy the shared runtime pull-dispatch worker."
-- Contract status today: **no ADR, no `KNOWN_DIFFERENCES.md` entry**; the compatibility docs mention it only as evidence text (`docs/compatibility/PHASE_10_OFFLINE_METHOD_MATRIX.md:56`, `docs/compatibility/JAVA_5_5_1_COMPATIBILITY.md:844`). The master-plan contract says Tokio primitives "may replace JVM internals, not change observable semantics", internal class layout is "Not required" to mirror, and "no observable difference may be waived". Because the cap changes an observable quantity (concurrent outstanding pulls → delivery latency under many queues), it is treated here as a parity defect to fix, not as an accepted framework difference.
+The Phase 10 bounded-pool choice is recorded by commit `62253614` and `rlogs/2026/09/11-phase-10-push-consumer-pipeline__20261011T135145Z.rlog`. The master-plan constraint against unbounded detached tasks does not require a fixed four-RPC limit: owned tasks admitted through scheduler identities satisfy the ownership requirement. Keep historical plans/logs unchanged and document this superseding decision.
 
-### 2.4 Existing precedent in this repository
+`PullScheduler` coalesces work by `PullIdentity { queue, generation }`. A running pull can also have one deferred follow-up, released by `finish`. Rebalance cancellation marks an old generation but does not immediately stop its RPC. Therefore the precise bound is one active request per admitted queue-generation, **including retiring generations**, not strictly the current assignment count during rebalance. `logical_pull_count()` excludes cancelled identities and is cleared by scheduler shutdown; zero alone cannot prove tasks were joined.
 
-The POP path already uses owned, joinable, cancellable per-assignment tasks: `pop_workers: Mutex<HashMap<MessageQueue, JoinHandle<()>>>` plus `pop_retired_workers` (`src/push/consumer.rs:665-666`), spawn/retire during rebalance (`src/push/consumer/rebalance.rs:305-317, 470-485, 520-528`), and abort/join at shutdown through `shutdown_pop_worker_handles` (`src/push/consumer.rs:336-352`). The new Pull dispatch reuses that ownership pattern, which also satisfies the master-plan rule "Implement these as cancellable tasks owned by [the owner], not detached Tokio tasks."
+The POP path provides an ownership precedent, but a task must not remove/drop its own unfinished `JoinHandle`: that detaches the tail of execution and hides it from shutdown. A completion guard created only inside the async body also misses abort-before-first-poll. The target below avoids both problems.
 
-See `diagrams/02-pull-dispatch-fanout.svg` for the Java / current-Rust / target comparison.
+See [the dispatch comparison](diagrams/02-pull-dispatch-fanout.svg).
 
 ## 3. Target Design
 
-- **Admission-immediate dispatch**: `try_submit` registers the request identity and spawns one owned task, then returns without waiting — the Rust analogue of Java's `CommunicationMode.ASYNC` hand-off.
-- **Fan-out bound** = live identities ≤ assigned queue generations. This is already guaranteed by `PullScheduler`: each `PullIdentity {queue, generation}` holds at most one scheduled/in-flight request (`in_flight: HashSet<PullIdentity>`, `src/push/pull_service.rs:301-305`; release through `PullScheduler::finish`, line 512). No fixed worker count, no channel capacity, no admission back-off delay.
-- **Exactly-once slot release** through an RAII guard created inside the task: on completion, cancellation, panic or abort it (a) removes its identity from the live map and (b) calls `PullScheduler::finish`. The guard drops after the pull future, so today's "reschedule first, then finish" ordering (`src/push/pull_service.rs:170-178`) is unchanged.
-- **Preserved lifecycle**: `watch` cancellation; `stop(wait_millis)` = close admission → signal cancellation → join each live handle within the remaining deadline → abort stragglers and await them; `Drop` aborts. Startup acquisition order, rollback path and `StartupStage::PullRpcWorkersStarted` (including its `"pull-rpc-workers-started"` string) stay unchanged because those names appear in existing evidence.
-- **Rejected alternative**: one long-lived loop task per assigned Pull queue (POP-style). It would duplicate Phase 6 `PullMessageService` ownership and bypass the `PullScheduler` delay/coalescing/pause/cancel invariants that Java's single service thread provides.
+- Keep the scheduler and runtime FIFO. `try_submit` synchronously registers one task and returns; it adds no fixed Pull concurrency/channel cap. Transport permits, cache flow control, pause, and stale-assignment checks remain authoritative.
+- Use an owned `tokio::task::JoinSet<()>` for task handles. Reap completed results on admission and drain everything at stop; no task owns or mutates the handle collection. The existing Tokio dependency is sufficient. Retained completed entries may remain until the next admission or stop, but must not accumulate with total pull iterations.
+- Construct `PullCompletionGuard` **before spawning**, move it into the future, and keep it alive around the entire pull/cancellation scope. It owns only the request, scheduler, and a separate active counter. It calls `scheduler.finish` once after the pull future has been dropped, including failed `Weak` upgrade, panic unwinding, cancellation, and abort before the first poll. No guard acquires the dispatcher state lock or retains a strong `PushConsumer`/dispatcher reference.
+- Preserve reschedule-before-finish: `run_pull_worker_request` may record a deferred follow-up; only the guard releases the scheduler slot. A finished task may still be awaiting join when its successor is admitted; this is safe because the earlier pull future has ended.
+- Stop closes admission atomically, signals cancellation, then joins within the existing local wait budget. Abort all remaining tasks at the deadline and drain their join results, allowing cancellation cleanup to complete. `Drop` aborts through the owned set; asynchronous cleanup is observed after the runtime polls the aborts. Do not claim a synchronous `Drop` joins tasks or that abort cleanup has a hard wall-clock bound.
+- Keep startup/shutdown acquisition order, rollback, `PullRpcWorkers`, `pull_rpc_workers`, and `StartupStage::PullRpcWorkersStarted` / `"pull-rpc-workers-started"`. A per-queue permanent loop is unnecessary and would duplicate scheduler ownership.
 
 ## 4. Implementation Plan
 
 ### 4.1 Replace the pool internals — `src/push/pull_service.rs`
 
-- Delete `PULL_RPC_WORKER_COUNT` and `PULL_RPC_QUEUE_CAPACITY` (lines 107-108) and drop the now-unused `tokio::sync::mpsc` import.
-- Change `PullRpcWorkerSet` to `{ live: HashMap<PullIdentity, JoinHandle<()>>, cancellation: watch::Sender<bool> }`; keep `PullRpcWorkers { state: Mutex<Option<PullRpcWorkerSet>> }`. Admission is closed exactly when `state` is `None`.
-- `start(consumer, scheduler)`: same signature and same `AlreadyStarted` / `Stopped` outcomes; it only installs the state (no spawn loop). Wrap the set in an `Arc` so completion guards can outlive a later `stop()` take.
-- `try_submit(request) -> Result<(), Arc<PullRequest>>`: under the state lock — return `Err(request)` when there is no state; otherwise prune finished handles (`live.retain(|_, handle| !handle.is_finished())`), spawn the task and insert `(identity, handle)`; return `Ok(())`. Never hold the state lock across an `await` or while calling into `PullScheduler`.
-- Task body: upgrade the `Weak<PushConsumer>` (on failure release the slot and exit); install the completion guard; then `tokio::select! { biased; _ = cancellation.changed() => {}, _ = consumer.clone().run_pull_worker_request(request) => {} }`, keeping the existing cancel-releases-slot semantics.
-- Add `struct PullCompletionGuard` whose `Drop` removes its identity from the live map and then calls `scheduler.finish(&request)`; it must be async-free (std mutex + `Notify` only) so it is abort-safe.
-- `stop(wait_millis)` and `Drop`: same algorithm as today, iterating `live.values()` instead of a fixed vector.
-- Rename the test-only accessor `worker_count()` to `active_admissions() -> usize` returning the live-task count; keep it `#[cfg(test)]`.
+1. Remove `PULL_RPC_WORKER_COUNT`, `PULL_RPC_QUEUE_CAPACITY`, and the unused `mpsc` import. Keep `PullRpcWorkers { state: Mutex<Option<PullRpcWorkerSet>> }`.
+2. Store `Weak<PushConsumer>`, `Arc<PullScheduler>`, the watch sender, `JoinSet<()>`, and an `Arc<AtomicUsize>` active counter in `PullRpcWorkerSet`. No `Arc` around the entire set is required. `None` means admission is closed.
+3. `start(consumer, scheduler)` installs an empty set without pre-spawned workers. Preserve `AlreadyStarted` when a set exists. The current dispatcher does **not** return `Stopped` after `stop`; do not accidentally copy the scheduler's different restart contract.
+4. Under the state lock, `try_submit` rejects absent state, drains available results with `try_join_next` (report unexpected panics), clones cancellation/consumer/scheduler/counter, increments active count, creates the guard, and spawns into the set before releasing the lock. Production requests must still arrive through `PullScheduler`; do not bypass its identity admission. No await or scheduler method call occurs while holding the dispatcher lock.
+5. The future owns the pre-created guard before any await or `Weak` upgrade. Check the cancellation receiver's current value before entering a biased `select!` between `changed()` and `run_pull_worker_request`. A task first polled after cancellation must not issue a new RPC. Scope the pull future so it is dropped before the guard. Guard drop decrements active count, then calls `scheduler.finish`, without accessing dispatcher state.
+6. `stop(wait_millis)` takes the set under the lock, releases the lock, signals cancellation, and repeatedly uses `join_next` under one deadline. Handle successful, cancelled, and panicked results without abandoning other tasks. At expiry call `abort_all`, then drain `join_next` until empty. `Drop` signals cancellation and lets the owned `JoinSet` abort outstanding tasks. Do not introduce a set–guard reference cycle; the set stores the consumer weakly and upgrades only for execution.
+7. Replace only the dispatcher's test accessor `worker_count()` with `active_admissions()`. Read the separate counter for active requests, not `JoinSet::len()` (which includes completed unjoined tasks). Keep `PullScheduler::worker_count()` unchanged. Tests must retain the counter/set's cleanup witness across `stop` taking the state; an accessor returning zero solely because state is `None` is insufficient evidence.
 
-### 4.2 Remove the Rust-only admission back-off — `src/push/consumer/runtime.rs:111-125`
+### 4.2 Align hand-off, async RPC selection, and the private Pull suspend constant
 
-When `try_submit` returns an error (admission closed during shutdown or startup rollback), call `self.pull_scheduler.finish(&request)` and drop the request instead of rescheduling it after 50 ms. This mirrors Java, where a stopped `PullMessageService` logs and drops (`executePullRequestLater` / `executePullRequestImmediately` guard on `isStopped()`). Keep `PULL_TIME_DELAY_MILLIS_WHEN_CACHE_FLOW_CONTROL` in place for the Java-mapped ProcessQueue cache flow control at `src/push/consumer/processing.rs:134, 462`.
+- In `src/push/consumer/runtime.rs::pull_message`, closed admission calls `self.pull_scheduler.finish(&request)` and drops the request; remove only the overflow retry. This is Rust lifecycle cleanup, not a claim that Java's immediate enqueue has a stopped guard. Keep the 50 ms constant and its genuine ProcessQueue cache-flow-control uses.
+- In `src/push/consumer/processing.rs::fetch_push_result`, select `runtime.api().pull_message_future` instead of `pull_message`. Preserve the absolute 30 s request deadline; allow the existing async transport cleanup grace and failure mapping rather than inheriting sync socket-close-on-timeout behavior. Add a paused-time/scripted-peer mode regression modeled on the core `rpc_modes` tests. Do not alter the core API or other callers.
+- In `src/push/consumer.rs`, add `PULL_BROKER_SUSPEND_MAX_TIME_MILLIS = 15_000` and use it in the Pull header in `src/push/consumer/processing.rs`. Keep the existing 20,000 ms constant for `run_pop_worker` unchanged; it is currently shared by Pull and POP. Keep the Pull client timeout at 30,000 ms. This removes the independently confirmed private Pull wire mismatch without altering POP or public settings.
 
-### 4.3 Call-site audit (compile-only changes)
+### 4.3 Audit lifecycle and call sites
 
-Verify these sites still compile and keep their ordering; no signature change is expected: `src/push/consumer.rs` lines 377, 442, 579/595/611, 2562, 2599, 2618, 2627-2630 (startup rollback), 2721-2728 (start + checkpoint), 2740, 3579-3609 , 3728 and 3658 (shutdown); `src/push/consumer/tests.rs` has about 40 `Arc::new(PullRpcWorkers::new())` fixture sites (first ones at lines 457, 623, 961, 1012, 1806, 2284, 2491, 2753, 2848, 2926); they need no edit unless an assertion changes. Enumerate them with `rg -n 'PullRpcWorkers::new|worker_count\(\)' crates/rocketmq-classic-consumer/src` before finishing.
+Check `PushConsumer::{start,start_registered,shutdown_with_await_termination_millis}`, the error/rollback arm in `start`, and test fixtures; preserve the existing scheduler-stop → dispatcher-stop order. No signature change is expected. Use:
 
-### 4.4 Unit tests
+```sh
+rg -n 'PullRpcWorkers::new|pull_rpc_workers|worker_count\(\)|BROKER_SUSPEND_MAX_TIME_MILLIS' crates/rocketmq-classic-consumer/src
+```
 
-- In `src/push/pull_service.rs`, replace `pull_rpc_workers_have_a_fixed_owned_set_and_join_on_stop` (line 910) with `pull_dispatch_admits_every_distinct_identity_without_a_worker_cap_and_joins_on_stop`: submit more than 64 distinct identities and assert every `try_submit` returned `Ok`; a second `start` still returns `AlreadyStarted`; after `stop(100)`, `active_admissions() == 0`.
-- Add `pull_dispatch_releases_the_scheduler_slot_when_a_pull_future_panics`: drive the completion guard with a panicking future and assert the scheduler's logical pull count returns to zero (no leaked in-flight identity).
-- In `src/push/consumer/tests.rs`, update the three worker-count assertions: `startup_registers_push_consumer_and_shutdown_releases_it` (line 8322 asserts `== 4`; replace with a no-cap assertion — after start with no assignment `active_admissions() == 0`, and it must not be a fixed constant), line 8381 (`== 0` after shutdown, renamed accessor), `shutdown_aborts_a_slow_listener_without_committing_its_batch` (line 9166) and `shutdown_with_explicit_wait_overrides_configured_wait` (line 9275) keep their zero-after-shutdown assertions with the renamed accessor.
+Only dispatcher-count assertions change; consume-service and scheduler counts remain meaningful. Update comments describing a bounded RPC pool. Do not mechanically rename every `worker_count()`.
 
-### 4.5 New scripted-peer fan-out test — `crates/rocketmq-classic-consumer/tests/push_pull_fanout.rs`
+### 4.4 Unit and lifecycle tests
 
-Model it on the existing harness in `crates/rocketmq-classic-consumer/tests/pull_consumer.rs` (`TcpListener::bind("127.0.0.1:0")`, NameServer peer replying with a route body, `read_command`, `frame::encode`, `respond_empty`). Route fixture: one broker with **16 queues**, real rebalance assignment (Phase 11 path).
+Factor the owned-task wrapper into a private helper usable with controlled futures; tests must exercise the same guard/spawn/join path as production, without exposing a public testing API.
 
-Assertions:
+- Replace `pull_rpc_workers_have_a_fixed_owned_set_and_join_on_stop`: pass **80 distinct scheduler-admitted identities** through `schedule`/`take_due`, hold their task futures on barriers, and prove all 80 enter concurrently. Submitting to an expired `Weak` and only checking `Ok` is not a concurrency test. Assert second `start` is `AlreadyStarted`, then cancel/join and inspect retained cleanup witnesses.
+- Cover normal completion with deferred rescheduling, expired `Weak`, panic, watch cancellation, abort of a polled pending future, **abort before first poll**, and dispatcher `Drop`. For completion paths without deferred work, verify the raw `in_flight` set and active counter reach zero while the scheduler is still running; observe panic/cancellation join results. For deferred work, verify exactly one follow-up becomes due.
+- Exercise admission racing stop and a zero wait budget: each request is either owned and drained or rejected and finished by the caller. Check cancellation already signalled before first poll and repeated stop. Abort tests must await join or a drop witness; do not infer success from `state == None` or `scheduler.stop()` clearing counters.
+- Verify rapid same-identity follow-ups and cancel/reassign with different generations; the old completion must not release the new generation's slot. Across repeated rounds, prove completed task entries are reaped rather than retained per iteration.
+- In `src/push/consumer/tests.rs`, `startup_registers_push_consumer_and_shutdown_releases_it` expects zero active admissions before any assignment, rather than four idle workers. Rename its shutdown assertion and those in `shutdown_aborts_a_slow_listener_without_committing_its_batch` and `shutdown_with_explicit_wait_overrides_configured_wait`; retain unresolved-message/offset and rollback checks. Keep the former scheduler/consume-worker assertions.
+- Assert Pull `suspendTimeoutMillis == 15000` and its 30 s deadline in a scripted request test; retain a POP assertion that `pollTime == 20000`.
 
-1. Before the peer answers anything, it observes at least 16 distinct `queueId` values outstanding on `PULL_MESSAGE`, exactly one request per queue — proving fan-out equals assignment count.
-2. No repeated request for the same `queueId` before its first response (this is what fails today: only 4 arrive and the rest re-enter every 50 ms).
-3. After replying `NO_NEW_MSG` to all, a second pull round starts for each queue.
+### 4.5 Scripted-peer integration test — `crates/rocketmq-classic-consumer/tests/push_pull_fanout.rs`
+
+Reuse frame/route helpers from `tests/pull_consumer.rs` and Push startup helpers in `src/push/consumer/tests.rs`. One broker exposes 16 read/write queues; one clustering Push consumer uses real rebalance and acquires all 16 target-topic queues. Handle route lookup, heartbeat, consumer-list lookup, offset queries/initial-offset lookup, client configuration checks, and unregister; filter retry-topic pulls separately. Do not block peer reads while awaiting a held Pull response. Track requests across connections by `(connection, opaque)` and queue-generation where available.
+
+1. Reply to setup/control requests, but **hold every target-topic Pull response**. Under one short test timeout (e.g. 5 s), require exactly queues `0..15` outstanding once each, before responding to any target Pull. The old four-worker pool fails this barrier; no 20 s wait or delivery-latency estimate is needed. For 16 queues, neither overflow nor 50 ms retry is expected in the old implementation.
+2. Send `response::PULL_NOT_FOUND` (decoded as `PullStatus::NoNewMessage`) with valid `suggestWhichBrokerId`, `nextBeginOffset`, `minOffset`, and `maxOffset` headers. Empty success replies are not valid Pull replies. Check the 15 s suspend header.
+3. Hold the second round and again require one outstanding request per target queue. This proves slot release and rescheduling, as well as initial fan-out.
+4. Shut down while polls remain open; ensure consumer shutdown and all peer tasks complete, with no further admissions or unresolved test tasks. Use bounded waits and explicit peer teardown.
 
 ### 4.6 Evidence and documentation
 
-- Add `docs/architecture/ADR-0085-push-pull-dispatch-fanout.md`: decision, Java source facts from §2.1, the rejected fixed-cap and per-queue-loop alternatives, and the ownership/join contract.
-- Update `docs/compatibility/PHASE_10_OFFLINE_METHOD_MATRIX.md` line 56 (replace "bounded RPC workers" with per-request owned dispatch whose fan-out equals assigned queues) and line 63 ("pull-RPC … workers" wording), plus the evidence cell of `docs/compatibility/JAVA_5_5_1_COMPATIBILITY.md:844`.
-- Record this analysis, the change and its verification in a new execution log `rlogs/2026/11/02-push-pull-dispatch-fanout-parity__<UTC>.rlog`. Do not rewrite the historical Phase 10 plan or rlog text.
+- Add `docs/architecture/ADR-0085-push-pull-dispatch-fanout.md` if that number remains available; otherwise select the next unused ADR number. Explain the superseding Phase 10 ownership decision, transport-limit qualification, 15 s Pull/20 s POP distinction, and join/guard contract.
+- Update the Pull and shutdown rows of `docs/compatibility/PHASE_10_OFFLINE_METHOD_MATRIX.md`, the Phase 10 evidence in `docs/compatibility/JAVA_5_5_1_COMPATIBILITY.md`, and `docs/compatibility/CURRENT_STATUS.md`. Record local evidence separately from the pending live result; do not upgrade broader phase status or rewrite historical validation counts.
+- Record implementation and verification in `rlogs/2026/11/02-push-pull-dispatch-fanout-parity__<UTC>.rlog`. Update the shared SVG to match these bounds and corrected facts.
 
-### 4.7 Register The Phase 19 Live Scenario `P10-V05`
+### 4.7 Complete the permanent Phase 19 scenario `P10-V05`
 
-Registered per owner decision (see §7). The live scenario inventory is `tests/differential/scenarios.yaml` (37 entries today; the Push entry `P10-V03` is line 33), and every scenario id is additionally hard-listed in `tests/differential/run.sh`. Registration points:
+Retain the recorded decision to register this scenario. Scripted peers already prove concurrency; the live case adds real Broker/client evidence. Registering only metadata or a command transcript is insufficient because `run.sh --all` / `--check-all` fail closed on unsupported IDs.
 
-- Manifest: append one object after the `P10-V03` row with `"id":"P10-V05"`, `"phase":10`, `"execution_phase":19`, `"profile":"basic"` (one Broker), inputs `{"topic":"compat_p10_fanout","group":"compat_p10_push_fanout","queues":16,"messages_per_queue":1}`, assertions `["every-queue-first-delivery-inside-broker-suspend-window","java-and-rust-per-queue-first-delivery-latency-comparable"]`, cleanup for that topic and group, `"normalization":["opaque","timestamps","message_id"]`, and `"live_status":"PENDING_PHASE_19"`.
-- `tests/differential/run.sh` id lists to update: manifest input validation (the `by_id` block near line 148 and the per-scenario input guard at lines 189-199); the `implemented=(...)` list at line 343; the topic guard `case "$scenario_id:$topic"` at line 426 (add `P10-V05:compat_p10_fanout`); a per-scenario profile/group guard next to `P10-V03:compat_p10_retry)` at line 546; the long scenario-id exclusion chain at line 625; and the per-scenario command script block (model it on the `P11-V04` heredoc near lines 1074-1090), which must create the topic with `mqadmin updateTopic ... -r 16 -w 16`. The profile allowlist at line 412 already accepts `basic:*`, and the two-Broker override list at line 638 needs no change.
-- Probes: add a `p10-fanout <namesrv> <topic> <group> <ready-file>` subcommand to `integration-tests/src/bin/live_client.rs` (model on `p10_push_probe`, lines 135 and 453) that records one `(queueId, first-delivery timestamp)` row per assigned queue; add the matching Java probe under `compat/java-reference/src/main/java/compat/` plus its `exec:java@...` id in `compat/java-reference/pom.xml`.
-- Checker: new `tests/differential/check_p10_fanout.py <evidence-dir> <topic>` comparing per-queue first-delivery latency between Java and Rust. Assertions must be timing-tolerant (every queue delivered inside the 20 s suspend window plus a fixed margin; no queue starved beyond a bounded multiple of the median), never an exact millisecond value.
-- Add the new checker and probe paths to the `code_dirty_paths` list in `tests/differential/run.sh` (lines 760-775) so clean-source accounting stays correct.
-- Docs: add a `P10-V05` row to the "Case ownership and status" table of `docs/compatibility/PHASE_10_OFFLINE_METHOD_MATRIX.md` (after line 213) with status `PENDING_PHASE_19`, and record the added pending scenario in `docs/compatibility/CURRENT_STATUS.md`. Historical counts such as "37/37 live scenarios" in `docs/owner-validation.md` stay untouched as historical text.
+**Manifest and environment**
+
+- Add `P10-V05` to `tests/differential/scenarios.yaml` with `source_case_id: P10-V05`, phase 10, execution phase 19, **profile `host-routed`**, inputs `topic: compat_p10_fanout`, `group: compat_p10_push_fanout`, `queues: 16`, `messages_per_queue: 1`, `admission_window_ms: 5000`, and `delivery_window_ms: 5000`. Host-run Java/Rust Push clients must receive reachable route addresses; the `basic` Broker advertises Docker-only `broker`.
+- Use separate `${topic}_java` / `${topic}_rust` topics and `${group}_java` / `${group}_rust` groups. Run one consumer at a time with real rebalance, no fixed allocation strategy. Create each topic with `-r 16 -w 16` on `broker-host` and create both subscription groups (automatic creation is disabled). Manage scenario retry topics through the existing Push setup/cleanup pattern.
+- Assertions: full target-topic assignment, all 16 empty-queue pulls initiated before any target Pull response, one active pull per queue, every seeded queue delivered within the declared bound, and recorded per-queue Java/Rust elapsed times. Include both client directions, complete derived-topic/group cleanup, and `live_status: PENDING_PHASE_19`.
+
+**Probes and measurement**
+
+- Add Rust `p10-fanout <namesrv> <topic> <group> <ready-file>` in `integration-tests/src/bin/live_client.rs` and Java `LivePullFanoutProbe` under `compat/java-reference/src/main/java/compat/`, with a matching Maven exec id. Use concurrent listeners that immediately acknowledge; initialize offsets consistently with `ConsumeFromFirstOffset` on fresh topics.
+- Observe Pull start/response through the existing `RpcHook::{before_request,after_response}` / Java `RPCHook`, filtering by exact topic and group. Log assignment keys, Pull events, and requested suspend time. Maintain active queue counts; duplicate active starts fail. Hooks observe invocation boundaries, not literal wire arrival; the scripted-peer test supplies wire-level proof. Keep transport permits above the test's demand.
+- Start with an empty topic. Allow a separate bounded startup period for assignment. From the first target Pull invocation, require all 16 distinct queues to have active pulls within **5 s and before any target Pull response**; write the ready file only then. A four-worker implementation fails this gate even if all messages could otherwise be consumed quickly. Do not seed before this gate or use an indefinite settling sleep.
+- After the gate, a reusable producer in the same probe process explicitly sends one unique message to each assigned `MessageQueue`. Record monotonic send-start and first-listener-delivery elapsed times per queue in that process (Java `System.nanoTime`, Rust `Instant`). Measure each queue from its own send start, allow callback-before-send-return, and include client/run/topic/broker/queue/message keys in the evidence. Separate topics avoid consumed offsets/backlog contaminating the next language run.
+- New `tests/differential/check_p10_fanout.py <evidence-dir> <topic-base>` requires complete, unique 16-queue assignment/send/delivery sets for both languages, validates event ordering and the 5 s admission/delivery bounds, and reports per-queue elapsed values and summary statistics. Do not subtract clocks across processes or demand an exact Java/Rust latency ratio or a multiple of a near-zero median. The barrier is the regression gate; latency is bounded supporting evidence.
+
+**Runner wiring**
+
+Audit with `rg -n 'P10-V03|P11-V04|P9-V03|implemented=|code_dirty_paths|topic_queue_count|group_created' tests/differential/run.sh`; update every applicable dispatch point, not every occurrence indiscriminately:
+
+- manifest input guards, `implemented`, profile/topic/group allowlists (`host-routed:P10-V05`), and the supported-ID rejection chain;
+- actual host-routed topic/subgroup creation, 16-queue override, command transcript, **executable** scenario branch that runs both probes and checker, exit/result/status recording, and process/topic/group cleanup on failure as well as success;
+- source-dirty accounting for the new checker (the `compat/java-reference/` and `integration-tests/` directory entries already cover the probes).
+
+Add a `P10-V05` ownership row to the Phase 10 matrix and explain the pending case in `CURRENT_STATUS.md`. Add checker self-tests using synthetic evidence: valid run, only four pulls before the deadline, a response before the admission barrier, missing/duplicate queue, and invalid timing must produce the expected pass/fail results. The live runner must be complete in the same implementation change as its manifest entry.
 
 ## 5. Verification
+
+Implementation checks (these are future implementation requirements, not claims that code changed during plan review):
 
 ```sh
 cargo fmt --all -- --check
 cargo test -p rocketmq-classic-consumer push::pull_service::tests --locked
 cargo test -p rocketmq-classic-consumer --test push_pull_fanout --locked
-cargo test -p rocketmq-classic-consumer --all-targets --locked
-cargo clippy -p rocketmq-classic-consumer --all-targets --all-features --locked -- -D warnings
-cargo test --workspace --locked
+cargo test --workspace --all-targets --locked
+cargo test --workspace --doc --locked
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+mvn -f compat/java-reference/pom.xml verify
+bash -n tests/differential/run.sh
+bash tests/differential/run.sh --list
+bash tests/differential/run.sh --check-all
+python3 tests/differential/check_p10_fanout.py --self-test
+git diff --check
 ```
 
-Expected: no regression in the existing Push lifecycle/shutdown tests (`startup_registers_push_consumer_and_shutdown_releases_it`, `shutdown_aborts_a_slow_listener_without_committing_its_batch`, `shutdown_with_explicit_wait_overrides_configured_wait`), and the new fan-out test passes.
+Use the repository's pinned Java/Maven environment; record environment limitations without claiming an unrun check passed. Show that the held-response integration test fails with the old four-worker dispatcher and passes with the replacement. Preserve startup rollback, slow-listener shutdown, explicit wait, pause/resume, cache flow control, rebalance generation isolation, and transport cleanup tests. The workspace checks include compiling the new Rust probe; Maven verification compiles the Java probe.
 
-Live gate (registered scenario, executed in Phase 19): `ROCKETMQ_CLASSIC_TEST_ENV=local-disposable ROCKETMQ_PROFILE=basic tests/differential/run.sh --scenario P10-V05` runs it against the disposable 5.3.4 Docker profile, and `bash integration-tests/run-local.sh --all` folds it into the aggregate. The scenario publishes one message per queue to a quiescent 16-queue topic and compares Java and Rust per-queue first-delivery latency; every queue must be delivered inside the broker suspend window instead of scaling with queue count. Until that run happens `P10-V05` stays `PENDING_PHASE_19`; because `run.sh --all`/`--check-all` fail closed on unimplemented ids, §4.7 must land in the same change as the code.
+Final, owner-executed Phase 19 gate:
+
+```sh
+ROCKETMQ_CLASSIC_TEST_ENV=local-disposable ROCKETMQ_PROFILE=host-routed bash tests/differential/run.sh --scenario P10-V05
+ROCKETMQ_CLASSIC_TEST_ENV=local-disposable bash integration-tests/run-local.sh --all
+```
+
+Archive both language logs and checker results outside the repository through the existing evidence mechanism. Until live execution records a result, keep `P10-V05` pending and do not present the previous 37/37 live result as covering this new case. Live execution remains a Phase 19 obligation and does not block merging locally verified implementation.
 
 ## 6. Acceptance Criteria
 
-1. `PULL_RPC_WORKER_COUNT` and `PULL_RPC_QUEUE_CAPACITY` no longer exist, and no fixed Pull concurrency constant remains in the consumer crate.
-2. With `N` assigned queues against a scripted peer that holds long-polls open, `N` concurrent `PULL_MESSAGE` requests are observed, one per queue; the 50 ms admission back-off path is gone.
-3. Each submitted request releases its scheduler slot exactly once on completion, cancellation, panic and abort (`active_admissions()` and the scheduler logical count both return to zero).
-4. Shutdown keeps its current contract: admission closes, live tasks are joined within `awaitTerminationMillisWhenShutdown`, stragglers are aborted, unresolved queue contents and offsets are retained as today.
-5. No public API, setting or default is added, removed or changed; Java-mapped delay constants (`20 ms / 50 ms / 1 s / 3 s`) keep their current call sites except the deleted admission back-off use.
-6. ADR-0085 plus the Phase 10 matrix and top-level compatibility rows describe the new dispatch, and the rlog records the parity reasoning that was previously missing.
-7. `P10-V05` exists in `tests/differential/scenarios.yaml`, is wired into every scenario-id list of `tests/differential/run.sh`, has both language probes plus `check_p10_fanout.py`, and carries `PENDING_PHASE_19` until a live run records the outcome.
+1. No extra fixed Pull dispatch width/channel capacity remains. With stable `N` eligible assigned queues and available transport permits, the peer sees `N` outstanding target-topic pulls before any response, one per queue. The overflow retry is removed; transport admission and genuine cache flow control remain.
+2. Every admitted request owns one guard and remains tracked until joined. Completion, expired owner, panic, cancellation, and abort-before-first-poll release its slot once. Deferred follow-ups and old/new generations remain isolated; completed-task retention does not grow with iterations.
+3. Stop closes admission, cancels, joins until the existing local deadline, then aborts/drains stragglers. Rollback/shutdown retain existing unresolved messages and offsets. Tests prove cleanup with live-scheduler/retained witnesses, not cleared-state counters alone.
+4. Push selects the existing async Pull API with its cleanup semantics. Pull headers use the pinned 15 s Broker suspend and 30 s client timeout; POP keeps 20 s polling. Public API/settings and other Java-mapped flow-control/retry delays remain unchanged.
+5. ADR, bilingual plan/SVG, compatibility rows, and rlog describe the qualified fan-out and lifecycle contract without claiming unlimited Java transport concurrency or full-phase parity.
+6. `P10-V05` has a complete executable host-routed runner, isolated probes, checker with negative self-tests, and cleanup. Offline manifest/runner checks pass; the live result stays `PENDING_PHASE_19` until executed.
 
 ## 7. Decisions
 
-- Decision: keep the existing names `PullRpcWorkers`, the `pull_rpc_workers` field and `StartupStage::PullRpcWorkersStarted` / `"pull-rpc-workers-started"`. Only internals change; renaming would invalidate strings already cited in compatibility docs and historical logs.
-- Decision: no fixed upper bound on live Pull tasks. Java has none, fan-out is bounded by assignment count, and every task is owned and joinable. A larger fixed cap (for example 32) was rejected because it reproduces the same observable divergence at a different queue count.
-- Decision (owner, 2026-11-12): register a permanent Phase 19 scenario `P10-V05` instead of leaving an owner-executed note. This defect class is invisible to unit and scripted-peer timing assertions, so only a live long-poll run proves fan-out parity; §4.7 registration work therefore belongs to this plan, while the live execution itself stays a Phase 19 obligation and does not block merging the code change.
+- Keep existing dispatcher and startup-stage names to avoid unrelated churn.
+- Remove the Pull-specific fixed cap; retain existing transport limits. Steady-state fan-out scales with eligible assignments, while retiring generations can briefly coexist during rebalance.
+- Use `JoinSet` ownership and a pre-spawn guard, rather than a self-removing `HashMap<PullIdentity, JoinHandle<()>>` that can detach tasks or miss early abort cleanup.
+- Preserve the recorded owner decision (2026-11-12) to add permanent `P10-V05`. Correct its rationale: local scripted peers can detect this defect deterministically; the live case confirms the same behavior with the actual Broker, and must gate on empty-queue concurrency before publishing.
