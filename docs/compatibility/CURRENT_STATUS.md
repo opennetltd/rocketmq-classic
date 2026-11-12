@@ -1,5 +1,28 @@
 # Current compatibility status
 
+## Push Pull dispatch fan-out — 2026-11-12
+
+The Push consumer no longer routes Pull RPCs through a fixed four-worker pool.
+Each admitted `PullRequest` now runs in its own owned task, and the scheduler slot
+for one queue-generation is released exactly once on completion, panic,
+cancellation or abort. Closed dispatcher admission releases the slot and drops the
+request instead of re-queueing it with a cache-flow-control delay. Push Pull uses
+the future/async RPC mode under the unchanged 30 s client deadline, and the Pull
+header now carries Java's simple-consumer `suspendTimeoutMillis=15000` while POP
+keeps `pollTime`/suspend at `20000`. See
+[ADR-0085](../architecture/ADR-0085-push-pull-dispatch-fanout.md) and the
+[Phase 10 matrix](PHASE_10_OFFLINE_METHOD_MATRIX.md).
+
+Local evidence only: the Consumer unit suites, the scripted-peer barrier in
+`crates/rocketmq-classic-consumer/tests/push_pull_fanout.rs` (all 16 assigned
+queues admit at once; the removed four-worker pool admits four), and the
+`tests/differential/check_p10_fanout.py` synthetic self-test. `P10-V05` is now a
+permanent manifest scenario, so the manifest holds 38 rows and `run.sh --check-all`
+reports full runner coverage without starting Docker. Its live status is
+`PENDING_PHASE_19`: no Broker evidence exists for it yet, the earlier 37/37 live
+aggregate predates this change, and MAN-01–MAN-04 plus final compatibility/release
+approval remain open.
+
 ## ASCII numeric scope follow-up — 2026-11-08
 
 The user's revised scope intentionally replaces Java Unicode integer parsing with
