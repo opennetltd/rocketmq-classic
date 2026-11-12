@@ -8319,7 +8319,9 @@ async fn startup_registers_push_consumer_and_shutdown_releases_it() {
     };
     assert_eq!(consume_service.worker_count(), 20);
     assert_eq!(pull_scheduler.worker_count(), 1);
-    assert_eq!(pull_rpc_workers.worker_count(), 4);
+    // Owned dispatch admits one task per in-flight pull; with no queue
+    // assignment yet there are no admitted requests, not four idle workers.
+    assert_eq!(pull_rpc_workers.active_admissions(), 0);
     assert!(consumer.update_core_pool_size(4).await.is_ok());
     assert_eq!(consume_service.worker_count(), 4);
     assert!(consumer.update_core_pool_size(20).await.is_ok());
@@ -8378,7 +8380,7 @@ async fn startup_registers_push_consumer_and_shutdown_releases_it() {
     assert!(!consumer.is_running().await);
     assert_eq!(consume_service.worker_count(), 0);
     assert_eq!(pull_scheduler.worker_count(), 0);
-    assert_eq!(pull_rpc_workers.worker_count(), 0);
+    assert_eq!(pull_rpc_workers.active_admissions(), 0);
     assert!(matches!(
         consumer.start().await,
         Err(PushConsumerError::Shutdown)
@@ -9163,7 +9165,7 @@ async fn shutdown_aborts_a_slow_listener_without_committing_its_batch() {
     assert_eq!(offset_store.values.lock().unwrap().get(&queue), Some(&50));
     assert_eq!(consume_service.worker_count(), 0);
     assert_eq!(scheduler.worker_count(), 0);
-    assert_eq!(pull_rpc_workers.worker_count(), 0);
+    assert_eq!(pull_rpc_workers.active_admissions(), 0);
 }
 
 #[tokio::test(start_paused = true)]
@@ -9272,7 +9274,7 @@ async fn shutdown_with_explicit_wait_overrides_configured_wait() {
     assert!(completed.load(Ordering::Acquire));
     assert_eq!(consume_service.worker_count(), 0);
     assert_eq!(scheduler.worker_count(), 0);
-    assert_eq!(pull_rpc_workers.worker_count(), 0);
+    assert_eq!(pull_rpc_workers.active_admissions(), 0);
     assert!(
         tokio::time::timeout(Duration::from_secs(1), cancelled.notified())
             .await

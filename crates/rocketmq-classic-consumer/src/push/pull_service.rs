@@ -1,9 +1,10 @@
 use std::{
     any::Any,
     collections::{BTreeMap, HashMap, HashSet},
+    future::Future,
     sync::{
         Arc, Mutex, MutexGuard, Weak,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     },
 };
 
@@ -11,8 +12,8 @@ use rocketmq_classic_common::message::MessageQueue;
 use rocketmq_classic_core::runtime::{ClientRuntime, MessageRequest};
 use rocketmq_classic_protocol::body::MessageRequestMode;
 use tokio::{
-    sync::{Notify, mpsc, watch},
-    task::JoinHandle,
+    sync::{Notify, watch},
+    task::{JoinHandle, JoinSet},
     time::{Duration, Instant, sleep_until},
 };
 
@@ -104,18 +105,38 @@ impl PullRequest {
     }
 }
 
-const PULL_RPC_WORKER_COUNT: usize = 4;
-const PULL_RPC_QUEUE_CAPACITY: usize = 64;
-
-struct PullRpcWorkerSet {
-    sender: Option<mpsc::Sender<Arc<PullRequest>>>,
-    cancellation: watch::Sender<bool>,
-    workers: Vec<JoinHandle<()>>,
+/// Releases one admitted queue-generation slot when its owned pull task ends.
+/// The guard is built before the task is spawned and moved into the future, so
+/// completion, a failed owner upgrade, panic unwinding, cancellation, and an
+/// abort before the first poll each release the slot exactly once. It never
+/// touches dispatcher state and holds no strong consumer reference.
+struct PullCompletionGuard {
+    request: Arc<PullRequest>,
+    scheduler: Arc<PullScheduler>,
+    active: Arc<AtomicUsize>,
 }
 
-/// Bounded pull-RPC workers keep long broker suspends off the shared runtime
-/// PullMessageService worker. A queue assignment still has at most one pull in
-/// flight because PullScheduler owns that invariant.
+impl Drop for PullCompletionGuard {
+    fn drop(&mut self) {
+        self.active.fetch_sub(1, Ordering::AcqRel);
+        self.scheduler.finish(&self.request);
+    }
+}
+
+struct PullRpcWorkerSet {
+    consumer: Weak<crate::push::PushConsumer>,
+    scheduler: Arc<PullScheduler>,
+    cancellation: watch::Sender<bool>,
+    tasks: JoinSet<()>,
+    active: Arc<AtomicUsize>,
+}
+
+/// Owned per-request pull dispatch. Every admitted request gets one task in the
+/// owned `JoinSet`, so a long broker suspend stays off the shared runtime
+/// PullMessageService worker without a fixed worker count or queue capacity.
+/// `PullScheduler` still owns the one-active-pull-per-queue-generation
+/// invariant, and transport admission plus ProcessQueue flow control bound how
+/// many long-polls are actually outstanding.
 pub(crate) struct PullRpcWorkers {
     state: Mutex<Option<PullRpcWorkerSet>>,
 }
@@ -127,6 +148,9 @@ impl PullRpcWorkers {
         }
     }
 
+    /// Install an empty admission set. Unlike `PullScheduler`, a stopped
+    /// dispatcher is not restarted by the consumer, so only an existing set is
+    /// rejected here.
     pub(crate) fn start(
         &self,
         consumer: Weak<crate::push::PushConsumer>,
@@ -139,108 +163,164 @@ impl PullRpcWorkers {
         if state.is_some() {
             return Err(PullSchedulerError::AlreadyStarted);
         }
-        let (sender, receiver) = mpsc::channel::<Arc<PullRequest>>(PULL_RPC_QUEUE_CAPACITY);
-        let receiver = Arc::new(tokio::sync::Mutex::new(receiver));
-        let (cancellation, initial_receiver) = watch::channel(false);
-        let mut workers = Vec::with_capacity(PULL_RPC_WORKER_COUNT);
-        for _ in 0..PULL_RPC_WORKER_COUNT {
-            let mut cancellation = initial_receiver.clone();
-            let receiver = receiver.clone();
-            let consumer = consumer.clone();
-            let scheduler = scheduler.clone();
-            workers.push(tokio::spawn(async move {
-                loop {
-                    if *cancellation.borrow() {
-                        break;
-                    }
-                    let request = tokio::select! {
-                        biased;
-                        _ = cancellation.changed() => break,
-                        request = async { receiver.lock().await.recv().await } => request,
-                    };
-                    let Some(request) = request else {
-                        break;
-                    };
-                    let Some(consumer) = consumer.upgrade() else {
-                        scheduler.finish(&request);
-                        continue;
-                    };
-                    let finish_request = request.clone();
-                    tokio::select! {
-                        biased;
-                        _ = cancellation.changed() => {
-                            scheduler.finish(&finish_request);
-                            break;
-                        }
-                        _ = consumer.clone().run_pull_worker_request(request) => {}
-                    }
-                    scheduler.finish(&finish_request);
-                }
-            }));
-        }
+        let (cancellation, _) = watch::channel(false);
         *state = Some(PullRpcWorkerSet {
-            sender: Some(sender),
+            consumer,
+            scheduler,
             cancellation,
-            workers,
+            tasks: JoinSet::new(),
+            active: Arc::new(AtomicUsize::new(0)),
         });
         Ok(())
     }
 
     pub(crate) fn try_submit(&self, request: Arc<PullRequest>) -> Result<(), Arc<PullRequest>> {
-        let state = self
+        self.submit_with(request, |consumer, request| async move {
+            // A retired consumer releases its scheduler slot through the guard
+            // instead of issuing a new RPC.
+            let Some(consumer) = consumer.upgrade() else {
+                return;
+            };
+            consumer.run_pull_worker_request(request).await;
+        })
+    }
+
+    /// Admit one already-scheduled request. The caller must have taken the
+    /// request from `PullScheduler`; this never bypasses identity admission.
+    fn submit_with<Factory, Operation>(
+        &self,
+        request: Arc<PullRequest>,
+        pull: Factory,
+    ) -> Result<(), Arc<PullRequest>>
+    where
+        Factory:
+            FnOnce(Weak<crate::push::PushConsumer>, Arc<PullRequest>) -> Operation + Send + 'static,
+        Operation: Future<Output = ()> + Send + 'static,
+    {
+        let mut state = self
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let Some(sender) = state.as_ref().and_then(|workers| workers.sender.as_ref()) else {
+        let Some(workers) = state.as_mut() else {
             return Err(request);
         };
-        sender.try_send(request).map_err(|error| error.into_inner())
+        // Reap finished tasks so retained entries do not grow with pull
+        // iterations. Join results are observed here, never abandoned.
+        while let Some(result) = workers.tasks.try_join_next() {
+            report_join(result, "push pull task panicked and was reaped");
+        }
+        let cancellation = workers.cancellation.subscribe();
+        let consumer = workers.consumer.clone();
+        let scheduler = workers.scheduler.clone();
+        let active = workers.active.clone();
+        active.fetch_add(1, Ordering::AcqRel);
+        let guard = PullCompletionGuard {
+            request: request.clone(),
+            scheduler,
+            active,
+        };
+        // No await and no scheduler call happens while the dispatcher lock is
+        // held; `spawn` only registers the task.
+        workers
+            .tasks
+            .spawn(run_owned_pull(guard, cancellation, pull(consumer, request)));
+        Ok(())
     }
 
     pub(crate) async fn stop(&self, wait_millis: i64) {
-        let Some(mut workers) = self
+        let mut workers = match self
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take()
-        else {
-            return;
+        {
+            Some(workers) => workers,
+            None => return,
         };
+        // Admission is closed by the take above; cancellation then lets running
+        // pulls stop before their next await point.
         workers.cancellation.send_replace(true);
-        workers.sender.take();
         let deadline = Instant::now() + Duration::from_millis(wait_millis.max(0) as u64);
-        for mut worker in workers.workers.drain(..) {
+        loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() || tokio::time::timeout(remaining, &mut worker).await.is_err() {
-                worker.abort();
-                let _ = worker.await;
+            if remaining.is_zero() {
+                break;
             }
+            match tokio::time::timeout(remaining, workers.tasks.join_next()).await {
+                Err(_) => break,
+                Ok(None) => return,
+                Ok(Some(Ok(()))) => continue,
+                Ok(Some(Err(error))) if error.is_cancelled() => continue,
+                Ok(Some(Err(error))) => {
+                    tracing::warn!(task = %error, "push pull task panicked during shutdown");
+                    continue;
+                }
+            }
+        }
+        workers.tasks.abort_all();
+        // Draining every join result lets each guard run and lets cancellation
+        // cleanup finish; the wait budget bounds the join, not the abort drain.
+        while let Some(result) = workers.tasks.join_next().await {
+            report_join(result, "push pull task panicked during shutdown");
         }
     }
 
+    /// Active admitted requests, not `JoinSet::len()`, which still counts
+    /// completed tasks that have not been joined yet.
     #[cfg(test)]
-    pub(crate) fn worker_count(&self) -> usize {
+    pub(crate) fn active_admissions(&self) -> usize {
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .as_ref()
-            .map_or(0, |workers| workers.workers.len())
+            .map_or(0, |workers| workers.active.load(Ordering::Acquire))
+    }
+}
+
+fn report_join(result: Result<(), tokio::task::JoinError>, message: &str) {
+    match result {
+        Ok(()) => {}
+        Err(error) if error.is_cancelled() => {}
+        Err(error) => tracing::warn!(task = %error, "{message}"),
+    }
+}
+
+/// Run one owned pull request under its pre-created completion guard. The pull
+/// future is scoped so it is dropped before the guard, which keeps slot release
+/// ordered after any consumer reference the pull future held.
+async fn run_owned_pull<Operation>(
+    _guard: PullCompletionGuard,
+    mut cancellation: watch::Receiver<bool>,
+    pull: Operation,
+) where
+    Operation: Future<Output = ()> + Send,
+{
+    // A task first polled after cancellation must not issue a new RPC.
+    if *cancellation.borrow_and_update() {
+        return;
+    }
+    {
+        let pull = std::pin::pin!(pull);
+        tokio::select! {
+            biased;
+            _ = cancellation.changed() => {}
+            _ = pull => {}
+        }
     }
 }
 
 impl Drop for PullRpcWorkers {
     fn drop(&mut self) {
-        if let Some(mut workers) = self
+        if let Some(workers) = self
             .state
             .get_mut()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take()
         {
+            // The owned `JoinSet` aborts outstanding tasks when it drops; the
+            // runtime observes their cleanup on its next poll rather than
+            // synchronously inside `Drop`.
             workers.cancellation.send_replace(true);
-            workers.sender.take();
-            for worker in workers.workers.drain(..) {
-                worker.abort();
-            }
         }
     }
 }
@@ -865,6 +945,7 @@ mod tests {
     use super::*;
     use rocketmq_classic_common::message::{Message, MessageExt, MessageQueue};
     use std::time::Duration;
+    use tokio::time::timeout;
 
     fn process_queue(queue_id: i32, generation: u64) -> Arc<ProcessQueue> {
         Arc::new(ProcessQueue::new_for_assignment(
@@ -906,14 +987,114 @@ mod tests {
         );
     }
 
+    /// Test-only formatting so admission results can be unwrapped; the
+    /// production type intentionally keeps its state private.
+    impl std::fmt::Debug for PullRequest {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter
+                .debug_struct("PullRequest")
+                .field("queue", self.queue())
+                .field("generation", &self.generation())
+                .field("next_offset", &self.next_offset())
+                .finish()
+        }
+    }
+
+    struct NotifyOnDrop(Arc<Notify>);
+
+    impl Drop for NotifyOnDrop {
+        fn drop(&mut self) {
+            self.0.notify_one();
+        }
+    }
+
+    /// Raw scheduler ownership that survives dispatcher `stop` taking its state.
+    fn in_flight(scheduler: &PullScheduler) -> Vec<PullIdentity> {
+        scheduler
+            .inner
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .in_flight
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+    }
+
+    /// Retained witness for the dispatcher's active counter, read before any
+    /// `stop` removes the state that owns it.
+    fn active_witness(workers: &PullRpcWorkers) -> Arc<AtomicUsize> {
+        workers
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+            .expect("dispatcher should be started")
+            .active
+            .clone()
+    }
+
+    fn admitted(scheduler: &PullScheduler, request: Arc<PullRequest>) -> Arc<PullRequest> {
+        scheduler.schedule(request, 0).unwrap();
+        scheduler.take_due().expect("request should be due")
+    }
+
     #[tokio::test]
-    async fn pull_rpc_workers_have_a_fixed_owned_set_and_join_on_stop() {
+    async fn pull_rpc_workers_admit_every_request_without_a_fixed_width() {
+        const QUEUES: usize = 80;
         let workers = PullRpcWorkers::new();
         let scheduler = Arc::new(PullScheduler::new());
         workers
-            .start(Weak::<crate::push::PushConsumer>::new(), scheduler)
+            .start(Weak::<crate::push::PushConsumer>::new(), scheduler.clone())
             .unwrap();
-        assert_eq!(workers.worker_count(), PULL_RPC_WORKER_COUNT);
+        let active = active_witness(&workers);
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+
+        // Every request enters the dispatcher through scheduler identity
+        // admission, exactly as the runtime FIFO delivers them.
+        for queue_id in 0..QUEUES as i32 {
+            let admitted = admitted(&scheduler, request(queue_id, 1, 10));
+            workers
+                .submit_with(admitted, move |_owner, _request| {
+                    std::future::pending::<()>()
+                })
+                .expect("every eligible queue must be admitted");
+        }
+        assert_eq!(active.load(Ordering::SeqCst), QUEUES);
+        assert_eq!(in_flight(&scheduler).len(), QUEUES);
+
+        // A JoinSet reports no fixed width: the retained task count is the
+        // number of live requests, not a pool size.
+        let tasks = workers
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+            .expect("dispatcher should be started")
+            .tasks
+            .len();
+        assert_eq!(tasks, QUEUES);
+
+        // Stop must cancel and join every outstanding task rather than leave a
+        // detached tail behind.
+        workers.stop(10).await;
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+        assert!(in_flight(&scheduler).is_empty());
+        // Closed admission returns the request to its caller.
+        let rejected = request(90, 1, 10);
+        let returned = workers.try_submit(rejected.clone()).unwrap_err();
+        assert_eq!(returned.queue(), rejected.queue());
+        assert_eq!(returned.generation(), rejected.generation());
+    }
+
+    #[tokio::test]
+    async fn pull_rpc_workers_run_every_admitted_task_concurrently() {
+        const QUEUES: usize = 80;
+        let workers = PullRpcWorkers::new();
+        let scheduler = Arc::new(PullScheduler::new());
+        workers
+            .start(Weak::<crate::push::PushConsumer>::new(), scheduler.clone())
+            .unwrap();
         assert_eq!(
             workers.start(
                 Weak::<crate::push::PushConsumer>::new(),
@@ -922,8 +1103,327 @@ mod tests {
             Err(PullSchedulerError::AlreadyStarted)
         );
 
+        let entered = Arc::new(AtomicUsize::new(0));
+        let (release, release_receiver) = watch::channel(false);
+        for queue_id in 0..QUEUES as i32 {
+            let admitted = admitted(&scheduler, request(queue_id, 1, 10));
+            let entered = entered.clone();
+            let mut release = release_receiver.clone();
+            workers
+                .submit_with(admitted, move |_owner, _request| async move {
+                    entered.fetch_add(1, Ordering::SeqCst);
+                    // Each task blocks until every other task has entered, so a
+                    // narrower dispatch width can never reach the count.
+                    let _ = release.wait_for(|released| *released).await;
+                })
+                .unwrap();
+        }
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while entered.load(Ordering::SeqCst) < QUEUES && Instant::now() < deadline {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(
+            entered.load(Ordering::SeqCst),
+            QUEUES,
+            "all admitted pulls must enter concurrently"
+        );
+
+        release.send(true).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while workers.active_admissions() > 0 && Instant::now() < deadline {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(workers.active_admissions(), 0);
+        assert!(in_flight(&scheduler).is_empty());
         workers.stop(100).await;
-        assert_eq!(workers.worker_count(), 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn completed_pull_releases_its_slot_and_keeps_one_deferred_follow_up() {
+        let workers = PullRpcWorkers::new();
+        let scheduler = Arc::new(PullScheduler::new());
+        workers
+            .start(Weak::<crate::push::PushConsumer>::new(), scheduler.clone())
+            .unwrap();
+        let active = active_witness(&workers);
+
+        let first = admitted(&scheduler, request(1, 3, 10));
+        // A running pull may record exactly one deferred follow-up; only the
+        // guard releases the scheduler slot afterwards.
+        scheduler.schedule(request(1, 3, 11), 5).unwrap();
+        workers
+            .submit_with(first.clone(), |_owner, _request| async {})
+            .unwrap();
+        assert_eq!(active.load(Ordering::SeqCst), 1);
+        tokio::task::yield_now().await;
+
+        // The task finished but has not been joined; the separate active
+        // counter and the raw scheduler set still prove cleanup happened.
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while active.load(Ordering::SeqCst) > 0 && Instant::now() < deadline {
+            tokio::time::advance(Duration::from_millis(1)).await;
+        }
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+        assert!(in_flight(&scheduler).is_empty());
+
+        tokio::time::advance(Duration::from_millis(5)).await;
+        let follow_up = scheduler.take_due().expect("one deferred follow-up");
+        assert_eq!(follow_up.next_offset(), 11);
+        assert!(scheduler.take_due().is_none());
+        workers.stop(100).await;
+    }
+
+    #[tokio::test]
+    async fn expired_consumer_owner_still_releases_the_admitted_slot() {
+        let workers = PullRpcWorkers::new();
+        let scheduler = Arc::new(PullScheduler::new());
+        workers
+            .start(Weak::<crate::push::PushConsumer>::new(), scheduler.clone())
+            .unwrap();
+        let active = active_witness(&workers);
+
+        let admitted = admitted(&scheduler, request(2, 4, 20));
+        // Production path: the weak owner is already gone, so no RPC runs and
+        // the guard still releases the slot.
+        workers.try_submit(admitted).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while active.load(Ordering::SeqCst) > 0 && Instant::now() < deadline {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+        assert!(in_flight(&scheduler).is_empty());
+        workers.stop(100).await;
+    }
+
+    #[tokio::test]
+    async fn panicking_and_cancelled_pull_tasks_release_their_slots_once() {
+        let workers = PullRpcWorkers::new();
+        let scheduler = Arc::new(PullScheduler::new());
+        workers
+            .start(Weak::<crate::push::PushConsumer>::new(), scheduler.clone())
+            .unwrap();
+        let active = active_witness(&workers);
+        let dropped = Arc::new(Notify::new());
+
+        let panicking = admitted(&scheduler, request(3, 5, 30));
+        workers
+            .submit_with(panicking, |_owner, _request| async {
+                panic!("pull task failure")
+            })
+            .unwrap();
+        let cancelled = admitted(&scheduler, request(4, 6, 40));
+        let witness = NotifyOnDrop(dropped.clone());
+        workers
+            .submit_with(cancelled, move |_owner, _request| async move {
+                let _witness = witness;
+                std::future::pending::<()>().await;
+            })
+            .unwrap();
+        tokio::task::yield_now().await;
+
+        // Stop observes both the panicked and cancelled join results without
+        // abandoning the other task.
+        workers.stop(50).await;
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+        assert!(in_flight(&scheduler).is_empty());
+        timeout(Duration::from_secs(1), dropped.notified())
+            .await
+            .expect("cancelled pull future must be dropped");
+        // Repeated stop is safe.
+        workers.stop(50).await;
+    }
+
+    #[tokio::test]
+    async fn aborting_a_polled_pending_task_releases_its_slot() {
+        let workers = PullRpcWorkers::new();
+        let scheduler = Arc::new(PullScheduler::new());
+        workers
+            .start(Weak::<crate::push::PushConsumer>::new(), scheduler.clone())
+            .unwrap();
+        let active = active_witness(&workers);
+        let dropped = Arc::new(Notify::new());
+
+        let admitted = admitted(&scheduler, request(5, 7, 50));
+        let witness = NotifyOnDrop(dropped.clone());
+        workers
+            .submit_with(admitted, move |_owner, _request| async move {
+                let _witness = witness;
+                std::future::pending::<()>().await;
+            })
+            .unwrap();
+        // Force the task to be polled and parked before the zero wait budget.
+        tokio::task::yield_now().await;
+        assert_eq!(active.load(Ordering::SeqCst), 1);
+
+        workers.stop(0).await;
+        timeout(Duration::from_secs(1), dropped.notified())
+            .await
+            .expect("aborted pull future must be dropped");
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+        assert!(in_flight(&scheduler).is_empty());
+    }
+
+    #[tokio::test]
+    async fn aborting_before_the_first_poll_releases_every_slot() {
+        let workers = PullRpcWorkers::new();
+        let scheduler = Arc::new(PullScheduler::new());
+        workers
+            .start(Weak::<crate::push::PushConsumer>::new(), scheduler.clone())
+            .unwrap();
+        let active = active_witness(&workers);
+
+        for queue_id in 0..8i32 {
+            let admitted = admitted(&scheduler, request(queue_id, 8, 60));
+            workers
+                .submit_with(admitted, move |_owner, _request| {
+                    std::future::pending::<()>()
+                })
+                .unwrap();
+        }
+        assert_eq!(active.load(Ordering::SeqCst), 8);
+
+        // No yield between admission and stop: every task is aborted before it
+        // is ever polled, so only the pre-created guard can release the slots.
+        workers.stop(0).await;
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+        assert!(in_flight(&scheduler).is_empty());
+    }
+
+    #[tokio::test]
+    async fn dispatcher_drop_aborts_outstanding_pulls() {
+        let workers = Arc::new(PullRpcWorkers::new());
+        let scheduler = Arc::new(PullScheduler::new());
+        workers
+            .start(Weak::<crate::push::PushConsumer>::new(), scheduler.clone())
+            .unwrap();
+        let active = active_witness(&workers);
+        for queue_id in 0..4i32 {
+            let admitted = admitted(&scheduler, request(queue_id, 9, 70));
+            workers
+                .submit_with(admitted, move |_owner, _request| {
+                    std::future::pending::<()>()
+                })
+                .unwrap();
+        }
+        tokio::task::yield_now().await;
+        assert_eq!(active.load(Ordering::SeqCst), 4);
+
+        drop(workers);
+        // `Drop` aborts through the owned set; cleanup is observed once the
+        // runtime polls the aborts, not synchronously inside `Drop`.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while active.load(Ordering::SeqCst) > 0 && Instant::now() < deadline {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+        assert!(in_flight(&scheduler).is_empty());
+    }
+
+    #[tokio::test]
+    async fn admission_racing_stop_either_owns_or_returns_each_request() {
+        for round in 0..8u32 {
+            let workers = Arc::new(PullRpcWorkers::new());
+            let scheduler = Arc::new(PullScheduler::new());
+            workers
+                .start(Weak::<crate::push::PushConsumer>::new(), scheduler.clone())
+                .unwrap();
+            let active = active_witness(&workers);
+            let stop = tokio::spawn({
+                let workers = workers.clone();
+                async move {
+                    workers.stop(0).await;
+                }
+            });
+
+            for queue_id in 0..4i32 {
+                let generation = u64::from(round) + 10;
+                let admitted = admitted(&scheduler, request(queue_id, generation, 80));
+                match workers.submit_with(admitted.clone(), |_owner, _request| {
+                    std::future::pending::<()>()
+                }) {
+                    // Owned by the dispatcher: its guard must run.
+                    Ok(()) => {}
+                    // Rejected by closed admission: the caller finishes it, as
+                    // `pull_message` does.
+                    Err(request) => scheduler.finish(&request),
+                }
+            }
+            stop.await.unwrap();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while active.load(Ordering::SeqCst) > 0 && Instant::now() < deadline {
+                tokio::task::yield_now().await;
+            }
+            assert_eq!(active.load(Ordering::SeqCst), 0, "round {round}");
+            assert!(in_flight(&scheduler).is_empty(), "round {round}");
+        }
+    }
+
+    #[tokio::test]
+    async fn old_generation_completion_cannot_release_a_new_generation_slot() {
+        let workers = PullRpcWorkers::new();
+        let scheduler = Arc::new(PullScheduler::new());
+        workers
+            .start(Weak::<crate::push::PushConsumer>::new(), scheduler.clone())
+            .unwrap();
+
+        // Rebalance cancels the old generation and assigns a new one while the
+        // retiring request's task is still running.
+        let retiring = admitted(&scheduler, request(6, 20, 90));
+        scheduler.cancel(retiring.queue(), retiring.generation());
+        let current = admitted(&scheduler, request(6, 21, 95));
+        workers
+            .submit_with(retiring.clone(), |_owner, _request| async {})
+            .unwrap();
+        // Rapid same-identity follow-ups arrive while the retiring task ends.
+        scheduler.schedule(request(6, 21, 96), 0).unwrap();
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while in_flight(&scheduler) != vec![current.key()] && Instant::now() < deadline {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(in_flight(&scheduler), vec![current.key()]);
+        // The retiring completion released only its own identity.
+        assert!(scheduler.take_due().is_none());
+
+        scheduler.finish(&current);
+        let follow_up = scheduler.take_due().expect("one deferred follow-up");
+        assert_eq!(follow_up.next_offset(), 96);
+        assert!(scheduler.take_due().is_none());
+        workers.stop(100).await;
+    }
+
+    #[tokio::test]
+    async fn completed_task_entries_are_reaped_across_rounds() {
+        let workers = PullRpcWorkers::new();
+        let scheduler = Arc::new(PullScheduler::new());
+        workers
+            .start(Weak::<crate::push::PushConsumer>::new(), scheduler.clone())
+            .unwrap();
+        let active = active_witness(&workers);
+
+        for round in 0..200u32 {
+            let admitted = admitted(&scheduler, request(7, 11, i64::from(round)));
+            workers
+                .submit_with(admitted, |_owner, _request| async {})
+                .unwrap();
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+        assert!(in_flight(&scheduler).is_empty());
+        let retained = workers
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+            .expect("dispatcher should be started")
+            .tasks
+            .len();
+        assert!(
+            retained < 8,
+            "completed task entries must not accumulate per iteration: {retained}"
+        );
+        workers.stop(100).await;
     }
 
     #[tokio::test(start_paused = true)]
