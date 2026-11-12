@@ -197,6 +197,24 @@ for scenario in selected:
         ]
     ):
         raise SystemExit("P10-V03 retry and DLQ inputs differ from the reviewed live case")
+    if scenario_id == "P10-V05" and (
+        profile != "host-routed"
+        or inputs.get("topic") != "compat_p10_fanout"
+        or inputs.get("group") != "compat_p10_push_fanout"
+        or inputs.get("queues") != 16
+        or inputs.get("messages_per_queue") != 1
+        or inputs.get("admission_window_ms") != 5000
+        or inputs.get("delivery_window_ms") != 5000
+        or inputs.get("checks") != [
+            "full-target-topic-assignment",
+            "all-empty-queue-pulls-before-any-response",
+            "one-active-pull-per-queue-generation",
+            "pull-suspend-timeout-15000",
+            "bounded-first-delivery-per-queue",
+        ]
+        or scenario.get("assertions") != inputs.get("checks")
+    ):
+        raise SystemExit("P10-V05 fan-out inputs differ from the reviewed live case")
     if scenario_id == "P11-V03" and (
         scenario.get("profile") != "two-broker"
         or inputs.get("topic") != "compat_p11_mixed"
@@ -340,7 +358,7 @@ if [[ "$selection" == "list" ]]; then
     exit 0
 fi
 
-implemented=("ROUTE-001-get-existing-topic" "ROUTE-002-topic-not-exist" "HEARTBEAT-001" "PROD-001-sync-send" "PROD-002-async-send" "PROD-003-oneway-send" "PROD-004-batch-send" "PROD-005-send-timeout" "CONS-001-query-offset" "CONS-002-pull-found" "CONS-003-pull-no-new-msg" "CONS-004-update-offset" "ORDER-001-lock-unlock" "REBAL-001-average-10q-3c" "TX-001-commit" "TX-002-rollback" "P3-V04" "P5-V02-route" "P5-V02-producer" "P5-V02-consumer" "P5-V02-extensions" "P0-V03" "P6-V04" "P7-V02" "P7-V03" "P7-V04" "P9-V03" "P10-V03" "P11-V03" "P11-V04" "P12-V03" "P13-V02" "P14-V03" "P16-V02" "P17-V02" "REQ-001-request-reply-success" "P15-V03")
+implemented=("ROUTE-001-get-existing-topic" "ROUTE-002-topic-not-exist" "HEARTBEAT-001" "PROD-001-sync-send" "PROD-002-async-send" "PROD-003-oneway-send" "PROD-004-batch-send" "PROD-005-send-timeout" "CONS-001-query-offset" "CONS-002-pull-found" "CONS-003-pull-no-new-msg" "CONS-004-update-offset" "ORDER-001-lock-unlock" "REBAL-001-average-10q-3c" "TX-001-commit" "TX-002-rollback" "P3-V04" "P5-V02-route" "P5-V02-producer" "P5-V02-consumer" "P5-V02-extensions" "P0-V03" "P6-V04" "P7-V02" "P7-V03" "P7-V04" "P9-V03" "P10-V03" "P10-V05" "P11-V03" "P11-V04" "P12-V03" "P13-V02" "P14-V03" "P16-V02" "P17-V02" "REQ-001-request-reply-success" "P15-V03")
 unsupported=()
 while IFS=$'\t' read -r scenario_id profile topic producer_group body key_prefix java_expected_max_offset rust_expected_max_offset java_expected_queue_offset rust_expected_queue_offset message_count java_offset rust_offset queue_id pull_offset missing_topic queue_count consumer_ids consumer_group; do
     is_implemented=false
@@ -416,7 +434,7 @@ case "$profile:$scenario_id" in
     tls-auth:P16-V02) ;;
     transaction:TX-001-commit|transaction:TX-002-rollback) ;;
     tls:P3-V04) ;;
-    host-routed:P6-V04|host-routed:P7-V02|host-routed:P9-V03) ;;
+    host-routed:P6-V04|host-routed:P7-V02|host-routed:P9-V03|host-routed:P10-V05) ;;
     host-routed:REQ-001-request-reply-success) ;;
     *)
         echo "Scenario metadata differs from the implemented profile" >&2
@@ -593,6 +611,12 @@ case "$scenario_id:$topic" in
             exit 3
         fi
         ;;
+    P10-V05:compat_p10_fanout)
+        if [[ "$profile" != "host-routed" || "$consumer_group" != "compat_p10_push_fanout" || "$queue_count" != "16" ]]; then
+            echo "P10-V05 metadata differs from the reviewed Push Pull fan-out case" >&2
+            exit 3
+        fi
+        ;;
     REQ-001-request-reply-success:compat_phase0_request_java)
         if [[ "$profile" != "host-routed" || "$consumer_group" != "compat_req_responder" ]]; then
             echo "Request/reply metadata differs from the reviewed host-routed case" >&2
@@ -622,7 +646,7 @@ case "$scenario_id:$topic" in
         exit 3
         ;;
 esac
-if [[ "$scenario_id" != "ROUTE-001-get-existing-topic" && "$scenario_id" != "ROUTE-002-topic-not-exist" && "$scenario_id" != "HEARTBEAT-001" && "$scenario_id" != "PROD-001-sync-send" && "$scenario_id" != "PROD-002-async-send" && "$scenario_id" != "PROD-003-oneway-send" && "$scenario_id" != "PROD-004-batch-send" && "$scenario_id" != "PROD-005-send-timeout" && "$scenario_id" != "CONS-001-query-offset" && "$scenario_id" != "CONS-004-update-offset" && "$scenario_id" != "CONS-002-pull-found" && "$scenario_id" != "CONS-003-pull-no-new-msg" && "$scenario_id" != "ORDER-001-lock-unlock" && "$scenario_id" != "REBAL-001-average-10q-3c" && "$scenario_id" != "TX-001-commit" && "$scenario_id" != "TX-002-rollback" && "$scenario_id" != "P3-V04" && "$scenario_id" != "P5-V02-route" && "$scenario_id" != "P5-V02-producer" && "$scenario_id" != "P5-V02-consumer" && "$scenario_id" != "P5-V02-extensions" && "$scenario_id" != "P0-V03" && "$scenario_id" != "P6-V04" && "$scenario_id" != "P7-V02" && "$scenario_id" != "P7-V03" && "$scenario_id" != "P7-V04" && "$scenario_id" != "P9-V03" && "$scenario_id" != "P10-V03" && "$scenario_id" != "P11-V03" && "$scenario_id" != "P11-V04" && "$scenario_id" != "P12-V03" && "$scenario_id" != "P13-V02" && "$scenario_id" != "P14-V03" && "$scenario_id" != "P16-V02" && "$scenario_id" != "P17-V02" && "$scenario_id" != "REQ-001-request-reply-success" && "$scenario_id" != "P15-V03" ]]; then
+if [[ "$scenario_id" != "ROUTE-001-get-existing-topic" && "$scenario_id" != "ROUTE-002-topic-not-exist" && "$scenario_id" != "HEARTBEAT-001" && "$scenario_id" != "PROD-001-sync-send" && "$scenario_id" != "PROD-002-async-send" && "$scenario_id" != "PROD-003-oneway-send" && "$scenario_id" != "PROD-004-batch-send" && "$scenario_id" != "PROD-005-send-timeout" && "$scenario_id" != "CONS-001-query-offset" && "$scenario_id" != "CONS-004-update-offset" && "$scenario_id" != "CONS-002-pull-found" && "$scenario_id" != "CONS-003-pull-no-new-msg" && "$scenario_id" != "ORDER-001-lock-unlock" && "$scenario_id" != "REBAL-001-average-10q-3c" && "$scenario_id" != "TX-001-commit" && "$scenario_id" != "TX-002-rollback" && "$scenario_id" != "P3-V04" && "$scenario_id" != "P5-V02-route" && "$scenario_id" != "P5-V02-producer" && "$scenario_id" != "P5-V02-consumer" && "$scenario_id" != "P5-V02-extensions" && "$scenario_id" != "P0-V03" && "$scenario_id" != "P6-V04" && "$scenario_id" != "P7-V02" && "$scenario_id" != "P7-V03" && "$scenario_id" != "P7-V04" && "$scenario_id" != "P9-V03" && "$scenario_id" != "P10-V03" && "$scenario_id" != "P10-V05" && "$scenario_id" != "P11-V03" && "$scenario_id" != "P11-V04" && "$scenario_id" != "P12-V03" && "$scenario_id" != "P13-V02" && "$scenario_id" != "P14-V03" && "$scenario_id" != "P16-V02" && "$scenario_id" != "P17-V02" && "$scenario_id" != "REQ-001-request-reply-success" && "$scenario_id" != "P15-V03" ]]; then
     echo "No implementation is registered for scenario '$scenario_id'" >&2
     exit 3
 fi
@@ -1158,6 +1182,18 @@ target/debug/live_client p10-push $namesrv_addr $topic $consumer_group <evidence
 mvn -q -f compat/java-reference/pom.xml -Dexec.args="seed-p10 $namesrv_addr $topic failure" exec:java@live-high-level-producer-probe
 The manifest profile is two-broker; the host-routed two-Broker Compose profile publishes NameServer-advertised Broker endpoints to the host Java/Rust clients. The runner releases the failure seed gate after Java sends the failure message; Rust records callbacks and verifies the retry-topic/DLQ transition before shutdown. Broker 5.3.4 stores the terminal DLQ copy with reconsumeTimes=retryMaxTimes+1 after the final send-back.
 EOF
+elif [[ "$scenario_id" == "P10-V05" ]]; then
+    cat >"$evidence_dir/commands.txt" <<EOF
+ROCKETMQ_CLASSIC_TEST_ENV=local-disposable ROCKETMQ_PROFILE=host-routed COMPOSE_PROJECT_NAME=$project_name bash integration-tests/setup.sh
+docker compose --project-name $project_name --file integration-tests/compose.yaml --profile host-routed exec broker-host ./mqadmin updateTopic -c RocketMQLocalTest -t ${topic}_java -r 16 -w 16 -n namesrv:9876
+docker compose --project-name $project_name --file integration-tests/compose.yaml --profile host-routed exec broker-host ./mqadmin updateTopic -c RocketMQLocalTest -t ${topic}_rust -r 16 -w 16 -n namesrv:9876
+docker compose --project-name $project_name --file integration-tests/compose.yaml --profile host-routed exec broker-host ./mqadmin updateSubGroup -c RocketMQLocalTest -g ${consumer_group}_java -n namesrv:9876
+docker compose --project-name $project_name --file integration-tests/compose.yaml --profile host-routed exec broker-host ./mqadmin updateSubGroup -c RocketMQLocalTest -g ${consumer_group}_rust -n namesrv:9876
+mvn -q -f compat/java-reference/pom.xml -Dexec.args="probe $namesrv_addr ${topic}_java ${consumer_group}_java <evidence>/java-p10-fanout.ready" exec:java@live-pull-fanout-probe
+cargo run --locked --quiet -p rocketmq-classic-integration --bin live_client -- p10-fanout $namesrv_addr ${topic}_rust ${consumer_group}_rust <evidence>/rust-p10-fanout.ready
+python3 tests/differential/check_p10_fanout.py <evidence> $topic --queues=$queue_count
+Each language runs one Push consumer with the default Average allocation on its own 16-queue topic and group, never both at once. The probe records every target-topic PULL_MESSAGE request/response boundary through an RPCHook, gates on all 16 distinct queue admissions before any of those Pull responses completes, then seeds one message per queue and records the first delivery per queue. Timestamps are process-local monotonic nanoseconds and are never compared across languages.
+EOF
 elif [[ "$scenario_id" == "P9-V03" ]]; then
     cat >"$evidence_dir/commands.txt" <<EOF
 ROCKETMQ_CLASSIC_TEST_ENV=local-disposable ROCKETMQ_PROFILE=host-routed COMPOSE_PROJECT_NAME=$project_name bash integration-tests/setup.sh
@@ -1343,6 +1379,9 @@ EOF
 fi
 topic_created=false
 topic_cleanup_list=("$topic")
+if [[ "$scenario_id" == "P10-V05" ]]; then
+    topic_cleanup_list=("${topic}_java" "${topic}_rust")
+fi
 if [[ "$scenario_id" == "P11-V04" ]]; then
     topic_cleanup_list+=("%RETRY%${consumer_group}")
 fi
@@ -1367,6 +1406,7 @@ p11_rust_pid=""
 p12_java_pid=""
 p12_rust_pid=""
 group_created=false
+fanout_groups_created=false
 p16_proxy_pids=()
 p17_proxy_pids=()
 p16_auth_config_path=""
@@ -1461,6 +1501,18 @@ cleanup() {
             if ((group_delete_status)); then
                 status=1
                 echo "Scenario consumer-group cleanup failed for $consumer_group on $topic_broker; see $evidence_dir/group-cleanup.log" >&2
+            fi
+        done
+    fi
+    if [[ "$fanout_groups_created" == true ]]; then
+        : >"$evidence_dir/group-cleanup.log"
+        for fanout_group in "${consumer_group}_java" "${consumer_group}_rust"; do
+            "${compose[@]}" exec --no-TTY "$broker_service" ./mqadmin deleteSubGroup -c RocketMQLocalTest -g "$fanout_group" -n namesrv:9876 \
+                >>"$evidence_dir/group-cleanup.log" 2>&1
+            group_delete_status=$?
+            if ((group_delete_status)); then
+                status=1
+                echo "Scenario consumer-group cleanup failed for $fanout_group; see $evidence_dir/group-cleanup.log" >&2
             fi
         done
     fi
@@ -1958,7 +2010,7 @@ if [[ "$scenario_id" == "P5-V02-extensions" ]]; then
     done
 fi
 
-if [[ "$scenario_id" == "ROUTE-001-get-existing-topic" || "$scenario_id" == "PROD-001-sync-send" || "$scenario_id" == "PROD-002-async-send" || "$scenario_id" == "PROD-003-oneway-send" || "$scenario_id" == "PROD-004-batch-send" || "$scenario_id" == "PROD-005-send-timeout" || "$scenario_id" == "CONS-001-query-offset" || "$scenario_id" == "CONS-002-pull-found" || "$scenario_id" == "CONS-003-pull-no-new-msg" || "$scenario_id" == "CONS-004-update-offset" || "$scenario_id" == "ORDER-001-lock-unlock" || "$scenario_id" == "REBAL-001-average-10q-3c" || "$scenario_id" == "TX-001-commit" || "$scenario_id" == "TX-002-rollback" || "$scenario_id" == "P3-V04" || "$scenario_id" == "P5-V02-route" || "$scenario_id" == "P5-V02-producer" || "$scenario_id" == "P5-V02-consumer" || "$scenario_id" == "P6-V04" || "$scenario_id" == "P7-V02" || "$scenario_id" == "P7-V03" || "$scenario_id" == "P7-V04" || "$scenario_id" == "P9-V03" || "$scenario_id" == "P10-V03" || "$scenario_id" == "P11-V03" || "$scenario_id" == "P11-V04" || "$scenario_id" == "P12-V03" || "$scenario_id" == "P13-V02" || "$scenario_id" == "P14-V03" || "$scenario_id" == "REQ-001-request-reply-success" || "$scenario_id" == "P15-V03" ]]; then
+if [[ "$scenario_id" == "ROUTE-001-get-existing-topic" || "$scenario_id" == "PROD-001-sync-send" || "$scenario_id" == "PROD-002-async-send" || "$scenario_id" == "PROD-003-oneway-send" || "$scenario_id" == "PROD-004-batch-send" || "$scenario_id" == "PROD-005-send-timeout" || "$scenario_id" == "CONS-001-query-offset" || "$scenario_id" == "CONS-002-pull-found" || "$scenario_id" == "CONS-003-pull-no-new-msg" || "$scenario_id" == "CONS-004-update-offset" || "$scenario_id" == "ORDER-001-lock-unlock" || "$scenario_id" == "REBAL-001-average-10q-3c" || "$scenario_id" == "TX-001-commit" || "$scenario_id" == "TX-002-rollback" || "$scenario_id" == "P3-V04" || "$scenario_id" == "P5-V02-route" || "$scenario_id" == "P5-V02-producer" || "$scenario_id" == "P5-V02-consumer" || "$scenario_id" == "P6-V04" || "$scenario_id" == "P7-V02" || "$scenario_id" == "P7-V03" || "$scenario_id" == "P7-V04" || "$scenario_id" == "P9-V03" || "$scenario_id" == "P10-V03" || "$scenario_id" == "P10-V05" || "$scenario_id" == "P11-V03" || "$scenario_id" == "P11-V04" || "$scenario_id" == "P12-V03" || "$scenario_id" == "P13-V02" || "$scenario_id" == "P14-V03" || "$scenario_id" == "REQ-001-request-reply-success" || "$scenario_id" == "P15-V03" ]]; then
     echo "Creating scenario-owned topic $topic"
     topic_created=true
     topic_queue_count=4
@@ -1968,8 +2020,22 @@ if [[ "$scenario_id" == "ROUTE-001-get-existing-topic" || "$scenario_id" == "PRO
         topic_queue_count=5
     elif [[ "$scenario_id" == "TX-001-commit" || "$scenario_id" == "TX-002-rollback" ]]; then
         topic_queue_count=1
+    elif [[ "$scenario_id" == "P10-V05" ]]; then
+        topic_queue_count="$queue_count"
     fi
-    if [[ "$profile" == "two-broker-host" ]]; then
+    if [[ "$scenario_id" == "P10-V05" ]]; then
+        # Only the language-specific topics exist; the manifest names are prefixes.
+        echo "Creating the Java and Rust fan-out topics with $topic_queue_count queues each"
+        : >"$evidence_dir/topic-create.log"
+        for fanout_topic in "${topic}_java" "${topic}_rust"; do
+            if ! "${compose[@]}" exec --no-TTY "$broker_service" ./mqadmin updateTopic -c RocketMQLocalTest \
+                -t "$fanout_topic" -r "$topic_queue_count" -w "$topic_queue_count" -n namesrv:9876 \
+                >>"$evidence_dir/topic-create.log" 2>&1; then
+                cat "$evidence_dir/topic-create.log" >&2
+                exit 1
+            fi
+        done
+    elif [[ "$profile" == "two-broker-host" ]]; then
         for broker_admin_target in "broker-a-host:127.0.0.1:50911" "broker-b-host:127.0.0.1:50921"; do
             topic_service="${broker_admin_target%%:*}"
             topic_broker="${broker_admin_target#*:}"
@@ -2054,6 +2120,18 @@ if [[ "$scenario_id" == "ROUTE-001-get-existing-topic" || "$scenario_id" == "PRO
                 exit 1
             fi
         done
+    elif [[ "$scenario_id" == "P10-V05" ]]; then
+        echo "Creating the Java and Rust fan-out Push consumer groups"
+        : >"$evidence_dir/group-create.log"
+        for language in java rust; do
+            if ! "${compose[@]}" exec --no-TTY "$broker_service" ./mqadmin updateSubGroup -c RocketMQLocalTest \
+                -g "${consumer_group}_${language}" -n namesrv:9876 \
+                >>"$evidence_dir/group-create.log" 2>&1; then
+                cat "$evidence_dir/group-create.log" >&2
+                exit 1
+            fi
+        done
+        fanout_groups_created=true
     elif [[ "$scenario_id" == "P15-V03" ]]; then
         echo "Creating scenario-owned Java and Rust reply responder groups on both Brokers"
         : >"$evidence_dir/group-create.log"
@@ -4208,6 +4286,28 @@ PY
         printf 'PASS %s: Java/Rust rollbacks matched; no message was visible and max offset was %s\n' \
             "$scenario_id" "$expected_max_offset" | tee "$evidence_dir/result.txt"
     fi
+elif [[ "$scenario_id" == "P10-V05" ]]; then
+    # One Push consumer per language, never concurrently, each on its own topic and group.
+    if ! mvn -q -f "$repo_root/compat/java-reference/pom.xml" \
+        -Dexec.args="probe $namesrv_addr ${topic}_java ${consumer_group}_java $evidence_dir/java-p10-fanout.ready" \
+        exec:java@live-pull-fanout-probe \
+        >"$evidence_dir/java-p10-fanout.tsv" 2>"$evidence_dir/java-p10-fanout.stderr"; then
+        cat "$evidence_dir/java-p10-fanout.tsv" "$evidence_dir/java-p10-fanout.stderr" 2>/dev/null >&2 || true
+        exit 1
+    fi
+    if ! cargo run --locked --quiet -p rocketmq-classic-integration --bin live_client -- \
+        p10-fanout "$namesrv_addr" "${topic}_rust" "${consumer_group}_rust" "$evidence_dir/rust-p10-fanout.ready" \
+        >"$evidence_dir/rust-p10-fanout.tsv" 2>"$evidence_dir/rust-p10-fanout.stderr"; then
+        cat "$evidence_dir/rust-p10-fanout.tsv" "$evidence_dir/rust-p10-fanout.stderr" 2>/dev/null >&2 || true
+        exit 1
+    fi
+    if ! python3 "$repo_root/tests/differential/check_p10_fanout.py" "$evidence_dir" "$topic" \
+        --queues="$queue_count" >"$evidence_dir/fanout-check.log" 2>&1; then
+        cat "$evidence_dir/fanout-check.log" >&2
+        exit 1
+    fi
+    printf 'PASS P10-V05: Java and Rust each admitted all %s empty-queue Pulls before any of those responses completed, kept one active Pull per queue at suspendTimeoutMillis=15000, and delivered every seeded queue within the declared bound\n' \
+        "$queue_count" | tee "$evidence_dir/result.txt"
 elif [[ "$scenario_id" == "P9-V03" ]]; then
     if ! mvn -q -f "$repo_root/compat/java-reference/pom.xml" \
         -Dexec.args="seed $namesrv_addr $topic" exec:java@live-pull-consumer-probe \

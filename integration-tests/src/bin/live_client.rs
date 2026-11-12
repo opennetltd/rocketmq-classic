@@ -1,6 +1,6 @@
 use std::{
     any::Any,
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     env,
     error::Error,
     fmt::Write as _,
@@ -14,9 +14,9 @@ use rocketmq_classic::{
     AclClientRpcHook, ConsumeConcurrentlyContext, ConsumeConcurrentlyStatus, ConsumeOrderlyContext,
     ConsumeOrderlyStatus, EndTransactionContext, EndTransactionHook, LocalTransactionState,
     MessageSelector, Producer, ProducerConfig, ProducerError, PullConsumer, PullConsumerConfig,
-    PushConsumer, PushConsumerConfig, PushMessageListener, RequestFutureHolder, SendMessageContext,
-    SendMessageHook, SessionCredentials, TransactionCallbackError, TransactionListener,
-    TransactionProducer, create_reply_message,
+    PushConsumer, PushConsumerConfig, PushMessageListener, RequestFutureHolder, RpcHook,
+    SendMessageContext, SendMessageHook, SessionCredentials, TransactionCallbackError,
+    TransactionListener, TransactionProducer, create_reply_message,
 };
 use rocketmq_classic_common::message::{
     DecodeOptions, Message, MessageExt, MessageQueue, decode_many_as_client_compatible,
@@ -54,6 +54,7 @@ use rocketmq_classic_protocol::{
     },
 };
 use rocketmq_classic_remoting::client::{ClientConfig, RemotingClient, TlsConfig, TransportMode};
+use rocketmq_classic_remoting::command::RemotingCommand;
 use tokio::time::Instant;
 
 #[derive(Debug, Clone, Copy)]
@@ -139,6 +140,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 &arguments[3],
                 &arguments[4],
                 &arguments[5],
+            )
+            .await
+        }
+        Some("p10-fanout") if arguments.len() == 5 => {
+            p10_fanout_probe(
+                &arguments[1],
+                &arguments[2],
+                &arguments[3],
+                &arguments[4],
             )
             .await
         }
@@ -417,7 +427,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             )
             .await
         }
-        _ => Err("usage: live_client route <namesrv-address> <topic> | rebalance <namesrv-address> <topic> <comma-separated-consumer-ids> | p7-producer <namesrv-address> <topic> | p10-push <namesrv-address> <topic> <group> <ready-file> <failure-go-file> | p11-mixed-group <namesrv-address> <topic> <group> <ownership-file> <stop-file> <exited-file> | p12-orderly <namesrv-address> <topic> <group> <ownership-file> <ready-file> <stop-file> <exited-file> <marker-dir> | p11-push <namesrv-address> <topic> <group> <body> <ready-file> | p11-producer <namesrv-address> <topic> <producer-group> <body> | p5-producer <broker-address> <topic> <producer-group> <minimum-base-offset> | p5-consumer <broker-address> <group> <topic> <seed-body> | p5-extension-prepare|p5-extension-consume|p5-extension-lite-pop <broker-address> <topic> <group-prefix> | p6-shared-runtime <namesrv-address> <topic> <producer-a> <producer-b> <consumer-group> | p9-pull <namesrv-address> <topic> <consumer-group> | p19-request <namesrv-address> <topic> <producer-group> <body> | p19-timeout|p19-late-timeout <namesrv-address> <topic> <producer-group> <body> <timeout-ms> <hold-ms> | p19-respond <namesrv-address> <topic> <consumer-group> <producer-group> <reply-body> [delay-ms] | transaction <namesrv-address> <topic> <producer-group> <commit|rollback> <key> <body> | p14-transaction <namesrv-address> <topic> <producer-group> <commit|rollback|unknown> <key> <body> | p14-pull <broker-address> <broker-name> <group> <topic> <queue-id> <offset> | max-offset <broker-address> <topic> <queue-id> | timeout-send <proxy-address> <topic> <producer-group> <body> <timeout-ms> <go-file> | heartbeat <broker-address> <producer-group> | send|async-send <broker-address> <topic> <body> | oneway-send <broker-address> <topic> <body> <key> <minimum-max-offset> | batch-send <broker-address> <topic> <body-prefix> <message-count> | view <broker-address> <topic> <offset-message-id> | view-batch <broker-address> <topic> <comma-separated-offset-message-ids> | offset-query <broker-address> <group> <topic> <queue-id> | offset-query-named <broker-address> <broker-name> <group> <topic> <queue-id> | offset-update <broker-address> <group> <topic> <queue-id> <offset> | pull <broker-address> <group> <topic> <queue-id> <queue-offset> | lock|unlock <broker-address> <group> <client-id> <topic> <broker-name> <queue-id>".into()),
+        _ => Err("usage: live_client route <namesrv-address> <topic> | rebalance <namesrv-address> <topic> <comma-separated-consumer-ids> | p7-producer <namesrv-address> <topic> | p10-push <namesrv-address> <topic> <group> <ready-file> <failure-go-file> | p10-fanout <namesrv-address> <topic> <group> <ready-file> | p11-mixed-group <namesrv-address> <topic> <group> <ownership-file> <stop-file> <exited-file> | p12-orderly <namesrv-address> <topic> <group> <ownership-file> <ready-file> <stop-file> <exited-file> <marker-dir> | p11-push <namesrv-address> <topic> <group> <body> <ready-file> | p11-producer <namesrv-address> <topic> <producer-group> <body> | p5-producer <broker-address> <topic> <producer-group> <minimum-base-offset> | p5-consumer <broker-address> <group> <topic> <seed-body> | p5-extension-prepare|p5-extension-consume|p5-extension-lite-pop <broker-address> <topic> <group-prefix> | p6-shared-runtime <namesrv-address> <topic> <producer-a> <producer-b> <consumer-group> | p9-pull <namesrv-address> <topic> <consumer-group> | p19-request <namesrv-address> <topic> <producer-group> <body> | p19-timeout|p19-late-timeout <namesrv-address> <topic> <producer-group> <body> <timeout-ms> <hold-ms> | p19-respond <namesrv-address> <topic> <consumer-group> <producer-group> <reply-body> [delay-ms] | transaction <namesrv-address> <topic> <producer-group> <commit|rollback> <key> <body> | p14-transaction <namesrv-address> <topic> <producer-group> <commit|rollback|unknown> <key> <body> | p14-pull <broker-address> <broker-name> <group> <topic> <queue-id> <offset> | max-offset <broker-address> <topic> <queue-id> | timeout-send <proxy-address> <topic> <producer-group> <body> <timeout-ms> <go-file> | heartbeat <broker-address> <producer-group> | send|async-send <broker-address> <topic> <body> | oneway-send <broker-address> <topic> <body> <key> <minimum-max-offset> | batch-send <broker-address> <topic> <body-prefix> <message-count> | view <broker-address> <topic> <offset-message-id> | view-batch <broker-address> <topic> <comma-separated-offset-message-ids> | offset-query <broker-address> <group> <topic> <queue-id> | offset-query-named <broker-address> <broker-name> <group> <topic> <queue-id> | offset-update <broker-address> <group> <topic> <queue-id> <offset> | pull <broker-address> <group> <topic> <queue-id> <queue-offset> | lock|unlock <broker-address> <group> <client-id> <topic> <broker-name> <queue-id>".into()),
     }
 }
 
@@ -670,6 +680,332 @@ async fn p10_push_probe(
     let shutdown = consumer.shutdown().await;
     operation?;
     shutdown?;
+    Ok(())
+}
+
+/// P10-V05 bounds shared with `tests/differential/check_p10_fanout.py`.
+const P10_FANOUT_QUEUES: usize = 16;
+const P10_FANOUT_ADMISSION_WINDOW: Duration = Duration::from_secs(5);
+const P10_FANOUT_DELIVERY_WINDOW: Duration = Duration::from_secs(5);
+
+macro_rules! p10_fanout_row {
+    ($kind:expr $(, $value:expr)*) => {{
+        let mut line = format!("P10F\t{}\trust", $kind);
+        $(let _ = write!(line, "\t{}", $value);)*
+        println!("{line}");
+    }};
+}
+
+/// Evidence state shared by the RPC hook, the listener, and the probe body.
+struct FanoutProbeState {
+    base: StdInstant,
+    inner: std::sync::Mutex<FanoutProbeInner>,
+}
+
+#[derive(Default)]
+struct FanoutProbeInner {
+    first_start: BTreeMap<i32, i64>,
+    last_start: BTreeMap<i32, i64>,
+    earliest_end: Option<i64>,
+    violation: Option<String>,
+    delivered: HashSet<String>,
+}
+
+impl FanoutProbeState {
+    fn new() -> Self {
+        Self {
+            base: StdInstant::now(),
+            inner: std::sync::Mutex::new(FanoutProbeInner::default()),
+        }
+    }
+
+    /// Monotonic nanoseconds since the probe started; never a wall-clock value.
+    fn nanos(&self) -> i64 {
+        i64::try_from(self.base.elapsed().as_nanos()).unwrap_or(i64::MAX)
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, FanoutProbeInner> {
+        self.inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn pull_start(&self, topic: &str, group: &str, remote_addr: &str, command: &RemotingCommand) {
+        let Some((queue_id, suspend_timeout_millis)) = target_pull_header(topic, group, command)
+        else {
+            return;
+        };
+        let now = self.nanos();
+        let mut inner = self.lock();
+        if inner.earliest_end.is_some() && inner.violation.is_none() {
+            inner.violation = Some(
+                "a target Pull response completed before every assigned queue had an outstanding Pull"
+                    .to_owned(),
+            );
+        }
+        inner.first_start.entry(queue_id).or_insert(now);
+        inner.last_start.insert(queue_id, now);
+        drop(inner);
+        p10_fanout_row!(
+            "PULL_START",
+            now,
+            queue_id,
+            command.opaque,
+            suspend_timeout_millis,
+            remote_addr
+        );
+    }
+
+    fn pull_end(
+        &self,
+        topic: &str,
+        group: &str,
+        _remote_addr: &str,
+        command: &RemotingCommand,
+        response: &RemotingCommand,
+    ) {
+        let Some((queue_id, _)) = target_pull_header(topic, group, command) else {
+            return;
+        };
+        let now = self.nanos();
+        {
+            let mut inner = self.lock();
+            inner.earliest_end = Some(inner.earliest_end.map_or(now, |previous| previous.min(now)));
+        }
+        p10_fanout_row!("PULL_END", now, queue_id, command.opaque, response.code);
+    }
+
+    fn record_delivery(&self, key: &str, queue_id: i32, reconsume_times: i32) {
+        let now = self.nanos();
+        if !self.lock().delivered.insert(key.to_owned()) {
+            return;
+        }
+        p10_fanout_row!("DELIVERY", now, queue_id, key, reconsume_times);
+    }
+
+    fn delivered_count(&self) -> usize {
+        self.lock().delivered.len()
+    }
+
+    fn distinct_started_queues(&self) -> usize {
+        self.lock().first_start.len()
+    }
+
+    fn admission_span_nanos(&self) -> i64 {
+        let inner = self.lock();
+        let Some(first) = inner.first_start.values().min().copied() else {
+            return 0;
+        };
+        let last = inner.last_start.values().max().copied().unwrap_or(first);
+        last - first
+    }
+
+    fn violation(&self) -> Option<String> {
+        self.lock().violation.clone()
+    }
+}
+
+/// Return `(queueId, suspendTimeoutMillis)` for a target-topic Pull request only.
+fn target_pull_header(topic: &str, group: &str, command: &RemotingCommand) -> Option<(i32, i64)> {
+    if command.code != request::PULL_MESSAGE {
+        return None;
+    }
+    if let Some(header) = command.read_custom_header::<PullMessageRequestHeader>() {
+        if header.get_topic() == Some(topic) && header.get_consumer_group() == Some(group) {
+            return Some((
+                header.get_queue_id().unwrap_or(-1),
+                header.get_suspend_timeout_millis().unwrap_or_default(),
+            ));
+        }
+        return None;
+    }
+    let fields = command.ext_fields.clone().unwrap_or_default();
+    if fields.get("topic").map(String::as_str) != Some(topic)
+        || fields.get("consumerGroup").map(String::as_str) != Some(group)
+    {
+        return None;
+    }
+    let queue_id = fields.get("queueId")?.parse().ok()?;
+    let suspend = fields
+        .get("suspendTimeoutMillis")
+        .and_then(|value| value.parse().ok())
+        .unwrap_or_default();
+    Some((queue_id, suspend))
+}
+
+struct FanoutRpcHook {
+    topic: String,
+    group: String,
+    state: Arc<FanoutProbeState>,
+}
+
+impl RpcHook for FanoutRpcHook {
+    fn before_request(&self, remote_addr: &str, command: &RemotingCommand) {
+        self.state
+            .pull_start(&self.topic, &self.group, remote_addr, command);
+    }
+
+    fn after_response(
+        &self,
+        remote_addr: &str,
+        command: &RemotingCommand,
+        response: &RemotingCommand,
+    ) {
+        self.state
+            .pull_end(&self.topic, &self.group, remote_addr, command, response);
+    }
+}
+
+async fn p10_fanout_probe(
+    namesrv_address: &str,
+    topic: &str,
+    consumer_group: &str,
+    ready_file: &str,
+) -> Result<(), Box<dyn Error>> {
+    let state = Arc::new(FanoutProbeState::new());
+    let hook = Arc::new(FanoutRpcHook {
+        topic: topic.to_owned(),
+        group: consumer_group.to_owned(),
+        state: Arc::clone(&state),
+    });
+
+    let mut config = PushConsumerConfig::new(consumer_group)?;
+    config
+        .client_config_mut()
+        .set_namesrv_addr(Some(namesrv_address.to_owned()));
+    config
+        .client_config_mut()
+        .set_instance_name(Some("a-p10f-rust".to_owned()));
+    config.client_config_mut().set_mq_client_api_timeout(5_000);
+    config.set_consume_from_where(ConsumeFromWhere::ConsumeFromFirstOffset);
+    let consumer = Arc::new(PushConsumer::new_with_rpc_hook(config, Some(hook)));
+
+    let listener_state = Arc::clone(&state);
+    consumer
+        .set_message_listener(PushMessageListener::concurrently(
+            move |messages: Vec<MessageExt>, context: ConsumeConcurrentlyContext| {
+                let state = Arc::clone(&listener_state);
+                Box::pin(async move {
+                    for message in messages {
+                        let key = String::from_utf8_lossy(message.body().as_ref()).to_string();
+                        state.record_delivery(&key, message.queue_id(), message.reconsume_times());
+                    }
+                    (Some(ConsumeConcurrentlyStatus::ConsumeSuccess), context)
+                })
+            },
+        ))
+        .await?;
+    consumer.subscribe(topic, "*").await?;
+    consumer.start().await?;
+
+    let mut producer_config = ProducerConfig::new(format!("{consumer_group}_producer"))?;
+    producer_config
+        .client_config_mut()
+        .set_namesrv_addr(Some(namesrv_address.to_owned()));
+    producer_config
+        .client_config_mut()
+        .set_instance_name(Some("a-p10f-rust-producer".to_owned()));
+    producer_config
+        .client_config_mut()
+        .set_mq_client_api_timeout(5_000);
+    producer_config.set_send_timeout_millis(10_000);
+    let producer = Arc::new(Producer::new(producer_config));
+    producer.set_send_message_with_vip_channel(false);
+    producer.start().await?;
+
+    let operation: Result<(), Box<dyn Error>> = async {
+        let mut queues = producer.fetch_publish_message_queues(topic).await?;
+        queues.sort_by_key(|queue| queue.queue_id());
+        if queues.len() != P10_FANOUT_QUEUES {
+            return Err(format!(
+                "expected {P10_FANOUT_QUEUES} publish queues, got {}",
+                queues
+                    .iter()
+                    .map(|queue| queue.queue_id().to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+            .into());
+        }
+        for queue in &queues {
+            p10_fanout_row!(
+                "ROUTE",
+                topic,
+                queue.broker_name().unwrap_or_default(),
+                queue.queue_id()
+            );
+        }
+
+        let admission_deadline = StdInstant::now() + P10_FANOUT_ADMISSION_WINDOW;
+        loop {
+            if let Some(violation) = state.violation() {
+                return Err(violation.into());
+            }
+            let started = state.distinct_started_queues();
+            if started >= P10_FANOUT_QUEUES {
+                let span_nanos = state.admission_span_nanos();
+                if Duration::from_nanos(span_nanos as u64) > P10_FANOUT_ADMISSION_WINDOW {
+                    return Err(format!(
+                        "first Pull starts span {} ms, exceeding the admission window",
+                        span_nanos / 1_000_000
+                    )
+                    .into());
+                }
+                p10_fanout_row!("GATE", state.nanos(), span_nanos / 1_000_000, started);
+                if let Some(parent) = Path::new(ready_file).parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                std::fs::write(ready_file, "rust-ready\n")?;
+                break;
+            }
+            if StdInstant::now() >= admission_deadline {
+                return Err(format!(
+                    "only {started} of {P10_FANOUT_QUEUES} queues started a Pull within the \
+                     admission window"
+                )
+                .into());
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        for queue in &queues {
+            let key = format!("p10f-q{}", queue.queue_id());
+            p10_fanout_row!("SEND_START", state.nanos(), queue.queue_id(), key);
+            let mut message = Message::new(topic, key.clone().into_bytes());
+            message.set_keys(&key)?;
+            let result = producer.send_to_queue(&mut message, queue).await?;
+            p10_fanout_row!(
+                "SEND_END",
+                state.nanos(),
+                queue.queue_id(),
+                key,
+                result.status.name(),
+                result.queue_offset
+            );
+        }
+
+        let delivery_deadline = StdInstant::now() + P10_FANOUT_DELIVERY_WINDOW;
+        while state.delivered_count() < P10_FANOUT_QUEUES {
+            if StdInstant::now() >= delivery_deadline {
+                return Err(format!(
+                    "only {} of {P10_FANOUT_QUEUES} seeded messages were delivered within the \
+                     delivery window",
+                    state.delivered_count()
+                )
+                .into());
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        Ok(())
+    }
+    .await;
+
+    let consumer_shutdown = consumer.shutdown().await;
+    let producer_shutdown = producer.shutdown().await;
+    p10_fanout_row!("SHUTDOWN", state.nanos());
+    operation?;
+    consumer_shutdown?;
+    producer_shutdown?;
     Ok(())
 }
 

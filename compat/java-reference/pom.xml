@@ -99,6 +99,10 @@
             <configuration><mainClass>compat.LivePullConsumerProbe</mainClass></configuration>
           </execution>
           <execution>
+            <id>live-pull-fanout-probe</id>
+            <configuration><mainClass>compat.LivePullFanoutProbe</mainClass></configuration>
+          </execution>
+          <execution>
             <id>live-request-reply-probe</id>
             <configuration><mainClass>compat.LiveRequestReplyProbe</mainClass></configuration>
           </execution>
