@@ -23,8 +23,9 @@ Usage:
 
 Only scenarios with a complete local runner are executable. --phase and --all
 fail closed if the selected inventory contains any unimplemented scenario.
---self-test runs the runner's own bash-level checks (partial subgroup setup and
-cleanup through a stubbed command runner) without starting Docker resources.
+--self-test runs the runner's own bash-level fan-out checks (subgroup ownership, the
+empty-topic gate, probe exit status, ready-file presence and the checker verdict) through
+stubbed command runners, without starting any Docker resource.
 EOF
 }
 
@@ -33,6 +34,11 @@ EOF
 # executor below exercises that contract without a Broker.
 fanout_groups=()
 fanout_mqadmin_fn="fanout_mqadmin_compose"
+fanout_topic_status_fn="fanout_topic_status_compose"
+fanout_empty_check_fn="fanout_require_empty_topic"
+fanout_java_probe_fn="fanout_java_probe_maven"
+fanout_rust_probe_fn="fanout_rust_probe_cargo"
+fanout_checker_fn="fanout_checker_python"
 fanout_log=/dev/null
 fanout_stub_fail_group=""
 
@@ -61,6 +67,89 @@ delete_fanout_groups() {
     return "$status"
 }
 
+# Read the per-queue offsets of one fan-out topic.
+fanout_topic_status_compose() {
+    "${compose[@]}" exec --no-TTY "$broker_service" ./mqadmin topicStatus -n namesrv:9876 -t "$1"
+}
+
+# Require every queue of one fan-out topic to report a max offset of zero before publishing.
+fanout_require_empty_topic() {
+    local output rows nonzero
+    if ! output=$("$fanout_topic_status_fn" "$1"); then
+        printf 'P10-V05 could not read the offsets of topic %s\n' "$1" >&2
+        return 1
+    fi
+    printf '# mqadmin topicStatus -n namesrv:9876 -t %s\n%s\n' "$1" "$output" \
+        >>"$evidence_dir/topic-status.log"
+    rows=$(printf '%s\n' "$output" | awk '$1 !~ /^#/ && NF >= 4 { print $4 }')
+    if [[ -z "$rows" ]]; then
+        printf 'P10-V05 topic %s reports no queue offsets, so it is not a usable empty topic\n' \
+            "$1" >&2
+        return 1
+    fi
+    nonzero=$(printf '%s\n' "$rows" | awk '$1 != "0" { print }')
+    if [[ -n "$nonzero" ]]; then
+        printf 'P10-V05 topic %s is not empty before publishing (max offsets: %s)\n' "$1" \
+            "$(printf '%s' "$nonzero" | tr '\n' ' ')" >&2
+        return 1
+    fi
+    return 0
+}
+
+fanout_java_probe_maven() {
+    mvn -q -f "$repo_root/compat/java-reference/pom.xml" \
+        -Dexec.args="probe $namesrv_addr $2 $3 $4" exec:java@live-pull-fanout-probe \
+        >"$5" 2>"$6"
+}
+
+fanout_rust_probe_cargo() {
+    cargo run --locked --quiet -p rocketmq-classic-integration --bin live_client -- \
+        p10-fanout "$namesrv_addr" "$2" "$3" "$4" >"$5" 2>"$6"
+}
+
+fanout_checker_python() {
+    python3 "$repo_root/tests/differential/check_p10_fanout.py" "$1" "$2" --queues="$3" \
+        >"$evidence_dir/fanout-check.log" 2>&1
+}
+
+# Run both language probes and the checker. Every failure path returns non-zero before any PASS
+# line exists, so a probe that never reached its gate cannot be recorded as evidence.
+run_fanout_sequence() {
+    local fanout_topic language ready_file tsv stderr_file
+    for fanout_topic in "${topic}_java" "${topic}_rust"; do
+        if ! "$fanout_empty_check_fn" "$fanout_topic"; then
+            return 1
+        fi
+    done
+    for language in java rust; do
+        ready_file="$evidence_dir/$language-p10-fanout.ready"
+        tsv="$evidence_dir/$language-p10-fanout.tsv"
+        stderr_file="$evidence_dir/$language-p10-fanout.stderr"
+        if [[ "$language" == "java" ]]; then
+            if ! "$fanout_java_probe_fn" java "${topic}_java" "${consumer_group}_java" \
+                "$ready_file" "$tsv" "$stderr_file"; then
+                cat "$tsv" "$stderr_file" >&2 2>/dev/null || true
+                return 1
+            fi
+        elif ! "$fanout_rust_probe_fn" rust "${topic}_rust" "${consumer_group}_rust" \
+            "$ready_file" "$tsv" "$stderr_file"; then
+            cat "$tsv" "$stderr_file" >&2 2>/dev/null || true
+            return 1
+        fi
+        if [[ ! -s "$ready_file" ]]; then
+            printf 'P10-V05 the %s probe exited without writing its admission-gate ready file %s\n' \
+                "$language" "$ready_file" >&2
+            return 1
+        fi
+    done
+    if ! "$fanout_checker_fn" "$evidence_dir" "$topic" "$queue_count"; then
+        cat "$evidence_dir/fanout-check.log" >&2 || true
+        return 1
+    fi
+    printf 'PASS P10-V05: Java and Rust each admitted all %s empty-queue Pulls before any of those responses completed, kept one active Pull per queue at suspendTimeoutMillis=15000, and delivered every seeded queue within the declared bound\n' \
+        "$queue_count" | tee "$evidence_dir/result.txt"
+}
+
 # Stubbed mqadmin runner used by --self-test: records every invocation and fails the
 # creation of `fanout_stub_fail_group`.
 fanout_mqadmin_stub() {
@@ -77,6 +166,155 @@ fanout_mqadmin_stub() {
         if [[ -n "$fanout_stub_fail_group" && "$group" == "$fanout_stub_fail_group" ]]; then
             return 1
         fi
+    fi
+    return 0
+}
+
+# Stubbed topic-offset reader used by --self-test.
+fanout_topic_status_stub() {
+    printf '%s\n' "$fanout_stub_topic_status"
+}
+
+# Stubbed language probe used by --self-test; `fanout_stub_probe_mode` selects the behaviour.
+fanout_probe_stub() {
+    local language="$1" ready_file="$4" tsv="$5" stderr_file="$6"
+    : >"$tsv"
+    : >"$stderr_file"
+    case "$fanout_stub_probe_mode" in
+    ok)
+        printf 'P10F\tROUTE\t%s\tbroker-a\t0\n' "$language" >>"$tsv"
+        printf 'ready\n' >"$ready_file"
+        return 0
+        ;;
+    gate-timeout)
+        printf 'the admission gate was never reached: active=4/16\n' >"$stderr_file"
+        return 1
+        ;;
+    no-ready-file)
+        printf 'P10F\tROUTE\t%s\tbroker-a\t0\n' "$language" >>"$tsv"
+        return 0
+        ;;
+    esac
+    return 1
+}
+
+fanout_checker_stub() {
+    if [[ "$fanout_stub_checker_status" != "0" ]]; then
+        printf 'P10-V05 evidence contract failed: a target Pull response preceded the barrier\n' \
+            >"$evidence_dir/fanout-check.log"
+        return 1
+    fi
+    printf 'PASS P10-V05 checker stub\n' >"$evidence_dir/fanout-check.log"
+    return 0
+}
+
+# Exercise the P10-V05 evidence contract without a Broker: the empty-topic gate, each probe exit
+# status, ready-file presence and the checker verdict must all be enforced before any PASS line.
+selftest_fanout_evidence_contract() {
+    local dir failures=0
+    dir="$(mktemp -d)"
+    # This self-test exits afterwards, so the scenario globals are set directly.
+    topic="compat_p10_fanout"
+    consumer_group="compat_p10_push_fanout"
+    queue_count=16
+    namesrv_addr="127.0.0.1:9876"
+    fanout_topic_status_fn="fanout_topic_status_stub"
+    fanout_java_probe_fn="fanout_probe_stub"
+    fanout_rust_probe_fn="fanout_probe_stub"
+    fanout_checker_fn="fanout_checker_stub"
+    fanout_stub_checker_status=0
+
+    # A completed run records both topics' offsets and writes the PASS line.
+    evidence_dir="$dir/complete"
+    mkdir -p "$evidence_dir"
+    fanout_stub_topic_status=$'#Broker Name\t#QID\t#Min Offset\t#Max Offset\nbroker-a\t0\t0\t0\nbroker-a\t1\t0\t0'
+    fanout_stub_probe_mode="ok"
+    if ! run_fanout_sequence >"$dir/complete.out" 2>&1; then
+        echo "fan-out self-test: a complete run should pass:" >&2
+        cat "$dir/complete.out" >&2
+        failures=$((failures + 1))
+    fi
+    if [[ ! -s "$evidence_dir/result.txt" ]]; then
+        echo "fan-out self-test: a complete run must write result.txt" >&2
+        failures=$((failures + 1))
+    fi
+    for fanout_topic in compat_p10_fanout_java compat_p10_fanout_rust; do
+        if ! grep -q -- "-t $fanout_topic" "$evidence_dir/topic-status.log"; then
+            echo "fan-out self-test: the offsets of $fanout_topic were not recorded" >&2
+            failures=$((failures + 1))
+        fi
+    done
+
+    # A topic that already holds messages must stop the run before any probe starts.
+    evidence_dir="$dir/not-empty"
+    mkdir -p "$evidence_dir"
+    fanout_stub_topic_status=$'#Broker Name\t#QID\t#Min Offset\t#Max Offset\nbroker-a\t0\t0\t3'
+    if run_fanout_sequence >"$dir/not-empty.out" 2>&1; then
+        echo "fan-out self-test: a non-empty fan-out topic must stop the run" >&2
+        failures=$((failures + 1))
+    fi
+    if [[ -e "$evidence_dir/java-p10-fanout.tsv" ]]; then
+        echo "fan-out self-test: no probe may start when the topics are not empty" >&2
+        failures=$((failures + 1))
+    fi
+    if [[ -s "$evidence_dir/result.txt" ]]; then
+        echo "fan-out self-test: a non-empty topic must not produce PASS evidence" >&2
+        failures=$((failures + 1))
+    fi
+
+    # A probe that never reached its gate exits non-zero and produces no PASS line.
+    evidence_dir="$dir/gate-timeout"
+    mkdir -p "$evidence_dir"
+    fanout_stub_topic_status=$'#Broker Name\t#QID\t#Min Offset\t#Max Offset\nbroker-a\t0\t0\t0'
+    fanout_stub_probe_mode="gate-timeout"
+    if run_fanout_sequence >"$dir/gate-timeout.out" 2>&1; then
+        echo "fan-out self-test: a probe gate timeout must fail the scenario" >&2
+        failures=$((failures + 1))
+    fi
+    if [[ -s "$evidence_dir/result.txt" ]]; then
+        echo "fan-out self-test: a probe gate timeout must not produce PASS evidence" >&2
+        failures=$((failures + 1))
+    fi
+    if ! grep -q 'admission gate was never reached' "$dir/gate-timeout.out"; then
+        echo "fan-out self-test: the gate timeout reason must reach the operator" >&2
+        failures=$((failures + 1))
+    fi
+
+    # A probe that exits zero without writing its ready file is still a failure.
+    evidence_dir="$dir/missing-ready"
+    mkdir -p "$evidence_dir"
+    fanout_stub_probe_mode="no-ready-file"
+    if run_fanout_sequence >"$dir/missing-ready.out" 2>&1; then
+        echo "fan-out self-test: a missing ready file must fail the scenario" >&2
+        failures=$((failures + 1))
+    fi
+    if ! grep -q 'ready file' "$dir/missing-ready.out"; then
+        echo "fan-out self-test: the missing ready file reason must reach the operator" >&2
+        failures=$((failures + 1))
+    fi
+
+    # A failing checker verdict overrides whatever the probes reported.
+    evidence_dir="$dir/checker-failure"
+    mkdir -p "$evidence_dir"
+    fanout_stub_probe_mode="ok"
+    fanout_stub_checker_status=1
+    if run_fanout_sequence >"$dir/checker-failure.out" 2>&1; then
+        echo "fan-out self-test: a failing checker must fail the scenario" >&2
+        failures=$((failures + 1))
+    fi
+    if [[ -s "$evidence_dir/result.txt" ]]; then
+        echo "fan-out self-test: a failing checker must not produce PASS evidence" >&2
+        failures=$((failures + 1))
+    fi
+
+    fanout_topic_status_fn="fanout_topic_status_compose"
+    fanout_java_probe_fn="fanout_java_probe_maven"
+    fanout_rust_probe_fn="fanout_rust_probe_cargo"
+    fanout_checker_fn="fanout_checker_python"
+    rm -rf "$dir"
+    if ((failures)); then
+        echo "run.sh fan-out evidence contract self-test FAIL ($failures check(s))" >&2
+        return 1
     fi
     return 0
 }
@@ -182,8 +420,10 @@ done
 
 [[ -n "$selection" ]] || { usage >&2; exit 2; }
 if [[ "$selection" == "self-test" ]]; then
-    selftest_fanout_group_cleanup
-    exit $?
+    selftest_fanout_group_cleanup || exit 1
+    selftest_fanout_evidence_contract || exit 1
+    echo "run.sh fan-out self-tests PASS (group ownership, empty-topic gate, probe status, checker verdict)"
+    exit 0
 fi
 if [[ "$selection" == "scenario" && $scenario_id_count -eq 0 ]]; then
     echo "At least one scenario ID is required" >&2
@@ -1306,6 +1546,8 @@ docker compose --project-name $project_name --file integration-tests/compose.yam
 docker compose --project-name $project_name --file integration-tests/compose.yaml --profile host-routed exec broker-host ./mqadmin updateTopic -c RocketMQLocalTest -t ${topic}_rust -r 16 -w 16 -n namesrv:9876
 docker compose --project-name $project_name --file integration-tests/compose.yaml --profile host-routed exec broker-host ./mqadmin updateSubGroup -c RocketMQLocalTest -g ${consumer_group}_java -n namesrv:9876
 docker compose --project-name $project_name --file integration-tests/compose.yaml --profile host-routed exec broker-host ./mqadmin updateSubGroup -c RocketMQLocalTest -g ${consumer_group}_rust -n namesrv:9876
+docker compose --project-name $project_name --file integration-tests/compose.yaml --profile host-routed exec broker ./mqadmin topicStatus -n namesrv:9876 -t ${topic}_java
+docker compose --project-name $project_name --file integration-tests/compose.yaml --profile host-routed exec broker ./mqadmin topicStatus -n namesrv:9876 -t ${topic}_rust
 mvn -q -f compat/java-reference/pom.xml -Dexec.args="probe $namesrv_addr ${topic}_java ${consumer_group}_java <evidence>/java-p10-fanout.ready" exec:java@live-pull-fanout-probe
 cargo run --locked --quiet -p rocketmq-classic-integration --bin live_client -- p10-fanout $namesrv_addr ${topic}_rust ${consumer_group}_rust <evidence>/rust-p10-fanout.ready
 python3 tests/differential/check_p10_fanout.py <evidence> $topic --queues=$queue_count
@@ -4394,27 +4636,10 @@ PY
             "$scenario_id" "$expected_max_offset" | tee "$evidence_dir/result.txt"
     fi
 elif [[ "$scenario_id" == "P10-V05" ]]; then
-    # One Push consumer per language, never concurrently, each on its own topic and group.
-    if ! mvn -q -f "$repo_root/compat/java-reference/pom.xml" \
-        -Dexec.args="probe $namesrv_addr ${topic}_java ${consumer_group}_java $evidence_dir/java-p10-fanout.ready" \
-        exec:java@live-pull-fanout-probe \
-        >"$evidence_dir/java-p10-fanout.tsv" 2>"$evidence_dir/java-p10-fanout.stderr"; then
-        cat "$evidence_dir/java-p10-fanout.tsv" "$evidence_dir/java-p10-fanout.stderr" 2>/dev/null >&2 || true
+    # One Push consumer per language, never concurrently, each on its own empty topic and group.
+    if ! run_fanout_sequence; then
         exit 1
     fi
-    if ! cargo run --locked --quiet -p rocketmq-classic-integration --bin live_client -- \
-        p10-fanout "$namesrv_addr" "${topic}_rust" "${consumer_group}_rust" "$evidence_dir/rust-p10-fanout.ready" \
-        >"$evidence_dir/rust-p10-fanout.tsv" 2>"$evidence_dir/rust-p10-fanout.stderr"; then
-        cat "$evidence_dir/rust-p10-fanout.tsv" "$evidence_dir/rust-p10-fanout.stderr" 2>/dev/null >&2 || true
-        exit 1
-    fi
-    if ! python3 "$repo_root/tests/differential/check_p10_fanout.py" "$evidence_dir" "$topic" \
-        --queues="$queue_count" >"$evidence_dir/fanout-check.log" 2>&1; then
-        cat "$evidence_dir/fanout-check.log" >&2
-        exit 1
-    fi
-    printf 'PASS P10-V05: Java and Rust each admitted all %s empty-queue Pulls before any of those responses completed, kept one active Pull per queue at suspendTimeoutMillis=15000, and delivered every seeded queue within the declared bound\n' \
-        "$queue_count" | tee "$evidence_dir/result.txt"
 elif [[ "$scenario_id" == "P9-V03" ]]; then
     if ! mvn -q -f "$repo_root/compat/java-reference/pom.xml" \
         -Dexec.args="seed $namesrv_addr $topic" exec:java@live-pull-consumer-probe \
