@@ -139,12 +139,26 @@ def check_language(language, rows, topic_base, queues, admission_window_ms, deli
         fail(f"queues never started a target Pull: {missing}")
 
     # 4. Admission barrier: all queues active within the window and before any response.
+    shutdown_at = None
+    if len(rows["SHUTDOWN"]) != 1 or len(rows["SHUTDOWN"][0]) != 4:
+        fail("exactly one well-formed SHUTDOWN row is required")
+    else:
+        shutdown_at = integer(rows["SHUTDOWN"][0][3], "shutdown timestamp", language, 0)
+
+    first_starts = {}
+    for queue_id, records in start_by_queue.items():
+        first_starts[queue_id] = min(record[0] for record in records)
+    barrier = max(first_starts.values()) if first_starts else None
+    span_ms = ((barrier - min(first_starts.values())) // 1_000_000) if first_starts else 0
+
     gate = rows["GATE"]
+    gate_at = None
     if len(gate) != 1:
         fail(f"exactly one GATE row is required, found {len(gate)}")
     elif len(gate[0]) != 6:
         fail(f"malformed GATE row: {gate[0]!r}")
     else:
+        gate_at = integer(gate[0][3], "gate timestamp", language, 0)
         gate_span = integer(gate[0][4], "gate span", language, 0)
         gate_queues = integer(gate[0][5], "gate distinct queue count", language, 0)
         if gate_queues != queues:
@@ -152,20 +166,31 @@ def check_language(language, rows, topic_base, queues, admission_window_ms, deli
         if gate_span > admission_window_ms:
             fail(f"admission span {gate_span} ms exceeds the {admission_window_ms} ms window")
 
-    first_starts = {}
-    for queue_id, records in start_by_queue.items():
-        first_starts[queue_id] = min(record[0] for record in records)
     if len(first_starts) == queues:
-        span_ms = (max(first_starts.values()) - min(first_starts.values())) // 1_000_000
         if span_ms > admission_window_ms:
             fail(f"first Pull starts span {span_ms} ms, exceeding the "
                  f"{admission_window_ms} ms admission window")
-        barrier = max(first_starts.values())
         early = [end for end in ends if end[0] < barrier]
         if early:
             queue_ids = sorted({end[1] for end in early})
             fail(f"a target Pull response completed before every assigned queue had an "
                  f"outstanding Pull (queues {queue_ids})")
+
+    # The GATE row must describe the recorded starts, not merely sit somewhere in the log.
+    if gate_at is not None and first_starts:
+        started_by_gate = {queue_id for queue_id, stamp in first_starts.items() if stamp <= gate_at}
+        if len(started_by_gate) != queues:
+            missing = sorted(set(first_starts) - started_by_gate)
+            fail(f"GATE timestamp precedes the initial Pull start of queues {missing}, so the "
+                 f"recorded barrier was not reached when the gate was written")
+        if gate_queues != len(started_by_gate):
+            fail(f"GATE row recorded {gate_queues} distinct queues but only "
+                 f"{len(started_by_gate)} initial Pull starts precede its timestamp")
+        if abs(gate_span - span_ms) > 1:
+            fail(f"GATE span {gate_span} ms does not match the {span_ms} ms span of the "
+                 f"recorded first Pull starts")
+        if ends and gate_at > min(end[0] for end in ends):
+            fail("a target Pull response completed before the recorded admission gate")
 
     # 5. One active Pull per queue-generation, and follow-ups wait for slot release.
     events = [(stamp, 1, queue_id, opaque) for stamp, queue_id, opaque in starts]
@@ -215,10 +240,7 @@ def check_language(language, rows, topic_base, queues, admission_window_ms, deli
                      f"previous Pull completed")
 
     # 6. Shutdown ordering: no new Pull after the client unregistered and stopped.
-    if len(rows["SHUTDOWN"]) != 1 or len(rows["SHUTDOWN"][0]) != 4:
-        fail("exactly one well-formed SHUTDOWN row is required")
-    else:
-        shutdown_at = integer(rows["SHUTDOWN"][0][3], "shutdown timestamp", language, 0)
+    if shutdown_at is not None:
         late = [start for start in starts if start[0] > shutdown_at]
         if late:
             fail(f"{len(late)} Pull admission(s) happened after client shutdown")
@@ -236,6 +258,9 @@ def check_language(language, rows, topic_base, queues, admission_window_ms, deli
             fail("SEND_START row has an empty message key")
         if key in sends:
             fail(f"duplicate SEND_START for message key {key!r}")
+        if gate_at is not None and stamp < gate_at:
+            fail(f"SEND_START for message key {key!r} precedes the admission gate, so the "
+                 f"topic was not empty while the barrier was measured")
         sends[key] = (stamp, queue_id)
     if len(sends) != queues:
         fail(f"{len(sends)} seeded sends recorded, expected one per queue ({queues})")
@@ -243,18 +268,39 @@ def check_language(language, rows, topic_base, queues, admission_window_ms, deli
     if send_queues != expected_queues:
         fail(f"seeded sends must cover every queue exactly once; saw {sorted(send_queues)}")
 
-    statuses = {}
+    # Every seeded send needs exactly one successful completion that matches its queue,
+    # with a non-negative offset and an end stamp at/after its start. A delivery may
+    # still precede the send return (the listener can run on another thread).
+    completions = {}
     for row in rows["SEND_END"]:
         if len(row) != 8:
             fail(f"malformed SEND_END row: {row!r}")
             continue
+        stamp = integer(row[3], "send end timestamp", language, 0)
+        queue_id = integer(row[4], "send end queue id", language, 0)
         key = row[5]
         status = row[6]
         if key not in sends:
             fail(f"SEND_END for unknown message key {key!r}")
-        elif status != "SEND_OK":
+            continue
+        if key in completions:
+            fail(f"duplicate SEND_END for message key {key!r}")
+            continue
+        send_start, send_queue = sends[key]
+        if status != "SEND_OK":
             fail(f"seeded send for {key!r} returned {status!r} instead of SEND_OK")
-        statuses[key] = status
+        if queue_id != send_queue:
+            fail(f"SEND_END for message key {key!r} names queue {queue_id} but the send "
+                 f"target was queue {send_queue}")
+        offset = integer(row[7], "send end queue offset", language, 0)
+        if offset < 0:
+            fail(f"SEND_END for message key {key!r} reported negative offset {offset}")
+        if stamp < send_start:
+            fail(f"SEND_END for message key {key!r} precedes its own SEND_START")
+        completions[key] = (stamp, queue_id, status, offset)
+    missing_end = sorted(set(sends) - set(completions))
+    if missing_end:
+        fail(f"seeded send(s) without a matching SEND_END row: {missing_end}")
 
     deliveries = {}
     for row in rows["DELIVERY"]:
@@ -274,6 +320,8 @@ def check_language(language, rows, topic_base, queues, admission_window_ms, deli
             fail(f"seeded message {key!r} was never delivered")
             continue
         delivery_at, delivery_queue = deliveries[key]
+        if shutdown_at is not None and delivery_at > shutdown_at:
+            fail(f"message {key!r} was delivered after the client shut down")
         if delivery_queue != send_queue:
             fail(f"message {key!r} was delivered on queue {delivery_queue} but sent to "
                  f"{send_queue}")
@@ -350,7 +398,10 @@ def self_test():
 
     def rows(language, queues=DEFAULT_QUEUES, suspend=EXPECTED_SUSPEND_MILLIS, starts=None,
              ends=None, sends=None, deliveries=None, duplicate_active=False,
-             shutdown_after=True, outstanding=0):
+             shutdown_after=True, outstanding=0, gate_at=None, send_before_gate=False,
+             drop_send_end=False, duplicate_send_end=False, mismatched_send_end=False,
+             delivery_before_send_return=False, duplicate_delivery=False,
+             delivery_after_shutdown=False):
         out = []
 
         def emit(kind, *fields):
@@ -366,11 +417,16 @@ def self_test():
             ends = [(base + 2_000_000_000 + queue_id, queue_id, 100 + queue_id)
                     for queue_id in range(queues)]
         if sends is None:
-            sends = [(base + 6_000_000_000 + queue_id * 1_000, queue_id, f"p10f-q{queue_id}")
+            send_base = base - 1_000 if send_before_gate else base + 6_000_000_000
+            sends = [(send_base + queue_id * 1_000, queue_id, f"p10f-q{queue_id}")
                      for queue_id in range(queues)]
         if deliveries is None:
-            deliveries = [(base + 7_000_000_000 + queue_id * 1_000, queue_id, f"p10f-q{queue_id}")
-                          for queue_id in range(queues)]
+            if delivery_after_shutdown:
+                deliveries = [(base + 20_001_000_000 + queue_id * 1_000, queue_id,
+                               f"p10f-q{queue_id}") for queue_id in range(queues)]
+            else:
+                deliveries = [(base + 7_000_000_000 + queue_id * 1_000, queue_id,
+                               f"p10f-q{queue_id}") for queue_id in range(queues)]
 
         for stamp, queue_id, opaque in sorted(starts):
             emit("PULL_START", stamp, queue_id, opaque, suspend, "127.0.0.1:40911")
@@ -381,10 +437,11 @@ def self_test():
             emit("PULL_START", base + 1_500, 0, 999, suspend, "127.0.0.1:40911")
 
         first_starts = {}
-        for _stamp, queue_id, _opaque in starts:
-            first_starts[queue_id] = min(first_starts.get(queue_id, base + 1 << 60), _stamp)
+        for stamp, queue_id, _opaque in starts:
+            first_starts[queue_id] = min(first_starts.get(queue_id, base + 1 << 60), stamp)
         span_ms = (max(first_starts.values()) - min(first_starts.values())) // 1_000_000
-        emit("GATE", max(first_starts.values()), span_ms, len(first_starts))
+        emit("GATE", gate_at if gate_at is not None else max(first_starts.values()),
+             span_ms, len(first_starts))
 
         # A long-poll that is still suspended when the client shuts down has a
         # recorded admission but no response hook.
@@ -394,14 +451,28 @@ def self_test():
 
         for stamp, queue_id, key in sends:
             emit("SEND_START", stamp, queue_id, key)
-            emit("SEND_END", stamp + 500_000, queue_id, key, "SEND_OK", 0)
-        for stamp, queue_id, key in deliveries:
-            emit("DELIVERY", stamp, queue_id, key, 0)
+            if delivery_before_send_return:
+                # The listener callback can run before the send call returns.
+                emit("DELIVERY", stamp + 100_000, queue_id, key, 0)
+            if drop_send_end:
+                continue
+            end_queue = 99 if mismatched_send_end else queue_id
+            emit("SEND_END", stamp + 500_000, end_queue, key, "SEND_OK", 0)
+            if duplicate_send_end and queue_id == 0:
+                emit("SEND_END", stamp + 600_000, queue_id, key, "SEND_OK", 1)
+        if not delivery_before_send_return:
+            for stamp, queue_id, key in deliveries:
+                emit("DELIVERY", stamp, queue_id, key, 0)
+        if duplicate_delivery:
+            emit("DELIVERY", base + 7_000_500_000, 0, "p10f-q0", 0)
         if duplicate_active:
             emit("PULL_END", base + 2_500_000_000, 0, 999, 19)
 
         emit("SHUTDOWN", base + 20_000_000_000 if shutdown_after else base + 1_000)
         return "\n".join(out) + "\n"
+
+    near_shutdown_sends = [(base + 19_000_000_000 + queue_id * 1_000, queue_id,
+                            f"p10f-q{queue_id}") for queue_id in range(DEFAULT_QUEUES)]
 
     late_starts = [(base + queue_id * 1_000, queue_id, 100 + queue_id) for queue_id in range(4)]
     late_starts += [(base + 9_000_000_000 + queue_id * 1_000, queue_id, 100 + queue_id)
@@ -431,6 +502,27 @@ def self_test():
         ("pull-after-shutdown", True, "after client shutdown", {"shutdown_after": False}),
         ("outstanding-at-shutdown", False, None, {"outstanding": 1}),
         ("two-outstanding-one-queue", True, "without a response", {"outstanding": 2}),
+        ("send-end-rows-removed", True, "without a matching SEND_END row",
+         {"drop_send_end": True}),
+        ("publish-before-gate", True, "precedes the admission gate",
+         {"send_before_gate": True,
+          "deliveries": [(base + 200_000 + queue_id * 1_000, queue_id, f"p10f-q{queue_id}")
+                         for queue_id in range(DEFAULT_QUEUES)]}),
+        ("gate-before-final-initial-start", True, "GATE timestamp precedes the initial Pull start",
+         {"gate_at": base}),
+        ("response-between-final-start-and-gate", True,
+         "completed before the recorded admission gate",
+         {"gate_at": base + 3_000_000_000}),
+        ("duplicate-send-end", True, "duplicate SEND_END for message key",
+         {"duplicate_send_end": True}),
+        ("mismatched-send-end-queue", True, "but the send target was queue",
+         {"mismatched_send_end": True}),
+        ("duplicate-delivery-row", True, "was delivered more than once",
+         {"duplicate_delivery": True}),
+        ("delivery-after-shutdown", True, "delivered after the client shut down",
+         {"sends": near_shutdown_sends, "delivery_after_shutdown": True}),
+        ("callback-before-send-return", False, None,
+         {"delivery_before_send_return": True}),
     ]
 
     with tempfile.TemporaryDirectory() as directory:
