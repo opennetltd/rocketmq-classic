@@ -4,7 +4,11 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    sync::{Arc, Mutex},
+    future::Future,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::Duration,
 };
 
@@ -21,7 +25,7 @@ use rocketmq_classic_remoting::{RemotingCommand, codec::frame};
 use serde_json::json;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpListener,
+    net::{TcpListener, TcpStream},
     sync::{broadcast, mpsc},
     task::JoinHandle,
     time::{Instant, timeout},
@@ -44,6 +48,78 @@ struct PullObserved {
 enum BrokerEvent {
     Pull(PullObserved),
     Unregistered,
+}
+
+/// One accepted connection task plus the label used when a cleanup join fails.
+type RecordedTask = (&'static str, JoinHandle<()>);
+
+/// Every accepted connection task is recorded here, so teardown can join each one instead of
+/// leaving detached tasks behind.
+#[derive(Clone, Default)]
+struct PeerTasks {
+    handles: Arc<Mutex<Vec<RecordedTask>>>,
+    live_connection_tasks: Arc<AtomicUsize>,
+}
+
+/// Decrements the live-connection witness when its task ends, including on abort.
+struct LiveWitness(Arc<AtomicUsize>);
+
+impl Drop for LiveWitness {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+/// Spawn one connection task and record it together with its witness.
+fn spawn_connection_task(
+    tasks: &PeerTasks,
+    name: &'static str,
+    future: impl Future<Output = ()> + Send + 'static,
+) {
+    let counter = Arc::clone(&tasks.live_connection_tasks);
+    counter.fetch_add(1, Ordering::SeqCst);
+    let handle = tokio::spawn(async move {
+        let _live = LiveWitness(counter);
+        future.await;
+    });
+    tasks
+        .handles
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .push((name, handle));
+}
+
+/// Join one recorded peer task. A cleanup timeout is a test failure, never something tolerated.
+async fn join_peer_task(label: &str, task: JoinHandle<()>) {
+    match timeout(Duration::from_secs(2), task).await {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => panic!("peer task {label} ended abnormally: {error}"),
+        Err(_) => panic!("peer task {label} survived the 2s cleanup bound"),
+    }
+}
+
+/// Join every recorded connection task and require the witness to reach zero.
+async fn join_recorded_tasks(tasks: &PeerTasks) {
+    // The registry lock is released before any await so teardown cannot deadlock on it.
+    let recorded = {
+        let mut guard = tasks
+            .handles
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        std::mem::take(&mut *guard)
+    };
+    assert!(
+        !recorded.is_empty(),
+        "the peer recorded no connection task, so the witness proves nothing"
+    );
+    for (name, handle) in recorded {
+        join_peer_task(name, handle).await;
+    }
+    assert_eq!(
+        tasks.live_connection_tasks.load(Ordering::SeqCst),
+        0,
+        "a peer connection task survived teardown"
+    );
 }
 
 async fn read_command<S: AsyncReadExt + Unpin>(stream: &mut S) -> Option<RemotingCommand> {
@@ -97,15 +173,30 @@ fn pull_not_found(opaque: i32) -> Vec<u8> {
     )
 }
 
-async fn nameserver_peer(broker_address: String) -> (String, JoinHandle<()>) {
+async fn nameserver_peer(
+    broker_address: String,
+    mut shutdown: broadcast::Receiver<()>,
+) -> (String, JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap().to_string();
     let task = tokio::spawn(async move {
         loop {
-            let Ok((mut stream, _)) = listener.accept().await else {
-                break;
+            // Acceptance closes cooperatively, so teardown never has to abort this task.
+            let mut stream = tokio::select! {
+                _ = shutdown.recv() => break,
+                accepted = listener.accept() => match accepted {
+                    Ok((stream, _)) => stream,
+                    Err(_) => break,
+                },
             };
-            while let Some(command) = read_command(&mut stream).await {
+            loop {
+                let command = tokio::select! {
+                    _ = shutdown.recv() => None,
+                    command = read_command(&mut stream) => command,
+                };
+                let Some(command) = command else {
+                    break;
+                };
                 let requested_topic = command
                     .ext_fields
                     .as_ref()
@@ -150,29 +241,42 @@ async fn nameserver_peer(broker_address: String) -> (String, JoinHandle<()>) {
 /// One broker peer that answers control traffic but holds every target-topic Pull
 /// response until a release round is broadcast. Frame reads stay in their own task so a
 /// held response can never block later requests on the same connection.
-async fn broker_peer() -> (
+async fn broker_peer(
+    shutdown: broadcast::Receiver<()>,
+) -> (
     String,
     broadcast::Sender<u64>,
     mpsc::UnboundedReceiver<BrokerEvent>,
     JoinHandle<()>,
+    PeerTasks,
 ) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap().to_string();
     let (event_tx, event_rx) = mpsc::unbounded_channel();
     let (release_tx, _) = broadcast::channel(16);
     let client_id = Arc::new(Mutex::new(None::<String>));
+    let tasks = PeerTasks::default();
 
     let connect_release = release_tx.clone();
+    let accept_shutdown = shutdown.resubscribe();
+    let accept_tasks = tasks.clone();
     let accept_task = tokio::spawn(async move {
+        let mut shutdown = accept_shutdown;
         let mut connection = 0_u64;
         loop {
-            let Ok((stream, _)) = listener.accept().await else {
-                break;
+            // Acceptance closes cooperatively, so teardown never aborts it mid-connection.
+            let stream = tokio::select! {
+                _ = shutdown.recv() => break,
+                accepted = listener.accept() => match accepted {
+                    Ok((stream, _)) => stream,
+                    Err(_) => break,
+                },
             };
             connection += 1;
             let (mut read_half, mut write_half) = stream.into_split();
-            let (out_tx, mut out_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-            tokio::spawn(async move {
+            let (out_tx, out_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+            spawn_connection_task(&accept_tasks, "broker writer", async move {
+                let mut out_rx = out_rx;
                 while let Some(bytes) = out_rx.recv().await {
                     if write_half.write_all(&bytes).await.is_err() {
                         break;
@@ -180,19 +284,32 @@ async fn broker_peer() -> (
                 }
             });
 
-            let (command_tx, mut command_rx) = mpsc::unbounded_channel::<RemotingCommand>();
-            tokio::spawn(async move {
-                while let Some(command) = read_command(&mut read_half).await {
-                    if command_tx.send(command).is_err() {
-                        break;
+            let (command_tx, command_rx) = mpsc::unbounded_channel::<RemotingCommand>();
+            let reader_shutdown = shutdown.resubscribe();
+            spawn_connection_task(&accept_tasks, "broker reader", async move {
+                let command_tx = command_tx;
+                let mut shutdown = reader_shutdown;
+                loop {
+                    tokio::select! {
+                        _ = shutdown.recv() => break,
+                        command = read_command(&mut read_half) => match command {
+                            Some(command) => {
+                                if command_tx.send(command).is_err() {
+                                    break;
+                                }
+                            }
+                            None => break,
+                        },
                     }
                 }
             });
 
             let mut release_rx = connect_release.subscribe();
+            let mut connection_shutdown = shutdown.resubscribe();
             let event_tx = event_tx.clone();
             let client_id = client_id.clone();
-            tokio::spawn(async move {
+            spawn_connection_task(&accept_tasks, "broker handler", async move {
+                let mut command_rx = command_rx;
                 // (connection, opaque) -> queue id for every unanswered target Pull.
                 let mut held: Vec<(u64, i32)> = Vec::new();
                 loop {
@@ -286,13 +403,16 @@ async fn broker_peer() -> (
                                 let _ = out_tx.send(pull_not_found(opaque));
                             }
                         }
+                        // Cooperative teardown: the handler exits first, which closes the writer
+                        // channel and the command queue behind it.
+                        _ = connection_shutdown.recv() => break,
                     }
                 }
             });
         }
     });
 
-    (address, release_tx, event_rx, accept_task)
+    (address, release_tx, event_rx, accept_task, tasks)
 }
 
 /// Collects target-topic Pull requests until every queue id `0..QUEUE_COUNT` has been
@@ -371,8 +491,11 @@ fn assert_fanout(rounds: &BTreeMap<i32, Vec<PullObserved>>) -> BTreeSet<(u64, i3
 
 #[tokio::test]
 async fn push_pull_fanout_admits_every_assigned_queue_before_any_response() {
-    let (broker_address, release_tx, mut events, broker_task) = broker_peer().await;
-    let (namesrv_addr, namesrv_task) = nameserver_peer(broker_address).await;
+    let (shutdown_tx, shutdown_rx) = broadcast::channel::<()>(1);
+    let (broker_address, release_tx, mut events, broker_task, peer_tasks) =
+        broker_peer(shutdown_rx).await;
+    let (namesrv_addr, namesrv_task) =
+        nameserver_peer(broker_address, shutdown_tx.subscribe()).await;
 
     let mut config = PushConsumerConfig::new("push-pull-fanout").unwrap();
     config
@@ -428,15 +551,40 @@ async fn push_pull_fanout_admits_every_assigned_queue_before_any_response() {
         "the consumer did not unregister before its broker connection closed"
     );
 
-    // Peer teardown is bounded: closing the client ends every per-connection task.
+    // Peer teardown is owned and bounded: acceptance closes, every connection is cancelled
+    // cooperatively, then each recorded task is joined. A cleanup timeout fails the test.
     drop(events);
     let _ = release_tx;
-    broker_task.abort();
-    namesrv_task.abort();
-    for task in [broker_task, namesrv_task] {
-        if let Ok(result) = timeout(Duration::from_secs(1), task).await {
-            // Aborted tasks report a join error; anything else is unexpected.
-            assert!(result.is_err(), "peer task ended without being aborted");
-        }
+    let _ = shutdown_tx.send(());
+    join_peer_task("broker accept", broker_task).await;
+    join_peer_task("nameserver accept", namesrv_task).await;
+    join_recorded_tasks(&peer_tasks).await;
+}
+
+/// A client that never closes its socket must not strand a peer task: the cleanup path is
+/// cooperative, so it also works when a scenario failed before any exchange completed.
+#[tokio::test]
+async fn peer_teardown_finishes_every_task_after_an_abandoned_connection() {
+    let (shutdown_tx, shutdown_rx) = broadcast::channel::<()>(1);
+    let (broker_address, _release_tx, events, broker_task, peer_tasks) =
+        broker_peer(shutdown_rx).await;
+
+    // The injected failure is a client that connects and then never speaks or closes.
+    let abandoned = TcpStream::connect(&broker_address).await.unwrap();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while peer_tasks.live_connection_tasks.load(Ordering::SeqCst) == 0 && Instant::now() < deadline
+    {
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
+    assert_ne!(
+        peer_tasks.live_connection_tasks.load(Ordering::SeqCst),
+        0,
+        "the peer recorded no connection task for the accepted socket"
+    );
+
+    drop(events);
+    let _ = shutdown_tx.send(());
+    join_peer_task("broker accept", broker_task).await;
+    join_recorded_tasks(&peer_tasks).await;
+    drop(abandoned);
 }
