@@ -687,34 +687,112 @@ async fn p10_push_probe(
 const P10_FANOUT_QUEUES: usize = 16;
 const P10_FANOUT_ADMISSION_WINDOW: Duration = Duration::from_secs(5);
 const P10_FANOUT_DELIVERY_WINDOW: Duration = Duration::from_secs(5);
+/// Route refresh, rebalance and the first Pull get their own bounded wait.
+const P10_FANOUT_STARTUP_WINDOW: Duration = Duration::from_secs(30);
+/// Slack past the admission window so a hopeless barrier reports instead of hanging.
+const P10_FANOUT_ADMISSION_SLACK: Duration = Duration::from_secs(2);
 
 macro_rules! p10_fanout_row {
-    ($kind:expr $(, $value:expr)*) => {{
-        let mut line = format!("P10F\t{}\trust", $kind);
-        $(let _ = write!(line, "\t{}", $value);)*
-        println!("{line}");
+    ($state:expr, $kind:expr $(, $value:expr)*) => {{
+        let mut fields: Vec<String> = vec![($kind).to_owned()];
+        $(fields.push(($value).to_string());)*
+        $state.emit(fields);
     }};
+}
+
+/// Where evidence rows go; the unit tests capture them instead of printing.
+type FanoutRowSink = Arc<dyn Fn(String) + Send + Sync>;
+
+/// Immutable admission-barrier snapshot, so callers never observe a half-updated gate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct GateSnapshot {
+    at_nanos: i64,
+    span_millis: i64,
+    distinct_queues: usize,
 }
 
 /// Evidence state shared by the RPC hook, the listener, and the probe body.
 struct FanoutProbeState {
     base: StdInstant,
+    sink: FanoutRowSink,
+    expected_queues: usize,
+    admission_window_nanos: i64,
     inner: std::sync::Mutex<FanoutProbeInner>,
 }
 
 #[derive(Default)]
 struct FanoutProbeInner {
+    /// Queue id to the opaque of that queue's currently outstanding Pull, if any.
+    active_pulls: BTreeMap<i32, i32>,
+    /// Queue id to the first time a target Pull was issued for it.
     first_start: BTreeMap<i32, i64>,
-    last_start: BTreeMap<i32, i64>,
-    earliest_end: Option<i64>,
+    earliest_start: Option<i64>,
+    completed_responses: usize,
+    gate: Option<GateSnapshot>,
     violation: Option<String>,
     delivered: HashSet<String>,
 }
 
+impl FanoutProbeInner {
+    /// Latch the admission barrier; call only while holding the state lock. Returns `Some` when
+    /// this call latched it. The gate requires exactly the expected number of distinct queues to be
+    /// active, no target response completed yet, and an elapsed span from the first target Pull
+    /// within the window.
+    fn attempt_latch(
+        &mut self,
+        now: i64,
+        expected_queues: usize,
+        admission_window_nanos: i64,
+    ) -> Option<GateSnapshot> {
+        if self.gate.is_some() || self.violation.is_some() || self.completed_responses > 0 {
+            return None;
+        }
+        // Nothing to measure until the first target Pull has been issued.
+        let earliest = self.earliest_start?;
+        if now - earliest > admission_window_nanos {
+            self.violation = Some(format!(
+                "only {} of {expected_queues} assigned queues had an outstanding Pull within the \
+                 {} ms admission window",
+                self.active_pulls.len(),
+                admission_window_nanos / 1_000_000
+            ));
+            return None;
+        }
+        if self.active_pulls.len() != expected_queues {
+            return None;
+        }
+        let earliest_start = *self.first_start.values().min()?;
+        let latest_start = *self.first_start.values().max()?;
+        let gate = GateSnapshot {
+            at_nanos: now,
+            span_millis: (latest_start - earliest_start) / 1_000_000,
+            distinct_queues: self.first_start.len(),
+        };
+        self.gate = Some(gate);
+        Some(gate)
+    }
+}
+
 impl FanoutProbeState {
     fn new() -> Self {
+        Self::with(
+            Arc::new(|line| println!("{line}")),
+            P10_FANOUT_QUEUES,
+            P10_FANOUT_ADMISSION_WINDOW,
+        )
+    }
+
+    #[cfg(test)]
+    fn for_tests(queues: usize, window: Duration, sink: FanoutRowSink) -> Self {
+        Self::with(sink, queues, window)
+    }
+
+    fn with(sink: FanoutRowSink, expected_queues: usize, window: Duration) -> Self {
         Self {
             base: StdInstant::now(),
+            sink,
+            expected_queues,
+            admission_window_nanos: i64::try_from(window.as_nanos()).unwrap_or(i64::MAX),
             inner: std::sync::Mutex::new(FanoutProbeInner::default()),
         }
     }
@@ -730,23 +808,60 @@ impl FanoutProbeState {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
+    /// Emit one `P10F` row; the first field is the kind and the language tag follows it.
+    fn emit(&self, fields: Vec<String>) {
+        let mut line = String::from("P10F");
+        for (index, field) in fields.iter().enumerate() {
+            line.push('\t');
+            line.push_str(field);
+            if index == 0 {
+                line.push_str("\trust");
+            }
+        }
+        (self.sink)(line);
+    }
+
+    fn emit_gate(&self, gate: GateSnapshot) {
+        p10_fanout_row!(
+            self,
+            "GATE",
+            gate.at_nanos,
+            gate.span_millis,
+            gate.distinct_queues
+        );
+    }
+
     fn pull_start(&self, topic: &str, group: &str, remote_addr: &str, command: &RemotingCommand) {
         let Some((queue_id, suspend_timeout_millis)) = target_pull_header(topic, group, command)
         else {
             return;
         };
         let now = self.nanos();
-        let mut inner = self.lock();
-        if inner.earliest_end.is_some() && inner.violation.is_none() {
-            inner.violation = Some(
-                "a target Pull response completed before every assigned queue had an outstanding Pull"
-                    .to_owned(),
-            );
-        }
-        inner.first_start.entry(queue_id).or_insert(now);
-        inner.last_start.insert(queue_id, now);
-        drop(inner);
+        let latched = {
+            let mut inner = self.lock();
+            if inner.earliest_start.is_none() {
+                inner.earliest_start = Some(now);
+            }
+            inner.first_start.entry(queue_id).or_insert(now);
+            match inner.active_pulls.get(&queue_id).copied() {
+                Some(outstanding) => {
+                    if inner.violation.is_none() {
+                        inner.violation = Some(format!(
+                            "queue {queue_id} admitted a second Pull while opaque {outstanding} \
+                             was still outstanding"
+                        ));
+                    }
+                }
+                None => {
+                    inner.active_pulls.insert(queue_id, command.opaque);
+                }
+            }
+            // Latching inside the same critical section as the start means a response can never
+            // slip between "the last queue became active" and "the barrier is recorded".
+            inner.attempt_latch(now, self.expected_queues, self.admission_window_nanos)
+        };
         p10_fanout_row!(
+            self,
             "PULL_START",
             now,
             queue_id,
@@ -754,6 +869,9 @@ impl FanoutProbeState {
             suspend_timeout_millis,
             remote_addr
         );
+        if let Some(gate) = latched {
+            self.emit_gate(gate);
+        }
     }
 
     fn pull_end(
@@ -770,34 +888,91 @@ impl FanoutProbeState {
         let now = self.nanos();
         {
             let mut inner = self.lock();
-            inner.earliest_end = Some(inner.earliest_end.map_or(now, |previous| previous.min(now)));
+            match inner.active_pulls.get(&queue_id).copied() {
+                Some(outstanding) if outstanding == command.opaque => {
+                    inner.active_pulls.remove(&queue_id);
+                }
+                _ => {
+                    if inner.violation.is_none() {
+                        inner.violation = Some(format!(
+                            "a target Pull response for queue {queue_id} / opaque {} did not match \
+                             an outstanding Pull",
+                            command.opaque
+                        ));
+                    }
+                }
+            }
+            inner.completed_responses += 1;
+            // A premature response is recorded when it happens, not on some later start.
+            if inner.gate.is_none() && inner.violation.is_none() {
+                inner.violation = Some(
+                    "a target Pull response completed before every assigned queue had an \
+                     outstanding Pull"
+                        .to_owned(),
+                );
+            }
         }
-        p10_fanout_row!("PULL_END", now, queue_id, command.opaque, response.code);
+        p10_fanout_row!(
+            self,
+            "PULL_END",
+            now,
+            queue_id,
+            command.opaque,
+            response.code
+        );
     }
 
-    fn record_delivery(&self, key: &str, queue_id: i32, reconsume_times: i32) {
-        let now = self.nanos();
-        if !self.lock().delivered.insert(key.to_owned()) {
-            return;
+    /// Return the recorded snapshot once latched, otherwise `None`; the GATE row is emitted once.
+    fn try_latch_gate(&self, now: i64) -> Option<GateSnapshot> {
+        let latched = {
+            let mut inner = self.lock();
+            if let Some(gate) = inner.gate {
+                return Some(gate);
+            }
+            inner.attempt_latch(now, self.expected_queues, self.admission_window_nanos)
+        };
+        if let Some(gate) = latched {
+            self.emit_gate(gate);
         }
-        p10_fanout_row!("DELIVERY", now, queue_id, key, reconsume_times);
+        latched
+    }
+
+    /// Emit every delivery row first; de-duplication only tracks progress.
+    fn record_delivery(&self, key: &str, queue_id: i32, reconsume_times: i32) -> bool {
+        let now = self.nanos();
+        p10_fanout_row!(self, "DELIVERY", now, queue_id, key, reconsume_times);
+        self.lock().delivered.insert(key.to_owned())
+    }
+
+    fn first_pull_start_nanos(&self) -> Option<i64> {
+        self.lock().earliest_start
     }
 
     fn delivered_count(&self) -> usize {
         self.lock().delivered.len()
     }
 
-    fn distinct_started_queues(&self) -> usize {
-        self.lock().first_start.len()
+    #[cfg(test)]
+    fn active_pull_count(&self) -> usize {
+        self.lock().active_pulls.len()
     }
 
-    fn admission_span_nanos(&self) -> i64 {
+    #[cfg(test)]
+    fn gate_snapshot(&self) -> Option<GateSnapshot> {
+        self.lock().gate
+    }
+
+    fn describe_state(&self) -> String {
         let inner = self.lock();
-        let Some(first) = inner.first_start.values().min().copied() else {
-            return 0;
-        };
-        let last = inner.last_start.values().max().copied().unwrap_or(first);
-        last - first
+        let elapsed = inner.earliest_start.map_or(0, |first| self.nanos() - first);
+        format!(
+            "active={}/{} distinctStarted={} responses={} sinceFirstPullMs={}",
+            inner.active_pulls.len(),
+            self.expected_queues,
+            inner.first_start.len(),
+            inner.completed_responses,
+            elapsed / 1_000_000
+        )
     }
 
     fn violation(&self) -> Option<String> {
@@ -888,6 +1063,7 @@ async fn p10_fanout_probe(
                 Box::pin(async move {
                     for message in messages {
                         let key = String::from_utf8_lossy(message.body().as_ref()).to_string();
+                        // Every listener callback is evidence; de-duplication only tracks progress.
                         state.record_delivery(&key, message.queue_id(), message.reconsume_times());
                     }
                     (Some(ConsumeConcurrentlyStatus::ConsumeSuccess), context)
@@ -911,9 +1087,12 @@ async fn p10_fanout_probe(
     producer_config.set_send_timeout_millis(10_000);
     let producer = Arc::new(Producer::new(producer_config));
     producer.set_send_message_with_vip_channel(false);
-    producer.start().await?;
 
+    // Both clients are shut down below whatever happens here, so a failed producer acquisition
+    // still releases the started consumer.
     let operation: Result<(), Box<dyn Error>> = async {
+        producer.start().await?;
+
         let mut queues = producer.fetch_publish_message_queues(topic).await?;
         queues.sort_by_key(|queue| queue.queue_id());
         if queues.len() != P10_FANOUT_QUEUES {
@@ -929,6 +1108,7 @@ async fn p10_fanout_probe(
         }
         for queue in &queues {
             p10_fanout_row!(
+                state,
                 "ROUTE",
                 topic,
                 queue.broker_name().unwrap_or_default(),
@@ -936,45 +1116,73 @@ async fn p10_fanout_probe(
             );
         }
 
-        let admission_deadline = StdInstant::now() + P10_FANOUT_ADMISSION_WINDOW;
-        loop {
+        // Startup gets its own bounded wait; the admission window is measured by the recorder from
+        // the first target Pull start.
+        let startup_limit = i64::try_from(P10_FANOUT_STARTUP_WINDOW.as_nanos()).unwrap_or(i64::MAX);
+        let startup_started = state.nanos();
+        while state.first_pull_start_nanos().is_none() {
             if let Some(violation) = state.violation() {
                 return Err(violation.into());
             }
-            let started = state.distinct_started_queues();
-            if started >= P10_FANOUT_QUEUES {
-                let span_nanos = state.admission_span_nanos();
-                if Duration::from_nanos(span_nanos as u64) > P10_FANOUT_ADMISSION_WINDOW {
-                    return Err(format!(
-                        "first Pull starts span {} ms, exceeding the admission window",
-                        span_nanos / 1_000_000
-                    )
-                    .into());
-                }
-                p10_fanout_row!("GATE", state.nanos(), span_nanos / 1_000_000, started);
-                if let Some(parent) = Path::new(ready_file).parent() {
-                    std::fs::create_dir_all(parent)?;
-                }
-                std::fs::write(ready_file, "rust-ready\n")?;
-                break;
-            }
-            if StdInstant::now() >= admission_deadline {
+            if state.nanos() - startup_started >= startup_limit {
                 return Err(format!(
-                    "only {started} of {P10_FANOUT_QUEUES} queues started a Pull within the \
-                     admission window"
+                    "no target-topic Pull was issued within the {} ms startup window",
+                    P10_FANOUT_STARTUP_WINDOW.as_millis()
                 )
                 .into());
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
 
+        let first_pull_nanos = state
+            .first_pull_start_nanos()
+            .unwrap_or_else(|| state.nanos());
+        let admission_limit =
+            i64::try_from(P10_FANOUT_ADMISSION_WINDOW.as_nanos()).unwrap_or(i64::MAX);
+        let slack = i64::try_from(P10_FANOUT_ADMISSION_SLACK.as_nanos()).unwrap_or(i64::MAX);
+        let wait_deadline = first_pull_nanos
+            .saturating_add(admission_limit)
+            .saturating_add(slack);
+        loop {
+            if let Some(violation) = state.violation() {
+                return Err(violation.into());
+            }
+            if state.try_latch_gate(state.nanos()).is_some() {
+                break;
+            }
+            if let Some(violation) = state.violation() {
+                return Err(violation.into());
+            }
+            if state.nanos() >= wait_deadline {
+                return Err(format!(
+                    "the admission gate was never reached: {}",
+                    state.describe_state()
+                )
+                .into());
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        // The ready file is written only after a valid latched gate.
+        if let Some(parent) = Path::new(ready_file).parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(ready_file, "rust-ready\n")?;
+
         for queue in &queues {
             let key = format!("p10f-q{}", queue.queue_id());
-            p10_fanout_row!("SEND_START", state.nanos(), queue.queue_id(), key);
+            p10_fanout_row!(
+                state,
+                "SEND_START",
+                state.nanos(),
+                queue.queue_id(),
+                key.clone()
+            );
             let mut message = Message::new(topic, key.clone().into_bytes());
             message.set_keys(&key)?;
             let result = producer.send_to_queue(&mut message, queue).await?;
             p10_fanout_row!(
+                state,
                 "SEND_END",
                 state.nanos(),
                 queue.queue_id(),
@@ -984,9 +1192,11 @@ async fn p10_fanout_probe(
             );
         }
 
-        let delivery_deadline = StdInstant::now() + P10_FANOUT_DELIVERY_WINDOW;
+        let delivery_limit =
+            i64::try_from(P10_FANOUT_DELIVERY_WINDOW.as_nanos()).unwrap_or(i64::MAX);
+        let delivery_started = state.nanos();
         while state.delivered_count() < P10_FANOUT_QUEUES {
-            if StdInstant::now() >= delivery_deadline {
+            if state.nanos() - delivery_started >= delivery_limit {
                 return Err(format!(
                     "only {} of {P10_FANOUT_QUEUES} seeded messages were delivered within the \
                      delivery window",
@@ -1002,7 +1212,7 @@ async fn p10_fanout_probe(
 
     let consumer_shutdown = consumer.shutdown().await;
     let producer_shutdown = producer.shutdown().await;
-    p10_fanout_row!("SHUTDOWN", state.nanos());
+    p10_fanout_row!(state, "SHUTDOWN", state.nanos());
     operation?;
     consumer_shutdown?;
     producer_shutdown?;
@@ -4861,7 +5071,62 @@ fn encode_hex(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::decode_batch_offsets;
+    use super::{FanoutProbeState, decode_batch_offsets};
+    use rocketmq_classic_protocol::codes::{request, response};
+    use rocketmq_classic_remoting::ExtFields;
+    use rocketmq_classic_remoting::command::RemotingCommand;
+    use std::{sync::Arc, time::Duration};
+
+    const FANOUT_TOPIC: &str = "compat_p10_fanout_rust";
+    const FANOUT_GROUP: &str = "compat_p10_push_fanout_rust";
+
+    fn fanout_pull_command(opaque: i32, queue_id: i32) -> RemotingCommand {
+        let mut command = RemotingCommand {
+            code: request::PULL_MESSAGE,
+            opaque,
+            ..Default::default()
+        };
+        command.ext_fields = Some(ExtFields::from_iter([
+            ("topic".to_owned(), FANOUT_TOPIC.to_owned()),
+            ("consumerGroup".to_owned(), FANOUT_GROUP.to_owned()),
+            ("queueId".to_owned(), queue_id.to_string()),
+            ("suspendTimeoutMillis".to_owned(), "15000".to_owned()),
+        ]));
+        command
+    }
+
+    fn fanout_pull_response(opaque: i32) -> RemotingCommand {
+        RemotingCommand {
+            code: response::PULL_NOT_FOUND,
+            opaque,
+            ..Default::default()
+        }
+    }
+
+    /// A recorder whose rows are captured instead of printed.
+    fn capturing_state(
+        queues: usize,
+        window: Duration,
+    ) -> (FanoutProbeState, Arc<std::sync::Mutex<Vec<String>>>) {
+        let rows = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let captured = Arc::clone(&rows);
+        let state = FanoutProbeState::for_tests(
+            queues,
+            window,
+            Arc::new(move |line| {
+                captured
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .push(line);
+            }),
+        );
+        (state, rows)
+    }
+
+    fn row_count(rows: &[String], kind: &str) -> usize {
+        let prefix = format!("P10F\t{kind}\trust");
+        rows.iter().filter(|row| row.starts_with(&prefix)).count()
+    }
 
     #[test]
     fn batch_readback_decodes_every_physical_offset_id() {
@@ -4874,5 +5139,176 @@ mod tests {
     fn batch_readback_rejects_missing_physical_offset_ids() {
         assert!(decode_batch_offsets("").is_err());
         assert!(decode_batch_offsets("C0A86B0200002A9F0000000000000000,").is_err());
+    }
+
+    /// A response that lands while fewer than all assigned queues are active is recorded at the
+    /// response itself; no later admission is needed to notice it.
+    #[test]
+    fn fanout_recorder_flags_a_response_that_lands_before_the_barrier() {
+        let (state, rows) = capturing_state(3, Duration::from_secs(5));
+        state.pull_start(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(101, 0),
+        );
+        state.pull_start(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(102, 1),
+        );
+        state.pull_end(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(101, 0),
+            &fanout_pull_response(101),
+        );
+
+        assert!(
+            state.gate_snapshot().is_none(),
+            "the barrier was never reached"
+        );
+        assert_eq!(
+            state.violation().as_deref(),
+            Some(
+                "a target Pull response completed before every assigned queue had an outstanding \
+                 Pull"
+            )
+        );
+        let rows = rows
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(row_count(&rows, "PULL_END"), 1);
+        assert_eq!(row_count(&rows, "GATE"), 0);
+    }
+
+    #[test]
+    fn fanout_recorder_flags_a_second_admission_for_an_active_queue() {
+        let (state, _rows) = capturing_state(2, Duration::from_secs(5));
+        state.pull_start(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(201, 0),
+        );
+        state.pull_start(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(202, 0),
+        );
+
+        assert_eq!(
+            state.violation().as_deref(),
+            Some("queue 0 admitted a second Pull while opaque 201 was still outstanding")
+        );
+        assert_eq!(state.active_pull_count(), 1);
+    }
+
+    /// The barrier latches with the last admission, and later follow-ups stay legal.
+    #[test]
+    fn fanout_recorder_latches_with_the_last_admission_and_allows_follow_ups() {
+        let (state, rows) = capturing_state(2, Duration::from_secs(5));
+        state.pull_start(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(301, 0),
+        );
+        assert!(
+            state.gate_snapshot().is_none(),
+            "one queue is not a barrier"
+        );
+        state.pull_start(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(302, 1),
+        );
+
+        let gate = state
+            .gate_snapshot()
+            .expect("the last admission latches the gate");
+        assert_eq!(gate.distinct_queues, 2);
+        {
+            let rows = rows
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            assert_eq!(row_count(&rows, "GATE"), 1);
+        }
+
+        // A response after the barrier is normal, and so is the follow-up Pull it schedules.
+        state.pull_end(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(301, 0),
+            &fanout_pull_response(301),
+        );
+        state.pull_start(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(303, 0),
+        );
+        assert_eq!(state.violation(), None, "a follow-up is not a violation");
+        {
+            let rows = rows
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            assert_eq!(row_count(&rows, "GATE"), 1, "the GATE row is not repeated");
+        }
+
+        // A response that does not match an outstanding request is still detected.
+        state.pull_end(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(999, 1),
+            &fanout_pull_response(999),
+        );
+        assert_eq!(
+            state.violation().as_deref(),
+            Some(
+                "a target Pull response for queue 1 / opaque 999 did not match an outstanding Pull"
+            )
+        );
+    }
+
+    /// The admission window is measured from the first target Pull start.
+    #[test]
+    fn fanout_recorder_reports_a_barrier_the_window_cannot_reach() {
+        let (state, _rows) = capturing_state(2, Duration::from_secs(5));
+        state.pull_start(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(401, 0),
+        );
+        let first = state.first_pull_start_nanos().expect("a start is recorded");
+
+        assert!(state.try_latch_gate(first + 6_000_000_000).is_none());
+        assert_eq!(
+            state.violation().as_deref(),
+            Some(
+                "only 1 of 2 assigned queues had an outstanding Pull within the 5000 ms admission window"
+            )
+        );
+    }
+
+    /// Every listener callback is evidence; de-duplication only tracks progress.
+    #[test]
+    fn fanout_recorder_logs_every_delivery_callback() {
+        let (state, rows) = capturing_state(1, Duration::from_secs(5));
+        assert!(state.record_delivery("p10f-q3", 3, 0));
+        assert!(!state.record_delivery("p10f-q3", 3, 1));
+
+        let rows = rows
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(row_count(&rows, "DELIVERY"), 2);
+        assert_eq!(state.delivered_count(), 1);
     }
 }
