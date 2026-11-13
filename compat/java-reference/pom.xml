@@ -1137,6 +1137,14 @@
             </configuration>
           </execution>
           <execution>
+            <id>verify-live-pull-fanout-fixtures</id>
+            <phase>verify</phase>
+            <goals><goal>java</goal></goals>
+            <configuration>
+              <mainClass>compat.LivePullFanoutProbeFixtures</mainClass>
+            </configuration>
+          </execution>
+          <execution>
             <id>scenario-manifest-validation</id>
             <phase>test</phase>
             <goals><goal>exec</goal></goals>

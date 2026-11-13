@@ -4,11 +4,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.rocketmq.client.consumer.DefaultMQPushConsumer;
 import org.apache.rocketmq.client.consumer.listener.ConsumeConcurrentlyStatus;
@@ -34,7 +34,16 @@ import org.apache.rocketmq.remoting.protocol.header.PullMessageRequestHeader;
  */
 public final class LivePullFanoutProbe {
     private static final int QUEUES = 16;
+
+    /** Admission is measured from the first target Pull, never from client setup. */
     private static final long ADMISSION_WINDOW_NANOS = 5_000_000_000L;
+
+    /** Route refresh, rebalance and the first Pull get their own bounded wait. */
+    private static final long STARTUP_WINDOW_NANOS = 30_000_000_000L;
+
+    /** Slack past the admission window so a hopeless barrier reports instead of hanging. */
+    private static final long ADMISSION_POLL_SLACK_NANOS = 2_000_000_000L;
+
     private static final long DELIVERY_WINDOW_MILLIS = 5_000;
 
     private LivePullFanoutProbe() {}
@@ -47,26 +56,22 @@ public final class LivePullFanoutProbe {
         probe(args[1], args[2], args[3], java.nio.file.Paths.get(args[4]));
     }
 
-    private static void probe(String namesrvAddress, String topic, String group, Path readyFile)
+    static void probe(String namesrvAddress, String topic, String group, Path readyFile)
         throws Exception {
-        Recorder recorder = new Recorder(topic, group);
+        Recorder recorder = new Recorder(topic, group, QUEUES, ADMISSION_WINDOW_NANOS,
+            line -> System.out.println(line));
 
         DefaultMQPushConsumer consumer = new DefaultMQPushConsumer(group, new FanoutRpcHook(recorder));
         consumer.setNamesrvAddr(namesrvAddress);
         consumer.setInstanceName("p10f-consumer");
         consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_FIRST_OFFSET);
         consumer.subscribe(topic, "*");
-        final Set<String> delivered = ConcurrentHashMap.newKeySet();
-        final Map<String, Long> deliveryNanos = new ConcurrentHashMap<>();
+        // Every listener callback is evidence; de-duplication only decides when to stop waiting.
         consumer.registerMessageListener((MessageListenerConcurrently) (messages, context) -> {
             for (MessageExt message : messages) {
                 String key = new String(message.getBody(), StandardCharsets.UTF_8);
-                long now = System.nanoTime();
-                if (deliveryNanos.putIfAbsent(key, now) == null) {
-                    delivered.add(key);
-                    recorder.row("DELIVERY", now, message.getQueueId(), key,
-                        message.getReconsumeTimes());
-                }
+                recorder.recordDelivery(System.nanoTime(), message.getQueueId(), key,
+                    message.getReconsumeTimes());
             }
             return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
         });
@@ -77,68 +82,82 @@ public final class LivePullFanoutProbe {
         producer.setSendMessageWithVIPChannel(false);
         producer.setSendMsgTimeout(10_000);
 
-        // The consumer registers the RPCHook on its client instance, so it starts first.
-        consumer.start();
+        Lifecycle lifecycle = new Lifecycle();
         try {
-            List<MessageQueue> queues = routeQueues(producer, topic, recorder);
-
-            long admissionDeadline = System.nanoTime() + ADMISSION_WINDOW_NANOS;
-            while (true) {
-                recorder.checkViolations();
-                if (recorder.distinctStartedQueues() >= QUEUES) {
-                    long spanNanos = recorder.admissionSpanNanos();
-                    if (spanNanos > ADMISSION_WINDOW_NANOS) {
-                        throw new IllegalStateException("first Pull starts span "
-                            + (spanNanos / 1_000_000L) + " ms, exceeding the admission window");
-                    }
-                    recorder.row("GATE", System.nanoTime(), spanNanos / 1_000_000L,
-                        recorder.distinctStartedQueues());
-                    Path parent = readyFile.getParent();
-                    if (parent != null) {
-                        Files.createDirectories(parent);
-                    }
-                    Files.write(readyFile, "java-ready\n".getBytes(StandardCharsets.UTF_8));
-                    break;
-                }
-                if (System.nanoTime() >= admissionDeadline) {
-                    throw new IllegalStateException("only " + recorder.distinctStartedQueues()
-                        + " of " + QUEUES + " queues started a Pull within the admission window");
-                }
-                Thread.sleep(10);
-            }
-
-            producer.start();
-            try {
-                for (MessageQueue queue : queues) {
-                    String key = "p10f-q" + queue.getQueueId();
-                    long sendStart = System.nanoTime();
-                    recorder.row("SEND_START", sendStart, queue.getQueueId(), key);
-                    SendResult result = producer.send(
-                        new Message(topic, "P10F", key, key.getBytes(StandardCharsets.UTF_8)), queue);
-                    recorder.row("SEND_END", System.nanoTime(), queue.getQueueId(), key,
-                        result.getSendStatus(), result.getQueueOffset());
-                }
-
-                long deliveryDeadline = System.currentTimeMillis() + DELIVERY_WINDOW_MILLIS;
-                while (delivered.size() < QUEUES) {
-                    if (System.currentTimeMillis() >= deliveryDeadline) {
-                        throw new IllegalStateException("only " + delivered.size() + " of " + QUEUES
-                            + " seeded messages were delivered within the delivery window");
-                    }
-                    Thread.sleep(10);
-                }
-            } finally {
-                producer.shutdown();
-            }
+            // The consumer carries the RPCHook, and {@code fetchPublishMessageQueues} requires a
+            // RUNNING producer, so both clients are acquired before any route lookup or send.
+            acquire(lifecycle,
+                client(consumer::start, consumer::shutdown),
+                client(producer::start, producer::shutdown),
+                () -> measure(topic, readyFile, recorder, producer));
         } finally {
-            consumer.shutdown();
             recorder.row("SHUTDOWN", System.nanoTime());
+        }
+    }
+
+    private static void measure(String topic, Path readyFile, Recorder recorder,
+        DefaultMQProducer producer) throws Exception {
+        List<MessageQueue> queues = routeQueues(producer, topic, recorder);
+
+        // Startup gets its own bounded wait; the admission window is measured by the recorder from
+        // the first target Pull start.
+        long startupDeadline = System.nanoTime() + STARTUP_WINDOW_NANOS;
+        while (recorder.firstPullStartNanos() == null) {
+            recorder.checkViolations();
+            if (System.nanoTime() >= startupDeadline) {
+                throw new IllegalStateException("no target-topic Pull was issued within the "
+                    + (STARTUP_WINDOW_NANOS / 1_000_000L) + " ms startup window");
+            }
+            Thread.sleep(10);
+        }
+
+        long firstPull = recorder.firstPullStartNanos();
+        long waitDeadline = firstPull + ADMISSION_WINDOW_NANOS + ADMISSION_POLL_SLACK_NANOS;
+        while (true) {
+            recorder.checkViolations();
+            if (recorder.tryLatchGate(System.nanoTime()) != null) {
+                break;
+            }
+            recorder.checkViolations();
+            if (System.nanoTime() >= waitDeadline) {
+                throw new IllegalStateException("the admission gate was never reached: "
+                    + recorder.describeState());
+            }
+            Thread.sleep(10);
+        }
+
+        Path parent = readyFile.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        Files.write(readyFile, "java-ready\n".getBytes(StandardCharsets.UTF_8));
+
+        for (MessageQueue queue : queues) {
+            String key = "p10f-q" + queue.getQueueId();
+            long sendStart = System.nanoTime();
+            recorder.row("SEND_START", sendStart, queue.getQueueId(), key);
+            SendResult result = producer.send(
+                new Message(topic, "P10F", key, key.getBytes(StandardCharsets.UTF_8)), queue);
+            recorder.row("SEND_END", System.nanoTime(), queue.getQueueId(), key,
+                result.getSendStatus(), result.getQueueOffset());
+        }
+
+        long deliveryDeadline = System.currentTimeMillis() + DELIVERY_WINDOW_MILLIS;
+        while (recorder.deliveredCount() < QUEUES) {
+            recorder.checkViolations();
+            if (System.currentTimeMillis() >= deliveryDeadline) {
+                throw new IllegalStateException("only " + recorder.deliveredCount() + " of " + QUEUES
+                    + " seeded messages were delivered within the delivery window");
+            }
+            Thread.sleep(10);
         }
     }
 
     private static List<MessageQueue> routeQueues(DefaultMQProducer producer, String topic,
         Recorder recorder) throws Exception {
-        // The publish queue list is the same route inventory the Push consumer subscribes to.
+        // The publish queue list is the same route inventory the Push consumer subscribes to. The
+        // pinned client rejects this call unless the producer is RUNNING, hence the acquisition
+        // order in {@link #probe}.
         List<MessageQueue> fetched = producer.fetchPublishMessageQueues(topic);
         Map<Integer, MessageQueue> byId = new TreeMap<>();
         for (MessageQueue queue : fetched) {
@@ -151,6 +170,69 @@ public final class LivePullFanoutProbe {
             throw new IllegalStateException("expected " + QUEUES + " route queues, got " + byId.keySet());
         }
         return new ArrayList<>(byId.values());
+    }
+
+    /** A client acquisition that the probe must close once it started. */
+    interface Client {
+        void start() throws Exception;
+
+        void shutdown();
+    }
+
+    interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
+    interface Body {
+        void run() throws Exception;
+    }
+
+    static Client client(ThrowingRunnable start, Runnable shutdown) {
+        return new Client() {
+            @Override
+            public void start() throws Exception {
+                start.run();
+            }
+
+            @Override
+            public void shutdown() {
+                shutdown.run();
+            }
+        };
+    }
+
+    /** Records every client it started and closes them in reverse order, even on partial failure. */
+    static final class Lifecycle implements AutoCloseable {
+        private final List<Client> started = new ArrayList<>();
+
+        void start(Client client) throws Exception {
+            client.start();
+            started.add(client);
+        }
+
+        @Override
+        public void close() {
+            for (int index = started.size() - 1; index >= 0; index--) {
+                started.get(index).shutdown();
+            }
+            started.clear();
+        }
+    }
+
+    /**
+     * Acquires both clients and guarantees that every client which started is closed, whatever the
+     * measured body does. The consumer starts first because its instance carries the RPCHook; the
+     * producer must be RUNNING before the route lookup or any send.
+     */
+    static void acquire(Lifecycle lifecycle, Client consumer, Client producer, Body body)
+        throws Exception {
+        try {
+            lifecycle.start(consumer);
+            lifecycle.start(producer);
+            body.run();
+        } finally {
+            lifecycle.close();
+        }
     }
 
     /** Records Pull request issue and response completion boundaries for the target topic. */
@@ -173,19 +255,67 @@ public final class LivePullFanoutProbe {
         }
     }
 
+    /** Where evidence rows go; the fixture captures them instead of printing. */
+    interface RowSink {
+        void emit(String line);
+    }
+
+    /** Immutable admission-barrier snapshot, so callers cannot observe a half-updated gate. */
+    static final class GateSnapshot {
+        private final long atNanos;
+        private final long spanMillis;
+        private final int distinctQueues;
+
+        private GateSnapshot(long atNanos, long spanMillis, int distinctQueues) {
+            this.atNanos = atNanos;
+            this.spanMillis = spanMillis;
+            this.distinctQueues = distinctQueues;
+        }
+
+        long atNanos() {
+            return atNanos;
+        }
+
+        long spanMillis() {
+            return spanMillis;
+        }
+
+        int distinctQueues() {
+            return distinctQueues;
+        }
+    }
+
     /** Shared evidence state; every timestamp is a process-local monotonic nanosecond value. */
-    private static final class Recorder {
+    static final class Recorder {
         private final String topic;
         private final String group;
+        private final int expectedQueues;
+        private final long admissionWindowNanos;
+        private final RowSink sink;
         private final Object lock = new Object();
+
+        /** queueId to the opaque of that queue's currently outstanding Pull, if any. */
+        private final Map<Integer, Integer> activePulls = new TreeMap<>();
+
+        /** queueId to the first time a target Pull was issued for it. */
         private final Map<Integer, Long> firstStart = new TreeMap<>();
-        private final Map<Integer, Long> lastStart = new TreeMap<>();
-        private long earliestEndNanos = Long.MAX_VALUE;
+
+        /** Distinct seeded keys seen so far; only used to decide when delivery waiting ends. */
+        private final Set<String> deliveredKeys = new HashSet<>();
+
+        private Long earliestStartNanos;
+        private int completedResponses;
+        private boolean gateLatched;
+        private GateSnapshot gate;
         private String violation;
 
-        private Recorder(String topic, String group) {
+        Recorder(String topic, String group, int expectedQueues, long admissionWindowNanos,
+            RowSink sink) {
             this.topic = topic;
             this.group = group;
+            this.expectedQueues = expectedQueues;
+            this.admissionWindowNanos = admissionWindowNanos;
+            this.sink = sink;
         }
 
         void pullStart(String remoteAddr, RemotingCommand request) {
@@ -195,18 +325,26 @@ public final class LivePullFanoutProbe {
             }
             long now = System.nanoTime();
             int queueId = header.getQueueId();
+            GateSnapshot latched;
             synchronized (lock) {
-                if (earliestEndNanos != Long.MAX_VALUE && violation == null) {
-                    violation = "a target Pull response completed before every assigned queue had an "
-                        + "outstanding Pull";
+                if (earliestStartNanos == null) {
+                    earliestStartNanos = now;
                 }
-                if (!firstStart.containsKey(queueId)) {
-                    firstStart.put(queueId, now);
+                firstStart.putIfAbsent(queueId, now);
+                Integer outstanding = activePulls.putIfAbsent(queueId, request.getOpaque());
+                if (outstanding != null && violation == null) {
+                    violation = "queue " + queueId + " admitted a second Pull while opaque "
+                        + outstanding + " was still outstanding";
                 }
-                lastStart.put(queueId, now);
+                // Latching inside the same critical section as the start means a response can never
+                // slip between "the last queue became active" and "the barrier is recorded".
+                latched = attemptLatchLocked(now);
             }
             row(now, "PULL_START", queueId, request.getOpaque(), header.getSuspendTimeoutMillis(),
                 remoteAddr);
+            if (latched != null) {
+                row(latched.atNanos, "GATE", latched.spanMillis, latched.distinctQueues);
+            }
         }
 
         void pullEnd(String remoteAddr, RemotingCommand request, RemotingCommand response) {
@@ -217,9 +355,79 @@ public final class LivePullFanoutProbe {
             long now = System.nanoTime();
             int code = response == null ? -1 : response.getCode();
             synchronized (lock) {
-                earliestEndNanos = Math.min(earliestEndNanos, now);
+                Integer outstanding = activePulls.get(header.getQueueId());
+                if (outstanding == null || outstanding != request.getOpaque()) {
+                    if (violation == null) {
+                        violation = "a target Pull response for queue " + header.getQueueId()
+                            + " / opaque " + request.getOpaque()
+                            + " did not match an outstanding Pull";
+                    }
+                } else {
+                    activePulls.remove(header.getQueueId());
+                }
+                completedResponses++;
+                // A premature response is recorded when it happens, not on some later start.
+                if (!gateLatched && violation == null) {
+                    violation = "a target Pull response completed before every assigned queue had "
+                        + "an outstanding Pull";
+                }
             }
             row(now, "PULL_END", header.getQueueId(), request.getOpaque(), code);
+        }
+
+        /**
+         * Latch the admission barrier atomically. The gate requires exactly the expected number of
+         * distinct queues to be active, no target response completed yet, and an elapsed span from
+         * the first target Pull within the window. Returns the snapshot once latched, otherwise
+         * null; the GATE row is emitted exactly once.
+         */
+        GateSnapshot tryLatchGate(long now) {
+            GateSnapshot latched;
+            synchronized (lock) {
+                if (gateLatched) {
+                    return gate;
+                }
+                latched = attemptLatchLocked(now);
+            }
+            if (latched != null) {
+                row(latched.atNanos, "GATE", latched.spanMillis, latched.distinctQueues);
+            }
+            return latched;
+        }
+
+        /** Latch the barrier; call only while holding {@code lock}. Returns null when unchanged. */
+        private GateSnapshot attemptLatchLocked(long now) {
+            if (gateLatched || violation != null || completedResponses > 0
+                || earliestStartNanos == null) {
+                return null;
+            }
+            long elapsed = now - earliestStartNanos;
+            if (elapsed > admissionWindowNanos) {
+                violation = "only " + activePulls.size() + " of " + expectedQueues
+                    + " assigned queues had an outstanding Pull within the "
+                    + (admissionWindowNanos / 1_000_000L) + " ms admission window";
+                return null;
+            }
+            if (activePulls.size() != expectedQueues) {
+                return null;
+            }
+            long earliest = Long.MAX_VALUE;
+            long latest = Long.MIN_VALUE;
+            for (Long value : firstStart.values()) {
+                earliest = Math.min(earliest, value);
+                latest = Math.max(latest, value);
+            }
+            gate = new GateSnapshot(now, (latest - earliest) / 1_000_000L, firstStart.size());
+            gateLatched = true;
+            return gate;
+        }
+
+        /** Emit every delivery row first; de-duplication only tracks progress. */
+        boolean recordDelivery(long now, int queueId, String key, int reconsumeTimes) {
+            row(now, "DELIVERY", queueId, key, reconsumeTimes);
+            synchronized (lock) {
+                return deliveredKeys.add(key);
+            }
         }
 
         /** Return the target-topic Pull header, or null when the command is not one of ours. */
@@ -249,23 +457,43 @@ public final class LivePullFanoutProbe {
             return header;
         }
 
-        int distinctStartedQueues() {
+        Long firstPullStartNanos() {
             synchronized (lock) {
-                return firstStart.size();
+                return earliestStartNanos;
             }
         }
 
-        long admissionSpanNanos() {
+        int activePullCount() {
             synchronized (lock) {
-                long earliest = Long.MAX_VALUE;
-                long latest = Long.MIN_VALUE;
-                for (Long value : firstStart.values()) {
-                    earliest = Math.min(earliest, value);
-                }
-                for (Long value : lastStart.values()) {
-                    latest = Math.max(latest, value);
-                }
-                return firstStart.isEmpty() ? 0 : latest - earliest;
+                return activePulls.size();
+            }
+        }
+
+        boolean gateLatched() {
+            synchronized (lock) {
+                return gateLatched;
+            }
+        }
+
+        GateSnapshot gateSnapshot() {
+            synchronized (lock) {
+                return gate;
+            }
+        }
+
+        int deliveredCount() {
+            synchronized (lock) {
+                return deliveredKeys.size();
+            }
+        }
+
+        String describeState() {
+            synchronized (lock) {
+                long elapsed = earliestStartNanos == null ? 0 : System.nanoTime() - earliestStartNanos;
+                return "active=" + activePulls.size() + "/" + expectedQueues
+                    + " distinctStarted=" + firstStart.size()
+                    + " responses=" + completedResponses
+                    + " sinceFirstPullMs=" + (elapsed / 1_000_000L);
             }
         }
 
@@ -285,7 +513,7 @@ public final class LivePullFanoutProbe {
             for (Object value : values) {
                 line.append('\t').append(value);
             }
-            System.out.println(line);
+            sink.emit(line.toString());
         }
 
         /** Emit a row whose first value after the language tag is a monotonic timestamp. */
@@ -295,7 +523,7 @@ public final class LivePullFanoutProbe {
             for (Object value : values) {
                 line.append('\t').append(value);
             }
-            System.out.println(line);
+            sink.emit(line.toString());
         }
     }
 }
