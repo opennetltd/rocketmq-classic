@@ -18,11 +18,119 @@ Usage:
   tests/differential/run.sh --phase N
   tests/differential/run.sh --all
   tests/differential/run.sh --check-all
+  tests/differential/run.sh --self-test
   tests/differential/run.sh --list
 
 Only scenarios with a complete local runner are executable. --phase and --all
 fail closed if the selected inventory contains any unimplemented scenario.
+--self-test runs the runner's own bash-level checks (partial subgroup setup and
+cleanup through a stubbed command runner) without starting Docker resources.
 EOF
+}
+
+# Fan-out subgroup setup goes through one indirection so each created group is recorded
+# immediately and a partial failure still cleans up only the recorded set. The stubbed
+# executor below exercises that contract without a Broker.
+fanout_groups=()
+fanout_mqadmin_fn="fanout_mqadmin_compose"
+fanout_log=/dev/null
+fanout_stub_fail_group=""
+
+fanout_mqadmin_compose() {
+    "${compose[@]}" exec --no-TTY "$broker_service" ./mqadmin "$@" >>"$fanout_log" 2>&1
+}
+
+create_fanout_group() {
+    local group="$1"
+    if ! "$fanout_mqadmin_fn" updateSubGroup -c RocketMQLocalTest -g "$group" -n namesrv:9876; then
+        return 1
+    fi
+    fanout_groups+=("$group")
+    return 0
+}
+
+delete_fanout_groups() {
+    local fanout_group status=0
+    for fanout_group in ${fanout_groups[@]+"${fanout_groups[@]}"}; do
+        if ! "$fanout_mqadmin_fn" deleteSubGroup -c RocketMQLocalTest -g "$fanout_group" -n namesrv:9876; then
+            status=1
+            echo "Scenario consumer-group cleanup failed for $fanout_group; see $fanout_log" >&2
+        fi
+    done
+    fanout_groups=()
+    return "$status"
+}
+
+# Stubbed mqadmin runner used by --self-test: records every invocation and fails the
+# creation of `fanout_stub_fail_group`.
+fanout_mqadmin_stub() {
+    printf '%s\n' "$*" >>"$fanout_log"
+    local argument group="" previous=""
+    if [[ "$1" == "updateSubGroup" ]]; then
+        shift
+        for argument in "$@"; do
+            if [[ "$previous" == "-g" ]]; then
+                group="$argument"
+            fi
+            previous="$argument"
+        done
+        if [[ -n "$fanout_stub_fail_group" && "$group" == "$fanout_stub_fail_group" ]]; then
+            return 1
+        fi
+    fi
+    return 0
+}
+
+selftest_fanout_group_cleanup() {
+    local dir failures=0 count
+    dir="$(mktemp -d)"
+    fanout_log="$dir/calls.log"
+    : >"$fanout_log"
+    fanout_groups=()
+    fanout_mqadmin_fn="fanout_mqadmin_stub"
+    fanout_stub_fail_group="selftest-group_rust"
+
+    if ! create_fanout_group "selftest-group_java"; then
+        echo "stubbed creation of the first fan-out subgroup failed" >&2
+        failures=$((failures + 1))
+    fi
+    if create_fanout_group "$fanout_stub_fail_group"; then
+        echo "stubbed creation of the second fan-out subgroup unexpectedly succeeded" >&2
+        failures=$((failures + 1))
+    fi
+    delete_fanout_groups || true
+
+    count=$(grep -c '^updateSubGroup -c RocketMQLocalTest -g selftest-group_java -n namesrv:9876$' "$fanout_log" || true)
+    if [[ "$count" != "1" ]]; then
+        echo "expected one creation attempt for the first subgroup, got $count" >&2
+        failures=$((failures + 1))
+    fi
+    count=$(grep -c '^updateSubGroup -c RocketMQLocalTest -g selftest-group_rust -n namesrv:9876$' "$fanout_log" || true)
+    if [[ "$count" != "1" ]]; then
+        echo "expected one creation attempt for the failing subgroup, got $count" >&2
+        failures=$((failures + 1))
+    fi
+    count=$(grep -c '^deleteSubGroup -c RocketMQLocalTest -g selftest-group_java -n namesrv:9876$' "$fanout_log" || true)
+    if [[ "$count" != "1" ]]; then
+        echo "expected the created subgroup to be deleted once, got $count" >&2
+        failures=$((failures + 1))
+    fi
+    count=$(grep -c '^deleteSubGroup -c RocketMQLocalTest -g selftest-group_rust -n namesrv:9876$' "$fanout_log" || true)
+    if [[ "$count" != "0" ]]; then
+        echo "the never-created subgroup was deleted $count time(s)" >&2
+        failures=$((failures + 1))
+    fi
+
+    fanout_stub_fail_group=""
+    fanout_mqadmin_fn="fanout_mqadmin_compose"
+    fanout_log=/dev/null
+    rm -rf "$dir"
+    if ((failures)); then
+        echo "run.sh fan-out subgroup self-test FAIL ($failures check(s))" >&2
+        return 1
+    fi
+    echo "run.sh fan-out subgroup self-test PASS (partial creation deletes only the recorded group)"
+    return 0
 }
 
 while (($#)); do
@@ -55,6 +163,11 @@ while (($#)); do
             selection="list"
             shift
             ;;
+        --self-test)
+            [[ -z "$selection" ]] || { usage >&2; exit 2; }
+            selection="self-test"
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -68,6 +181,10 @@ while (($#)); do
 done
 
 [[ -n "$selection" ]] || { usage >&2; exit 2; }
+if [[ "$selection" == "self-test" ]]; then
+    selftest_fanout_group_cleanup
+    exit $?
+fi
 if [[ "$selection" == "scenario" && $scenario_id_count -eq 0 ]]; then
     echo "At least one scenario ID is required" >&2
     exit 2
@@ -1406,7 +1523,6 @@ p11_rust_pid=""
 p12_java_pid=""
 p12_rust_pid=""
 group_created=false
-fanout_groups_created=false
 p16_proxy_pids=()
 p17_proxy_pids=()
 p16_auth_config_path=""
@@ -1504,17 +1620,10 @@ cleanup() {
             fi
         done
     fi
-    if [[ "$fanout_groups_created" == true ]]; then
-        : >"$evidence_dir/group-cleanup.log"
-        for fanout_group in "${consumer_group}_java" "${consumer_group}_rust"; do
-            "${compose[@]}" exec --no-TTY "$broker_service" ./mqadmin deleteSubGroup -c RocketMQLocalTest -g "$fanout_group" -n namesrv:9876 \
-                >>"$evidence_dir/group-cleanup.log" 2>&1
-            group_delete_status=$?
-            if ((group_delete_status)); then
-                status=1
-                echo "Scenario consumer-group cleanup failed for $fanout_group; see $evidence_dir/group-cleanup.log" >&2
-            fi
-        done
+    if ((${#fanout_groups[@]} > 0)); then
+        fanout_log="$evidence_dir/group-cleanup.log"
+        : >"$fanout_log"
+        delete_fanout_groups || status=1
     fi
     if [[ "$topic_created" == true ]]; then
         : >"$evidence_dir/topic-cleanup.log"
@@ -2122,16 +2231,14 @@ if [[ "$scenario_id" == "ROUTE-001-get-existing-topic" || "$scenario_id" == "PRO
         done
     elif [[ "$scenario_id" == "P10-V05" ]]; then
         echo "Creating the Java and Rust fan-out Push consumer groups"
-        : >"$evidence_dir/group-create.log"
+        fanout_log="$evidence_dir/group-create.log"
+        : >"$fanout_log"
         for language in java rust; do
-            if ! "${compose[@]}" exec --no-TTY "$broker_service" ./mqadmin updateSubGroup -c RocketMQLocalTest \
-                -g "${consumer_group}_${language}" -n namesrv:9876 \
-                >>"$evidence_dir/group-create.log" 2>&1; then
+            if ! create_fanout_group "${consumer_group}_${language}"; then
                 cat "$evidence_dir/group-create.log" >&2
                 exit 1
             fi
         done
-        fanout_groups_created=true
     elif [[ "$scenario_id" == "P15-V03" ]]; then
         echo "Creating scenario-owned Java and Rust reply responder groups on both Brokers"
         : >"$evidence_dir/group-create.log"
