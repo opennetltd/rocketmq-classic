@@ -1,5 +1,30 @@
 # Current compatibility status
 
+## Push Pull fan-out validation harness — 2026-11-13
+
+The `P10-V05` architecture is unchanged; only the validation around it was corrected.
+
+- Both live probes now acquire a client before using it. The Java probe starts its producer
+  before `fetchPublishMessageQueues`, which pinned RocketMQ 5.5.1 rejects for a non-RUNNING
+  producer, and closes every successfully started client on a partial acquisition failure;
+  `LivePullFanoutProbeFixtures` covers that seam offline.
+- Both recorders track active Pulls per queue-generation and request identity. A second admission
+  while one is outstanding, an unmatched response, or a target response before the barrier is
+  recorded when it happens rather than inferred from a later start; the gate latches atomically
+  with the last admission under one lock, and every listener callback emits a delivery row before
+  de-duplication keeps progress.
+- `tests/differential/run.sh` requires both fan-out topics to report zero max offsets before
+  publishing, records only the subgroups it actually created, and cannot emit PASS after a probe
+  exit, a missing ready file or a checker failure. `check_p10_fanout.py` rejects pre-gate
+  publishing, missing/duplicate/mismatched send completions and duplicate deliveries.
+- The scripted consumer test now retains, cancels and joins every peer connection task with a
+  completion witness, so no detached peer task can survive the run.
+
+Local evidence only: `bash tests/differential/run.sh --self-test`, the checker self-test (20
+synthetic cases), the Java fan-out fixtures, and the Rust probe-state tests. `P10-V05` remains
+`PENDING_PHASE_19`: no Broker evidence exists for it yet, and the earlier 37/37 live aggregate
+does not cover it.
+
 ## Push Pull dispatch fan-out — 2026-11-12
 
 The Push consumer no longer routes Pull RPCs through a fixed four-worker pool.

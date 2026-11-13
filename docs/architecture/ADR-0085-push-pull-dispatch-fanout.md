@@ -94,6 +94,19 @@ Pull/simple-consumer value.
   suspend header) before any response, then again after one release round, then shuts down
   while polls are outstanding. With the pre-change pool restored the same test fails with
   `only 4 of 16 queues started a Pull within 5s`.
+- The scripted peer owns every accepted connection task (reader, writer, handler). Teardown
+  closes acceptance, cancels each connection cooperatively and joins every recorded task under
+  one cleanup bound; a surviving task fails the test. `peer_teardown_finishes_every_task_after_an_abandoned_connection`
+  covers the case where the client never closes its socket.
+- The permanent live case keeps its own contract: both probes start their producer before route
+  lookup (the pinned 5.5.1 client rejects `fetchPublishMessageQueues` for a non-RUNNING
+  producer), track active Pulls per queue-generation and request identity under one lock, latch
+  the admission gate atomically with the last admission, and write their ready file only after
+  that latch. `run.sh` requires both fan-out topics to report zero max offsets before publishing,
+  records only the subgroups it actually created, and refuses a PASS line on a probe exit, a
+  missing ready file or a checker failure. `check_p10_fanout.py` rejects pre-gate publishing,
+  missing/duplicate/mismatched send completions, duplicate deliveries, and any target response
+  that lands before the barrier.
 - These are local scripted-peer results. Live Broker/client evidence is registered as
   `P10-V05` and stays `PENDING_PHASE_19`; it does not retroactively validate the earlier
   Phase 19 live run.
