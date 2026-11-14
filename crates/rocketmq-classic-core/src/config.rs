@@ -220,11 +220,6 @@ impl Default for ClientConfig {
     }
 }
 
-#[cfg(test)]
-fn java_client_property(key: &str) -> Option<String> {
-    std::env::var(key).ok()
-}
-
 #[cfg(not(test))]
 fn java_client_property(key: &str) -> Option<String> {
     rocketmq_classic_common::utils::system_properties::get_property(key)
@@ -758,6 +753,11 @@ pub(crate) fn java_whitespace(value: char) -> bool {
     matches!(value, '\u{0009}'..='\u{000d}' | '\u{001c}'..='\u{0020}'
         | '\u{1680}' | '\u{2000}'..='\u{2006}' | '\u{2008}'..='\u{200a}'
         | '\u{2028}' | '\u{2029}' | '\u{205f}' | '\u{3000}')
+}
+
+#[cfg(test)]
+fn java_client_property(key: &str) -> Option<String> {
+    std::env::var(key).ok()
 }
 
 #[cfg(test)]

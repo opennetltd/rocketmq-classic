@@ -11,48 +11,6 @@ mod remote;
 pub use local::LocalFileOffsetStore;
 pub use remote::RemoteBrokerOffsetStore;
 
-#[cfg(test)]
-fn assert_clone_topic_filter_matches_java(store: &dyn OffsetStore) {
-    let fixture: serde_json::Value =
-        serde_json::from_str(include_str!("../../../../fixtures/runtime/offsets.json")).unwrap();
-    let blank: HashSet<u32> = fixture["cloneOffsetTableBlankTopicCodeUnits"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|value| value.as_u64().unwrap() as u32)
-        .collect();
-    let expected = HashMap::from([
-        (MessageQueue::new("orders", "broker", 0), 42),
-        (MessageQueue::new("events", "broker", 1), -7),
-    ]);
-    for (queue, offset) in &expected {
-        store.update_offset(queue, *offset, false);
-    }
-    for code in 0..=u16::MAX as u32 {
-        let Some(character) = char::from_u32(code) else {
-            continue;
-        };
-        let topic = character.to_string();
-        let actual = store.clone_offset_table(Some(&topic));
-        if blank.contains(&code) {
-            assert_eq!(actual, expected, "Java blank topic U+{code:04X}");
-        } else {
-            assert!(actual.is_empty(), "Java literal topic U+{code:04X}");
-        }
-    }
-    for topic in [None, Some(""), Some(" \t\n")] {
-        assert_eq!(store.clone_offset_table(topic), expected);
-    }
-    assert_eq!(
-        store.clone_offset_table(Some("orders")),
-        HashMap::from([(MessageQueue::new("orders", "broker", 0), 42)])
-    );
-    assert!(store.clone_offset_table(Some(" orders ")).is_empty());
-    let mut detached = store.clone_offset_table(None);
-    detached.clear();
-    assert_eq!(store.clone_offset_table(None), expected);
-}
-
 use rocketmq_classic_common::message::MessageQueue;
 use thiserror::Error;
 
@@ -247,6 +205,48 @@ pub trait OffsetStore: Send + Sync {
         offset: i64,
         oneway: bool,
     ) -> OffsetStoreFuture<'a, ()>;
+}
+
+#[cfg(test)]
+fn assert_clone_topic_filter_matches_java(store: &dyn OffsetStore) {
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../../../../fixtures/runtime/offsets.json")).unwrap();
+    let blank: HashSet<u32> = fixture["cloneOffsetTableBlankTopicCodeUnits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|value| value.as_u64().unwrap() as u32)
+        .collect();
+    let expected = HashMap::from([
+        (MessageQueue::new("orders", "broker", 0), 42),
+        (MessageQueue::new("events", "broker", 1), -7),
+    ]);
+    for (queue, offset) in &expected {
+        store.update_offset(queue, *offset, false);
+    }
+    for code in 0..=u16::MAX as u32 {
+        let Some(character) = char::from_u32(code) else {
+            continue;
+        };
+        let topic = character.to_string();
+        let actual = store.clone_offset_table(Some(&topic));
+        if blank.contains(&code) {
+            assert_eq!(actual, expected, "Java blank topic U+{code:04X}");
+        } else {
+            assert!(actual.is_empty(), "Java literal topic U+{code:04X}");
+        }
+    }
+    for topic in [None, Some(""), Some(" \t\n")] {
+        assert_eq!(store.clone_offset_table(topic), expected);
+    }
+    assert_eq!(
+        store.clone_offset_table(Some("orders")),
+        HashMap::from([(MessageQueue::new("orders", "broker", 0), 42)])
+    );
+    assert!(store.clone_offset_table(Some(" orders ")).is_empty());
+    let mut detached = store.clone_offset_table(None);
+    detached.clear();
+    assert_eq!(store.clone_offset_table(None), expected);
 }
 
 #[cfg(test)]

@@ -1,0 +1,1 @@
+{"javaClientVersion":"5.5.1","outstandingQueuesBeforeAnyResponse":80,"communicationMode":"ASYNC","brokerSuspendMillis":15000,"rpcTimeoutMillisAfterRouteRefresh":30000,"missingMemoryCommitOffset":-1,"slaveCommitOffset":42,"slaveCommitFlag":false,"concurrentMaxSpanDelayMillis":50,"orderlyIgnoresConcurrentMaxSpan":true,"orderlyRetainsCacheCountLimit":true}

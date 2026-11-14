@@ -24,6 +24,92 @@ use tokio::{
 
 struct Producer;
 
+impl ProducerRuntime for Producer {}
+struct Consumer(Mutex<SubscriptionData>);
+impl ConsumerRuntime for Consumer {
+    fn heartbeat_data(&self) -> ConsumerData {
+        ConsumerData {
+            group_name: Some("consumer".into()),
+            subscription_data_set: Some(SharedValue::from(HashSet::from([Some(
+                SharedValue::from(self.0.lock().unwrap().clone()),
+            )]))),
+            ..Default::default()
+        }
+    }
+}
+
+async fn read(stream: &mut TcpStream) -> RemotingCommand {
+    let mut length = [0; 4];
+    stream.read_exact(&mut length).await.unwrap();
+    let mut bytes = BytesMut::from(&length[..]);
+    bytes.resize(u32::from_be_bytes(length) as usize + 4, 0);
+    stream.read_exact(&mut bytes[4..]).await.unwrap();
+    frame::decode_next(&mut bytes).unwrap().unwrap()
+}
+
+async fn respond(
+    stream: &mut TcpStream,
+    command: &RemotingCommand,
+    body: Option<Vec<u8>>,
+    support: bool,
+    sub_change: bool,
+) {
+    let mut reply = RemotingCommand {
+        opaque: command.opaque,
+        version: 551,
+        body,
+        ext_fields: Some(
+            std::collections::BTreeMap::from([
+                ("IS_SUPPORT_HEART_BEAT_V2".into(), support.to_string()),
+                ("IS_SUB_CHANGE".into(), sub_change.to_string()),
+            ])
+            .into(),
+        ),
+        ..Default::default()
+    };
+    reply.mark_response();
+    stream
+        .write_all(&frame::encode(&reply).unwrap())
+        .await
+        .unwrap();
+}
+
+async fn runtime(config: ClientConfig, addresses: &[String]) -> Arc<ClientRuntime> {
+    let broker_addrs = addresses
+        .iter()
+        .enumerate()
+        .map(|(id, address)| (id.to_string(), address))
+        .collect::<HashMap<_, _>>();
+    runtime_with_broker_addrs(config, serde_json::json!(broker_addrs)).await
+}
+
+async fn runtime_with_broker_addrs(
+    mut config: ClientConfig,
+    broker_addrs: serde_json::Value,
+) -> Arc<ClientRuntime> {
+    let nameserver = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    config.set_namesrv_addr(Some(nameserver.local_addr().unwrap().to_string()));
+    let route = serde_json::to_vec(&serde_json::json!({
+        "queueDatas": [{"brokerName":"broker", "readQueueNums":1,"writeQueueNums":1,"perm":6,"topicSysFlag":0}],
+        "brokerDatas": [{"cluster":"cluster", "brokerName":"broker", "brokerAddrs":broker_addrs}], "filterServerTable":{}
+    })).unwrap();
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = nameserver.accept().await.unwrap();
+        let command = read(&mut stream).await;
+        assert_eq!(command.code, request::GET_ROUTEINFO_BY_TOPIC);
+        respond(&mut stream, &command, Some(route), false, false).await;
+    });
+    let manager = ClientRuntimeManager::new();
+    let runtime = manager.get_or_create(&config).await.unwrap();
+    runtime.remoting().start().unwrap();
+    runtime
+        .update_topic_route("topic", Instant::now() + Duration::from_secs(2))
+        .await
+        .unwrap();
+    server.await.unwrap();
+    runtime
+}
+
 #[tokio::test]
 async fn v2_full_and_simple_wire_preserve_duplicate_consumer_metadata() {
     let broker = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -222,20 +308,6 @@ async fn all_broker_wrapper_reads_live_v2_before_concurrent_v1_setting() {
     runtime.remoting().shutdown().await;
 }
 
-impl ProducerRuntime for Producer {}
-struct Consumer(Mutex<SubscriptionData>);
-impl ConsumerRuntime for Consumer {
-    fn heartbeat_data(&self) -> ConsumerData {
-        ConsumerData {
-            group_name: Some("consumer".into()),
-            subscription_data_set: Some(SharedValue::from(HashSet::from([Some(
-                SharedValue::from(self.0.lock().unwrap().clone()),
-            )]))),
-            ..Default::default()
-        }
-    }
-}
-
 #[tokio::test]
 async fn enabled_vip_does_not_rewrite_an_explicit_heartbeat_address() {
     let fixture: serde_json::Value =
@@ -279,78 +351,6 @@ async fn enabled_vip_does_not_rewrite_an_explicit_heartbeat_address() {
         .unwrap()
         .unwrap();
     runtime.remoting().shutdown().await;
-}
-
-async fn read(stream: &mut TcpStream) -> RemotingCommand {
-    let mut length = [0; 4];
-    stream.read_exact(&mut length).await.unwrap();
-    let mut bytes = BytesMut::from(&length[..]);
-    bytes.resize(u32::from_be_bytes(length) as usize + 4, 0);
-    stream.read_exact(&mut bytes[4..]).await.unwrap();
-    frame::decode_next(&mut bytes).unwrap().unwrap()
-}
-
-async fn respond(
-    stream: &mut TcpStream,
-    command: &RemotingCommand,
-    body: Option<Vec<u8>>,
-    support: bool,
-    sub_change: bool,
-) {
-    let mut reply = RemotingCommand {
-        opaque: command.opaque,
-        version: 551,
-        body,
-        ext_fields: Some(
-            std::collections::BTreeMap::from([
-                ("IS_SUPPORT_HEART_BEAT_V2".into(), support.to_string()),
-                ("IS_SUB_CHANGE".into(), sub_change.to_string()),
-            ])
-            .into(),
-        ),
-        ..Default::default()
-    };
-    reply.mark_response();
-    stream
-        .write_all(&frame::encode(&reply).unwrap())
-        .await
-        .unwrap();
-}
-
-async fn runtime(config: ClientConfig, addresses: &[String]) -> Arc<ClientRuntime> {
-    let broker_addrs = addresses
-        .iter()
-        .enumerate()
-        .map(|(id, address)| (id.to_string(), address))
-        .collect::<HashMap<_, _>>();
-    runtime_with_broker_addrs(config, serde_json::json!(broker_addrs)).await
-}
-
-async fn runtime_with_broker_addrs(
-    mut config: ClientConfig,
-    broker_addrs: serde_json::Value,
-) -> Arc<ClientRuntime> {
-    let nameserver = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    config.set_namesrv_addr(Some(nameserver.local_addr().unwrap().to_string()));
-    let route = serde_json::to_vec(&serde_json::json!({
-        "queueDatas": [{"brokerName":"broker", "readQueueNums":1,"writeQueueNums":1,"perm":6,"topicSysFlag":0}],
-        "brokerDatas": [{"cluster":"cluster", "brokerName":"broker", "brokerAddrs":broker_addrs}], "filterServerTable":{}
-    })).unwrap();
-    let server = tokio::spawn(async move {
-        let (mut stream, _) = nameserver.accept().await.unwrap();
-        let command = read(&mut stream).await;
-        assert_eq!(command.code, request::GET_ROUTEINFO_BY_TOPIC);
-        respond(&mut stream, &command, Some(route), false, false).await;
-    });
-    let manager = ClientRuntimeManager::new();
-    let runtime = manager.get_or_create(&config).await.unwrap();
-    runtime.remoting().start().unwrap();
-    runtime
-        .update_topic_route("topic", Instant::now() + Duration::from_secs(2))
-        .await
-        .unwrap();
-    server.await.unwrap();
-    runtime
 }
 
 #[tokio::test]

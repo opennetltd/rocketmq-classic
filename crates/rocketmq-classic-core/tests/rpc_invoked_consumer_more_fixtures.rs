@@ -170,21 +170,21 @@ async fn java_invoked_consumer_more_requests_and_outcomes_match() {
         let queue = MessageQueue::new("oracle-topic", "broker", 2);
         let outcome = if name.starts_with("pull-") || name.starts_with("lite-pull-") {
             let header = {
-                let mut __phase18_header_0 = PullMessageRequestHeader::default();
-                __phase18_header_0.set_consumer_group(Some("consumer".into()));
-                __phase18_header_0.set_topic(Some("oracle-topic".into()));
-                __phase18_header_0.set_queue_id(Some(2));
-                __phase18_header_0.set_queue_offset(Some(10));
-                __phase18_header_0.set_max_msg_nums(Some(1));
-                __phase18_header_0.set_sys_flag(Some(if name.starts_with("lite-pull-") {
+                let mut header = PullMessageRequestHeader::default();
+                header.set_consumer_group(Some("consumer".into()));
+                header.set_topic(Some("oracle-topic".into()));
+                header.set_queue_id(Some(2));
+                header.set_queue_offset(Some(10));
+                header.set_max_msg_nums(Some(1));
+                header.set_sys_flag(Some(if name.starts_with("lite-pull-") {
                     16
                 } else {
                     0
                 }));
-                __phase18_header_0.set_commit_offset(Some(0));
-                __phase18_header_0.set_suspend_timeout_millis(Some(0));
-                __phase18_header_0.set_sub_version(Some(1));
-                __phase18_header_0
+                header.set_commit_offset(Some(0));
+                header.set_suspend_timeout_millis(Some(0));
+                header.set_sub_version(Some(1));
+                header
             };
             let result = if fixture["mode"] == "ASYNC" {
                 api.pull_message_future(&addr, &header, deadline).await

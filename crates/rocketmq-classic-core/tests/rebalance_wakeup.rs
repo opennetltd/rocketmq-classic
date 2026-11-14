@@ -49,6 +49,16 @@ impl ConsumerRuntime for Consumer {
     }
 }
 
+async fn settle() {
+    for _ in 0..30 {
+        tokio::task::yield_now().await;
+    }
+}
+async fn advance(ms: u64) {
+    tokio::time::advance(Duration::from_millis(ms)).await;
+    settle().await;
+}
+
 #[tokio::test(start_paused = true)]
 async fn stop_cancels_and_joins_pending_rebalance_capability_without_post_stop_ticks() {
     let mut config = ClientConfig::new("pending-rebalance");
@@ -113,15 +123,6 @@ async fn delayed_wakeup_runs_on_owned_scheduler_and_nonpositive_delay_is_immedia
     assert!(runtime.rebalance_later(1).is_err());
     advance(120_000).await;
     assert_eq!(consumer.calls.load(Ordering::SeqCst), 2);
-}
-async fn settle() {
-    for _ in 0..30 {
-        tokio::task::yield_now().await;
-    }
-}
-async fn advance(ms: u64) {
-    tokio::time::advance(Duration::from_millis(ms)).await;
-    settle().await;
 }
 
 #[tokio::test(start_paused = true)]

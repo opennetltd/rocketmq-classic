@@ -1262,253 +1262,6 @@ impl<'de> Deserialize<'de> for HeartbeatData {
     }
 }
 
-#[cfg(test)]
-mod fastjson_dto_input_tests {
-    use super::{ConsumerData, HeartbeatData, ProducerData, SubscriptionData};
-    use crate::serde_fastjson;
-
-    fn normalize_json(value: &mut serde_json::Value) {
-        match value {
-            serde_json::Value::Array(values) => {
-                for value in values.iter_mut() {
-                    normalize_json(value);
-                }
-                values.sort_by_key(|value| serde_json::to_string(value).unwrap());
-            }
-            serde_json::Value::Object(fields) => {
-                fields.retain(|_, value| !value.is_null());
-                for value in fields.values_mut() {
-                    normalize_json(value);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    #[test]
-    fn heartbeat_dto_inputs_match_invoked_java_fastjson() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/heartbeat.json"))
-                .unwrap();
-        let cases = fixture["heartbeatDtoInputCases"].as_array().unwrap();
-        assert_eq!(
-            cases.len(),
-            1221,
-            "Java oracle includes DTO root shapes, scalar, numeric-boundary, collection-shape, syntax-grammar, numeric suffix and decimal-point forms, per-field token-kind, systematic whitespace-position/string probes, and exhaustive EOF-marker separators"
-        );
-        for dto in ["subscription", "producer", "consumer", "heartbeat"] {
-            for shape in [
-                "empty-object",
-                "null",
-                "empty-array",
-                "singleton-array",
-                "number",
-                "boolean",
-                "string",
-            ] {
-                let id = format!("root-{dto}-{shape}");
-                assert!(
-                    cases
-                        .iter()
-                        .any(|case| case["id"].as_str() == Some(id.as_str())),
-                    "missing {id}"
-                );
-            }
-        }
-        for required in [
-            "subscription-duplicate-class-filter-mode-last-wins",
-            "subscription-duplicate-topic-last-wins",
-            "subscription-duplicate-sub-string-last-wins",
-            "subscription-duplicate-tags-set-last-wins",
-            "subscription-duplicate-code-set-last-wins",
-            "subscription-duplicate-sub-version-last-wins",
-            "subscription-duplicate-expression-type-last-wins",
-            "producer-duplicate-group-name-last-wins",
-            "consumer-duplicate-group-name-last-wins",
-            "consumer-duplicate-consume-type-last-wins",
-            "consumer-duplicate-message-model-last-wins",
-            "consumer-duplicate-consume-from-last-wins",
-            "consumer-duplicate-subscription-set-last-wins",
-            "consumer-duplicate-unit-mode-last-wins",
-            "heartbeat-duplicate-client-id-last-wins",
-            "heartbeat-duplicate-producer-set-last-wins",
-            "heartbeat-duplicate-consumer-set-last-wins",
-            "heartbeat-duplicate-fingerprint-last-wins",
-            "heartbeat-duplicate-without-sub-last-wins",
-            "subscription-high-precision-number-to-string",
-            "subscription-exponent-number-to-string",
-            "subscription-decimal-exponent-number-to-string",
-            "subscription-precision-exponent-number-to-string",
-            "subscription-tags-high-precision-number-to-string",
-            "subscription-leading-plus-zero-version",
-            "subscription-number-long-suffix",
-            "subscription-number-double-suffix",
-            "subscription-number-float-suffix",
-            "subscription-number-byte-suffix",
-            "subscription-number-short-suffix",
-            "subscription-float-suffix-high-precision-to-string",
-            "subscription-float-suffix-exponent-to-string",
-            "subscription-double-suffix-exponent-to-string",
-            "subscription-long-suffix-to-string",
-            "subscription-lowercase-float-suffix-rejected",
-            "subscription-leading-dot-negative-version",
-            "subscription-trailing-dot-version",
-            "subscription-trailing-dot-exponent-double-suffix",
-            "subscription-leading-dot-positive-version",
-            "subscription-leading-dot-positive-float-version",
-            "subscription-leading-dot-positive-topic-rejected",
-            "subscription-leading-dot-positive-float-topic-rejected",
-            "subscription-leading-dot-explicit-positive-topic",
-            "subscription-incomplete-exponent-version",
-            "subscription-incomplete-exponent-topic",
-            "subscription-incomplete-exponent-float-topic",
-            "subscription-incomplete-exponent-trailing-dot-topic",
-            "heartbeat-leading-plus-zero-fingerprint",
-            "heartbeat-exponent-float-suffix-fingerprint",
-            "consumer-form-feed-and-leading-zero",
-            "heartbeat-bom-prefix",
-            "heartbeat-eof-marker-repeated",
-            "heartbeat-eof-marker-separated",
-            "heartbeat-eof-marker-before-trailing-text",
-            "heartbeat-eof-marker-before-trailing-json",
-            "heartbeat-eof-marker-between-0001",
-            "heartbeat-eof-marker-after-0001",
-            "heartbeat-eof-marker-between-00a0",
-            "heartbeat-eof-marker-after-00a0",
-            "subscription-form-feed-before-version",
-            "consumer-vertical-tab-prefix",
-            "heartbeat-embedded-bom",
-            "subscription-single-quoted-strings",
-            "subscription-single-quoted-escapes",
-            "subscription-comment-markers-in-string",
-            "subscription-unquoted-key-rejected",
-            "subscription-trailing-object-comma",
-            "subscription-trailing-array-comma",
-            "subscription-block-comment",
-            "subscription-line-comment",
-            "subscription-single-quoted-key",
-            "subscription-short-control-escapes",
-            "subscription-char1-escape-table",
-            "subscription-hex-escapes",
-            "subscription-identity-escapes",
-            "subscription-double-quoted-apostrophe-escape",
-            "subscription-single-quote-escaped-delimiters",
-            "subscription-comments-between-tokens",
-            "subscription-comment-after-object-open",
-            "subscription-comment-after-object-comma",
-            "subscription-comment-after-array-open",
-            "subscription-comment-after-array-comma",
-            "subscription-comment-after-colon",
-            "subscription-comment-before-object-close",
-            "subscription-comment-before-array-comma",
-            "subscription-comment-after-trailing-array-comma",
-            "subscription-comment-after-nested-value",
-            "subscription-comment-after-trailing-comma",
-            "subscription-null-array-trailing-comma",
-            "subscription-eof-line-comment",
-            "subscription-single-quoted-comment-markers",
-            "subscription-nested-trailing-commas",
-            "subscription-leading-and-trailing-comments",
-            "subscription-unknown-escape-rejected",
-            "subscription-nonhex-x-lookup-zero",
-            "subscription-hex-escape-above-lookup-range-rejected",
-            "subscription-char1-escape-8-rejected",
-            "subscription-object-to-string",
-            "subscription-array-to-string",
-            "producer-object-to-string",
-            "heartbeat-object-to-string",
-            "subscription-tags-singleton-string",
-            "subscription-tags-singleton-number",
-            "subscription-tags-singleton-boolean",
-            "subscription-tags-singleton-object",
-            "subscription-tags-object-member",
-            "subscription-codes-singleton-number",
-            "subscription-codes-singleton-string",
-            "subscription-codes-singleton-boolean",
-            "subscription-codes-singleton-object",
-            "subscription-codes-object-member",
-            "subscription-long-object-to-zero",
-            "subscription-long-empty-object-to-zero",
-            "subscription-long-empty-array",
-            "subscription-code-set-boundaries",
-            "subscription-code-set-overflow-positive",
-            "subscription-code-set-overflow-negative",
-            "subscription-code-set-numeric-string-exponent",
-            "subscription-code-set-wide-decimal",
-            "subscription-code-set-high-precision-decimal",
-            "subscription-code-set-decimal-long-maximum",
-            "subscription-code-set-decimal-long-overflow-positive",
-            "subscription-code-set-decimal-long-overflow-negative",
-            "subscription-code-set-null",
-            "subscription-tags-coercion-deduplicates",
-            "consumer-subscriptions-singleton-object",
-            "consumer-subscription-set-scalar-string",
-            "heartbeat-producers-singleton-object",
-            "heartbeat-consumers-singleton-object",
-            "shape-subscription-subVersion-object",
-            "shape-consumer-consumeType-array",
-            "shape-heartbeat-producerDataSet-object",
-            "heartbeat-whitespace-0000-root-prefix",
-            "heartbeat-whitespace-000c-colon-value",
-            "heartbeat-whitespace-000b-object-open",
-            "heartbeat-whitespace-00a0-after-root",
-            "heartbeat-whitespace-00a0-object-comma",
-            "heartbeat-whitespace-00a0-array-comma",
-            "heartbeat-whitespace-00a0-nested-object-close",
-            "heartbeat-whitespace-0000-string-key",
-            "heartbeat-whitespace-0000-string-value",
-            "heartbeat-whitespace-00a0-string-value",
-            "heartbeat-whitespace-2007-key-colon",
-            "heartbeat-whitespace-feff-root-prefix",
-        ] {
-            assert!(
-                cases.iter().any(|case| case["id"] == required),
-                "missing {required}"
-            );
-        }
-        let mut mismatches = Vec::new();
-        for case in cases {
-            let raw_input = case["rawInput"].as_str().unwrap();
-            let case_id = case["id"].as_str().unwrap();
-            let decoded = match case["type"].as_str().unwrap() {
-                "subscription" => {
-                    serde_fastjson::from_fastjson_str::<Option<SubscriptionData>>(raw_input)
-                        .and_then(serde_json::to_value)
-                }
-                "producer" => serde_fastjson::from_fastjson_str::<Option<ProducerData>>(raw_input)
-                    .and_then(serde_json::to_value),
-                "consumer" => serde_fastjson::from_fastjson_str::<Option<ConsumerData>>(raw_input)
-                    .and_then(serde_json::to_value),
-                "heartbeat" => HeartbeatData::java_from_json_nullable(Some(raw_input))
-                    .and_then(serde_json::to_value),
-                other => panic!("unknown heartbeat DTO case type {other}"),
-            };
-            let java_accepts = case["outcome"] == "ACCEPTED";
-            if decoded.is_ok() != java_accepts {
-                mismatches.push(format!(
-                    "{case_id}: Java accepted={java_accepts}, Rust={decoded:?}, input={raw_input:?}"
-                ));
-                continue;
-            }
-            if let Ok(mut decoded) = decoded {
-                let mut expected = case["fields"].clone();
-                if case_id == "root-subscription-empty-object" {
-                    decoded.as_object_mut().unwrap().remove("subVersion");
-                    expected.as_object_mut().unwrap().remove("subVersion");
-                }
-                normalize_json(&mut decoded);
-                normalize_json(&mut expected);
-                if decoded != expected {
-                    mismatches.push(format!(
-                        "{case_id}: Rust fields={decoded}, Java fields={expected}, input={raw_input:?}"
-                    ));
-                }
-            }
-        }
-        assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
-    }
-}
-
 impl Default for HeartbeatData {
     fn default() -> Self {
         Self {
@@ -1873,6 +1626,253 @@ fn empty_producers() -> Option<SharedProducerDataSet> {
 
 fn empty_consumers() -> Option<SharedHeartbeatConsumerDataSet> {
     Some(SharedValue::default())
+}
+
+#[cfg(test)]
+mod fastjson_dto_input_tests {
+    use super::{ConsumerData, HeartbeatData, ProducerData, SubscriptionData};
+    use crate::serde_fastjson;
+
+    fn normalize_json(value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::Array(values) => {
+                for value in values.iter_mut() {
+                    normalize_json(value);
+                }
+                values.sort_by_key(|value| serde_json::to_string(value).unwrap());
+            }
+            serde_json::Value::Object(fields) => {
+                fields.retain(|_, value| !value.is_null());
+                for value in fields.values_mut() {
+                    normalize_json(value);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn heartbeat_dto_inputs_match_invoked_java_fastjson() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/heartbeat.json"))
+                .unwrap();
+        let cases = fixture["heartbeatDtoInputCases"].as_array().unwrap();
+        assert_eq!(
+            cases.len(),
+            1221,
+            "Java oracle includes DTO root shapes, scalar, numeric-boundary, collection-shape, syntax-grammar, numeric suffix and decimal-point forms, per-field token-kind, systematic whitespace-position/string probes, and exhaustive EOF-marker separators"
+        );
+        for dto in ["subscription", "producer", "consumer", "heartbeat"] {
+            for shape in [
+                "empty-object",
+                "null",
+                "empty-array",
+                "singleton-array",
+                "number",
+                "boolean",
+                "string",
+            ] {
+                let id = format!("root-{dto}-{shape}");
+                assert!(
+                    cases
+                        .iter()
+                        .any(|case| case["id"].as_str() == Some(id.as_str())),
+                    "missing {id}"
+                );
+            }
+        }
+        for required in [
+            "subscription-duplicate-class-filter-mode-last-wins",
+            "subscription-duplicate-topic-last-wins",
+            "subscription-duplicate-sub-string-last-wins",
+            "subscription-duplicate-tags-set-last-wins",
+            "subscription-duplicate-code-set-last-wins",
+            "subscription-duplicate-sub-version-last-wins",
+            "subscription-duplicate-expression-type-last-wins",
+            "producer-duplicate-group-name-last-wins",
+            "consumer-duplicate-group-name-last-wins",
+            "consumer-duplicate-consume-type-last-wins",
+            "consumer-duplicate-message-model-last-wins",
+            "consumer-duplicate-consume-from-last-wins",
+            "consumer-duplicate-subscription-set-last-wins",
+            "consumer-duplicate-unit-mode-last-wins",
+            "heartbeat-duplicate-client-id-last-wins",
+            "heartbeat-duplicate-producer-set-last-wins",
+            "heartbeat-duplicate-consumer-set-last-wins",
+            "heartbeat-duplicate-fingerprint-last-wins",
+            "heartbeat-duplicate-without-sub-last-wins",
+            "subscription-high-precision-number-to-string",
+            "subscription-exponent-number-to-string",
+            "subscription-decimal-exponent-number-to-string",
+            "subscription-precision-exponent-number-to-string",
+            "subscription-tags-high-precision-number-to-string",
+            "subscription-leading-plus-zero-version",
+            "subscription-number-long-suffix",
+            "subscription-number-double-suffix",
+            "subscription-number-float-suffix",
+            "subscription-number-byte-suffix",
+            "subscription-number-short-suffix",
+            "subscription-float-suffix-high-precision-to-string",
+            "subscription-float-suffix-exponent-to-string",
+            "subscription-double-suffix-exponent-to-string",
+            "subscription-long-suffix-to-string",
+            "subscription-lowercase-float-suffix-rejected",
+            "subscription-leading-dot-negative-version",
+            "subscription-trailing-dot-version",
+            "subscription-trailing-dot-exponent-double-suffix",
+            "subscription-leading-dot-positive-version",
+            "subscription-leading-dot-positive-float-version",
+            "subscription-leading-dot-positive-topic-rejected",
+            "subscription-leading-dot-positive-float-topic-rejected",
+            "subscription-leading-dot-explicit-positive-topic",
+            "subscription-incomplete-exponent-version",
+            "subscription-incomplete-exponent-topic",
+            "subscription-incomplete-exponent-float-topic",
+            "subscription-incomplete-exponent-trailing-dot-topic",
+            "heartbeat-leading-plus-zero-fingerprint",
+            "heartbeat-exponent-float-suffix-fingerprint",
+            "consumer-form-feed-and-leading-zero",
+            "heartbeat-bom-prefix",
+            "heartbeat-eof-marker-repeated",
+            "heartbeat-eof-marker-separated",
+            "heartbeat-eof-marker-before-trailing-text",
+            "heartbeat-eof-marker-before-trailing-json",
+            "heartbeat-eof-marker-between-0001",
+            "heartbeat-eof-marker-after-0001",
+            "heartbeat-eof-marker-between-00a0",
+            "heartbeat-eof-marker-after-00a0",
+            "subscription-form-feed-before-version",
+            "consumer-vertical-tab-prefix",
+            "heartbeat-embedded-bom",
+            "subscription-single-quoted-strings",
+            "subscription-single-quoted-escapes",
+            "subscription-comment-markers-in-string",
+            "subscription-unquoted-key-rejected",
+            "subscription-trailing-object-comma",
+            "subscription-trailing-array-comma",
+            "subscription-block-comment",
+            "subscription-line-comment",
+            "subscription-single-quoted-key",
+            "subscription-short-control-escapes",
+            "subscription-char1-escape-table",
+            "subscription-hex-escapes",
+            "subscription-identity-escapes",
+            "subscription-double-quoted-apostrophe-escape",
+            "subscription-single-quote-escaped-delimiters",
+            "subscription-comments-between-tokens",
+            "subscription-comment-after-object-open",
+            "subscription-comment-after-object-comma",
+            "subscription-comment-after-array-open",
+            "subscription-comment-after-array-comma",
+            "subscription-comment-after-colon",
+            "subscription-comment-before-object-close",
+            "subscription-comment-before-array-comma",
+            "subscription-comment-after-trailing-array-comma",
+            "subscription-comment-after-nested-value",
+            "subscription-comment-after-trailing-comma",
+            "subscription-null-array-trailing-comma",
+            "subscription-eof-line-comment",
+            "subscription-single-quoted-comment-markers",
+            "subscription-nested-trailing-commas",
+            "subscription-leading-and-trailing-comments",
+            "subscription-unknown-escape-rejected",
+            "subscription-nonhex-x-lookup-zero",
+            "subscription-hex-escape-above-lookup-range-rejected",
+            "subscription-char1-escape-8-rejected",
+            "subscription-object-to-string",
+            "subscription-array-to-string",
+            "producer-object-to-string",
+            "heartbeat-object-to-string",
+            "subscription-tags-singleton-string",
+            "subscription-tags-singleton-number",
+            "subscription-tags-singleton-boolean",
+            "subscription-tags-singleton-object",
+            "subscription-tags-object-member",
+            "subscription-codes-singleton-number",
+            "subscription-codes-singleton-string",
+            "subscription-codes-singleton-boolean",
+            "subscription-codes-singleton-object",
+            "subscription-codes-object-member",
+            "subscription-long-object-to-zero",
+            "subscription-long-empty-object-to-zero",
+            "subscription-long-empty-array",
+            "subscription-code-set-boundaries",
+            "subscription-code-set-overflow-positive",
+            "subscription-code-set-overflow-negative",
+            "subscription-code-set-numeric-string-exponent",
+            "subscription-code-set-wide-decimal",
+            "subscription-code-set-high-precision-decimal",
+            "subscription-code-set-decimal-long-maximum",
+            "subscription-code-set-decimal-long-overflow-positive",
+            "subscription-code-set-decimal-long-overflow-negative",
+            "subscription-code-set-null",
+            "subscription-tags-coercion-deduplicates",
+            "consumer-subscriptions-singleton-object",
+            "consumer-subscription-set-scalar-string",
+            "heartbeat-producers-singleton-object",
+            "heartbeat-consumers-singleton-object",
+            "shape-subscription-subVersion-object",
+            "shape-consumer-consumeType-array",
+            "shape-heartbeat-producerDataSet-object",
+            "heartbeat-whitespace-0000-root-prefix",
+            "heartbeat-whitespace-000c-colon-value",
+            "heartbeat-whitespace-000b-object-open",
+            "heartbeat-whitespace-00a0-after-root",
+            "heartbeat-whitespace-00a0-object-comma",
+            "heartbeat-whitespace-00a0-array-comma",
+            "heartbeat-whitespace-00a0-nested-object-close",
+            "heartbeat-whitespace-0000-string-key",
+            "heartbeat-whitespace-0000-string-value",
+            "heartbeat-whitespace-00a0-string-value",
+            "heartbeat-whitespace-2007-key-colon",
+            "heartbeat-whitespace-feff-root-prefix",
+        ] {
+            assert!(
+                cases.iter().any(|case| case["id"] == required),
+                "missing {required}"
+            );
+        }
+        let mut mismatches = Vec::new();
+        for case in cases {
+            let raw_input = case["rawInput"].as_str().unwrap();
+            let case_id = case["id"].as_str().unwrap();
+            let decoded = match case["type"].as_str().unwrap() {
+                "subscription" => {
+                    serde_fastjson::from_fastjson_str::<Option<SubscriptionData>>(raw_input)
+                        .and_then(serde_json::to_value)
+                }
+                "producer" => serde_fastjson::from_fastjson_str::<Option<ProducerData>>(raw_input)
+                    .and_then(serde_json::to_value),
+                "consumer" => serde_fastjson::from_fastjson_str::<Option<ConsumerData>>(raw_input)
+                    .and_then(serde_json::to_value),
+                "heartbeat" => HeartbeatData::java_from_json_nullable(Some(raw_input))
+                    .and_then(serde_json::to_value),
+                other => panic!("unknown heartbeat DTO case type {other}"),
+            };
+            let java_accepts = case["outcome"] == "ACCEPTED";
+            if decoded.is_ok() != java_accepts {
+                mismatches.push(format!(
+                    "{case_id}: Java accepted={java_accepts}, Rust={decoded:?}, input={raw_input:?}"
+                ));
+                continue;
+            }
+            if let Ok(mut decoded) = decoded {
+                let mut expected = case["fields"].clone();
+                if case_id == "root-subscription-empty-object" {
+                    decoded.as_object_mut().unwrap().remove("subVersion");
+                    expected.as_object_mut().unwrap().remove("subVersion");
+                }
+                normalize_json(&mut decoded);
+                normalize_json(&mut expected);
+                if decoded != expected {
+                    mismatches.push(format!(
+                        "{case_id}: Rust fields={decoded}, Java fields={expected}, input={raw_input:?}"
+                    ));
+                }
+            }
+        }
+        assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+    }
 }
 
 #[cfg(test)]

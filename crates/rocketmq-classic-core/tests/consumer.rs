@@ -74,12 +74,49 @@ fn fields<H: CommandHeader>(header: &H) -> HeaderMap {
     fields
 }
 
+fn rejected(
+    result: Result<impl std::fmt::Debug, RpcError>,
+    request_code: i32,
+    addr: &str,
+    code: i32,
+) {
+    match result {
+        Err(RpcError::Response {
+            request_code: actual,
+            peer,
+            code: actual_code,
+            remark,
+        }) => {
+            assert_eq!(actual, request_code);
+            assert_eq!(peer, addr);
+            assert_eq!(actual_code, code);
+            assert_eq!(remark.as_deref(), Some("broker error"));
+        }
+        other => panic!("expected broker rejection: {other:?}"),
+    }
+}
+
+fn malformed(result: Result<impl std::fmt::Debug, RpcError>, request_code: i32, addr: &str) {
+    match result {
+        Err(RpcError::MalformedResponse {
+            request_code: actual,
+            peer,
+            reason,
+        }) => {
+            assert_eq!(actual, request_code);
+            assert_eq!(peer, addr);
+            assert!(!reason.is_empty());
+        }
+        other => panic!("expected malformed response: {other:?}"),
+    }
+}
+
 #[tokio::test]
 async fn pull_statuses_and_malformed_success() {
     let header = {
-        let mut __phase18_header_0 = PullMessageRequestHeader::default();
-        __phase18_header_0.set_sys_flag(Some(0));
-        __phase18_header_0
+        let mut header = PullMessageRequestHeader::default();
+        header.set_sys_flag(Some(0));
+        header
     };
     let mut response = PullMessageResponseHeader::default();
     response.set_next_begin_offset(Some(12));
@@ -420,43 +457,6 @@ async fn consumer_list_reply_uses_pinned_java_fastjson_eof_rules() {
     }
 }
 
-fn rejected(
-    result: Result<impl std::fmt::Debug, RpcError>,
-    request_code: i32,
-    addr: &str,
-    code: i32,
-) {
-    match result {
-        Err(RpcError::Response {
-            request_code: actual,
-            peer,
-            code: actual_code,
-            remark,
-        }) => {
-            assert_eq!(actual, request_code);
-            assert_eq!(peer, addr);
-            assert_eq!(actual_code, code);
-            assert_eq!(remark.as_deref(), Some("broker error"));
-        }
-        other => panic!("expected broker rejection: {other:?}"),
-    }
-}
-
-fn malformed(result: Result<impl std::fmt::Debug, RpcError>, request_code: i32, addr: &str) {
-    match result {
-        Err(RpcError::MalformedResponse {
-            request_code: actual,
-            peer,
-            reason,
-        }) => {
-            assert_eq!(actual, request_code);
-            assert_eq!(peer, addr);
-            assert!(!reason.is_empty());
-        }
-        other => panic!("expected malformed response: {other:?}"),
-    }
-}
-
 #[tokio::test]
 async fn every_consumer_rpc_rejects_unexpected_status_before_decoding() {
     for code in [response::QUERY_NOT_FOUND, 9123] {
@@ -472,9 +472,9 @@ async fn every_consumer_rpc_rejects_unexpected_status_before_decoding() {
             api.pull_message(
                 &addr,
                 &{
-                    let mut __phase18_header_1 = PullMessageRequestHeader::default();
-                    __phase18_header_1.set_sys_flag(Some(0));
-                    __phase18_header_1
+                    let mut header = PullMessageRequestHeader::default();
+                    header.set_sys_flag(Some(0));
+                    header
                 },
                 deadline(),
             )

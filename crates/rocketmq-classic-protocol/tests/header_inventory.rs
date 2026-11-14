@@ -169,6 +169,101 @@ macro_rules! cases {
 
 inventory!(cases);
 
+fn assert_header_api_inventory_matches_rust(
+    rust_type: &str,
+    inventory: &serde_json::Value,
+    source: &str,
+    trait_source: &str,
+) {
+    assert_eq!(
+        inventory["publicFields"],
+        serde_json::json!([]),
+        "Java {rust_type} must not expose public fields"
+    );
+    let declaration = format!("pub struct {rust_type} {{");
+    let (before_struct, struct_tail) = source
+        .split_once(&declaration)
+        .unwrap_or_else(|| panic!("missing Rust header {rust_type}"));
+    let struct_body = struct_tail.split_once("\n}\n").unwrap().0;
+    assert!(
+        struct_body
+            .lines()
+            .all(|line| !line.trim_start().starts_with("pub ")),
+        "Rust {rust_type} must not expose public fields"
+    );
+
+    let constructors = inventory["publicConstructors"].as_array().unwrap();
+    assert!(
+        constructors
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .any(|signature| signature.ends_with("()")),
+        "Java {rust_type} must have a public no-argument constructor"
+    );
+    let derives_default = before_struct
+        .rsplit_once("#[derive")
+        .is_some_and(|(_, derive)| derive.contains("Default"));
+    let implements_default = source.contains(&format!("impl Default for {rust_type} {{"));
+    assert!(
+        derives_default || implements_default,
+        "Rust {rust_type} must provide Default for Java's no-argument construction"
+    );
+
+    let methods = inventory["callablePublicMethods"].as_array().unwrap();
+    for signature in methods.iter().filter_map(serde_json::Value::as_str) {
+        let (prefix, parameters) = signature.split_once('(').unwrap();
+        let name = prefix
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .rsplit('.')
+            .next()
+            .unwrap();
+        if matches!(name, "encode" | "decode" | "checkFields") {
+            let rust_method = match name {
+                "encode" => "encode_fields",
+                "decode" => "decode_fields",
+                _ => "check_fields",
+            };
+            assert!(
+                trait_source.contains(&format!("fn {rust_method}(")),
+                "Java {rust_type}::{name} has no Rust CommandHeader::{rust_method}"
+            );
+            continue;
+        }
+        if matches!(
+            name,
+            "getAndCheckNotNull" | "writeIfNotNull" | "writeInt" | "writeLong"
+        ) {
+            let rust_method = java_camel_to_snake(name);
+            assert!(
+                rust_header_method_exists(source, trait_source, rust_type, &rust_method),
+                "Java {rust_type}::{name} has no Rust FastCodesHeader::{rust_method}"
+            );
+            continue;
+        }
+        if !(name.starts_with("get") || name.starts_with("set") || name.starts_with("is")) {
+            continue;
+        }
+        let parameter_count = if parameters.starts_with(')') {
+            0
+        } else {
+            parameters.matches(',').count() + 1
+        };
+        if (name.starts_with("get") || name.starts_with("is")) && parameter_count != 0 {
+            continue;
+        }
+        if name.starts_with("set") && parameter_count != 1 {
+            continue;
+        }
+        let rust_method = java_camel_to_snake(name);
+        assert!(
+            rust_header_method_exists(source, trait_source, rust_type, &rust_method),
+            "Java {rust_type}::{name} has no Rust {rust_type}::{rust_method}"
+        );
+    }
+}
+
 #[test]
 #[allow(deprecated)]
 fn heartbeat_request_header_inherits_java_rpc_surface() {
@@ -358,101 +453,6 @@ fn all_public_command_headers_have_java_api_inventory_coverage() {
         java_types, rust_types,
         "Java API inventories must cover every public Rust CommandHeader"
     );
-}
-
-fn assert_header_api_inventory_matches_rust(
-    rust_type: &str,
-    inventory: &serde_json::Value,
-    source: &str,
-    trait_source: &str,
-) {
-    assert_eq!(
-        inventory["publicFields"],
-        serde_json::json!([]),
-        "Java {rust_type} must not expose public fields"
-    );
-    let declaration = format!("pub struct {rust_type} {{");
-    let (before_struct, struct_tail) = source
-        .split_once(&declaration)
-        .unwrap_or_else(|| panic!("missing Rust header {rust_type}"));
-    let struct_body = struct_tail.split_once("\n}\n").unwrap().0;
-    assert!(
-        struct_body
-            .lines()
-            .all(|line| !line.trim_start().starts_with("pub ")),
-        "Rust {rust_type} must not expose public fields"
-    );
-
-    let constructors = inventory["publicConstructors"].as_array().unwrap();
-    assert!(
-        constructors
-            .iter()
-            .filter_map(serde_json::Value::as_str)
-            .any(|signature| signature.ends_with("()")),
-        "Java {rust_type} must have a public no-argument constructor"
-    );
-    let derives_default = before_struct
-        .rsplit_once("#[derive")
-        .is_some_and(|(_, derive)| derive.contains("Default"));
-    let implements_default = source.contains(&format!("impl Default for {rust_type} {{"));
-    assert!(
-        derives_default || implements_default,
-        "Rust {rust_type} must provide Default for Java's no-argument construction"
-    );
-
-    let methods = inventory["callablePublicMethods"].as_array().unwrap();
-    for signature in methods.iter().filter_map(serde_json::Value::as_str) {
-        let (prefix, parameters) = signature.split_once('(').unwrap();
-        let name = prefix
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .rsplit('.')
-            .next()
-            .unwrap();
-        if matches!(name, "encode" | "decode" | "checkFields") {
-            let rust_method = match name {
-                "encode" => "encode_fields",
-                "decode" => "decode_fields",
-                _ => "check_fields",
-            };
-            assert!(
-                trait_source.contains(&format!("fn {rust_method}(")),
-                "Java {rust_type}::{name} has no Rust CommandHeader::{rust_method}"
-            );
-            continue;
-        }
-        if matches!(
-            name,
-            "getAndCheckNotNull" | "writeIfNotNull" | "writeInt" | "writeLong"
-        ) {
-            let rust_method = java_camel_to_snake(name);
-            assert!(
-                rust_header_method_exists(source, trait_source, rust_type, &rust_method),
-                "Java {rust_type}::{name} has no Rust FastCodesHeader::{rust_method}"
-            );
-            continue;
-        }
-        if !(name.starts_with("get") || name.starts_with("set") || name.starts_with("is")) {
-            continue;
-        }
-        let parameter_count = if parameters.starts_with(')') {
-            0
-        } else {
-            parameters.matches(',').count() + 1
-        };
-        if (name.starts_with("get") || name.starts_with("is")) && parameter_count != 0 {
-            continue;
-        }
-        if name.starts_with("set") && parameter_count != 1 {
-            continue;
-        }
-        let rust_method = java_camel_to_snake(name);
-        assert!(
-            rust_header_method_exists(source, trait_source, rust_type, &rust_method),
-            "Java {rust_type}::{name} has no Rust {rust_type}::{rust_method}"
-        );
-    }
 }
 
 #[test]

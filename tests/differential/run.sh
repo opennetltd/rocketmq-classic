@@ -18,11 +18,357 @@ Usage:
   tests/differential/run.sh --phase N
   tests/differential/run.sh --all
   tests/differential/run.sh --check-all
+  tests/differential/run.sh --self-test
   tests/differential/run.sh --list
 
 Only scenarios with a complete local runner are executable. --phase and --all
 fail closed if the selected inventory contains any unimplemented scenario.
+--self-test runs the runner's own bash-level fan-out checks (subgroup ownership, the
+empty-topic gate, probe exit status, ready-file presence and the checker verdict) through
+stubbed command runners, without starting any Docker resource.
 EOF
+}
+
+# Fan-out subgroup setup goes through one indirection so each created group is recorded
+# immediately and a partial failure still cleans up only the recorded set. The stubbed
+# executor below exercises that contract without a Broker.
+fanout_groups=()
+fanout_mqadmin_fn="fanout_mqadmin_compose"
+fanout_topic_status_fn="fanout_topic_status_compose"
+fanout_empty_check_fn="fanout_require_empty_topic"
+fanout_java_probe_fn="fanout_java_probe_maven"
+fanout_rust_probe_fn="fanout_rust_probe_cargo"
+fanout_checker_fn="fanout_checker_python"
+fanout_log=/dev/null
+fanout_stub_fail_group=""
+
+fanout_mqadmin_compose() {
+    "${compose[@]}" exec --no-TTY "$broker_service" ./mqadmin "$@" >>"$fanout_log" 2>&1
+}
+
+create_fanout_group() {
+    local group="$1"
+    if ! "$fanout_mqadmin_fn" updateSubGroup -c RocketMQLocalTest -g "$group" -n namesrv:9876; then
+        return 1
+    fi
+    fanout_groups+=("$group")
+    return 0
+}
+
+delete_fanout_groups() {
+    local fanout_group status=0
+    for fanout_group in ${fanout_groups[@]+"${fanout_groups[@]}"}; do
+        if ! "$fanout_mqadmin_fn" deleteSubGroup -c RocketMQLocalTest -g "$fanout_group" -n namesrv:9876; then
+            status=1
+            echo "Scenario consumer-group cleanup failed for $fanout_group; see $fanout_log" >&2
+        fi
+    done
+    fanout_groups=()
+    return "$status"
+}
+
+# Read the per-queue offsets of one fan-out topic.
+fanout_topic_status_compose() {
+    "${compose[@]}" exec --no-TTY "$broker_service" ./mqadmin topicStatus -n namesrv:9876 -t "$1"
+}
+
+# Require every queue of one fan-out topic to report a max offset of zero before publishing.
+fanout_require_empty_topic() {
+    local output rows nonzero
+    if ! output=$("$fanout_topic_status_fn" "$1"); then
+        printf 'P10-V05 could not read the offsets of topic %s\n' "$1" >&2
+        return 1
+    fi
+    printf '# mqadmin topicStatus -n namesrv:9876 -t %s\n%s\n' "$1" "$output" \
+        >>"$evidence_dir/topic-status.log"
+    rows=$(printf '%s\n' "$output" | awk '$1 !~ /^#/ && NF >= 4 && $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ { print $4 }')
+    if [[ -z "$rows" ]]; then
+        printf 'P10-V05 topic %s reports no queue offsets, so it is not a usable empty topic\n' \
+            "$1" >&2
+        return 1
+    fi
+    nonzero=$(printf '%s\n' "$rows" | awk '$1 != "0" { print }')
+    if [[ -n "$nonzero" ]]; then
+        printf 'P10-V05 topic %s is not empty before publishing (max offsets: %s)\n' "$1" \
+            "$(printf '%s' "$nonzero" | tr '\n' ' ')" >&2
+        return 1
+    fi
+    return 0
+}
+
+fanout_java_probe_maven() {
+    mvn -q -f "$repo_root/compat/java-reference/pom.xml" \
+        -Dexec.args="probe $namesrv_addr $2 $3 $4" exec:java@live-pull-fanout-probe \
+        >"$5" 2>"$6"
+}
+
+fanout_rust_probe_cargo() {
+    cargo run --locked --quiet -p rocketmq-classic-integration --bin live_client -- \
+        p10-fanout "$namesrv_addr" "$2" "$3" "$4" >"$5" 2>"$6"
+}
+
+fanout_checker_python() {
+    python3 "$repo_root/tests/differential/check_p10_fanout.py" "$1" "$2" --queues="$3" \
+        >"$evidence_dir/fanout-check.log" 2>&1
+}
+
+# Run both language probes and the checker. Every failure path returns non-zero before any PASS
+# line exists, so a probe that never reached its gate cannot be recorded as evidence.
+run_fanout_sequence() {
+    local fanout_topic language ready_file tsv stderr_file
+    for fanout_topic in "${topic}_java" "${topic}_rust"; do
+        if ! "$fanout_empty_check_fn" "$fanout_topic"; then
+            return 1
+        fi
+    done
+    for language in java rust; do
+        ready_file="$evidence_dir/$language-p10-fanout.ready"
+        tsv="$evidence_dir/$language-p10-fanout.tsv"
+        stderr_file="$evidence_dir/$language-p10-fanout.stderr"
+        if [[ "$language" == "java" ]]; then
+            if ! "$fanout_java_probe_fn" java "${topic}_java" "${consumer_group}_java" \
+                "$ready_file" "$tsv" "$stderr_file"; then
+                cat "$tsv" "$stderr_file" >&2 2>/dev/null || true
+                return 1
+            fi
+        elif ! "$fanout_rust_probe_fn" rust "${topic}_rust" "${consumer_group}_rust" \
+            "$ready_file" "$tsv" "$stderr_file"; then
+            cat "$tsv" "$stderr_file" >&2 2>/dev/null || true
+            return 1
+        fi
+        if [[ ! -s "$ready_file" ]]; then
+            printf 'P10-V05 the %s probe exited without writing its admission-gate ready file %s\n' \
+                "$language" "$ready_file" >&2
+            return 1
+        fi
+    done
+    if ! "$fanout_checker_fn" "$evidence_dir" "$topic" "$queue_count"; then
+        cat "$evidence_dir/fanout-check.log" >&2 || true
+        return 1
+    fi
+    printf 'PASS P10-V05: Java and Rust each admitted all %s empty-queue Pulls before any of those responses completed, kept one active Pull per queue at suspendTimeoutMillis=15000, and delivered every seeded queue within the declared bound\n' \
+        "$queue_count" | tee "$evidence_dir/result.txt"
+}
+
+# Stubbed mqadmin runner used by --self-test: records every invocation and fails the
+# creation of `fanout_stub_fail_group`.
+fanout_mqadmin_stub() {
+    printf '%s\n' "$*" >>"$fanout_log"
+    local argument group="" previous=""
+    if [[ "$1" == "updateSubGroup" ]]; then
+        shift
+        for argument in "$@"; do
+            if [[ "$previous" == "-g" ]]; then
+                group="$argument"
+            fi
+            previous="$argument"
+        done
+        if [[ -n "$fanout_stub_fail_group" && "$group" == "$fanout_stub_fail_group" ]]; then
+            return 1
+        fi
+    fi
+    return 0
+}
+
+# Stubbed topic-offset reader used by --self-test.
+fanout_topic_status_stub() {
+    printf '%s\n' "$fanout_stub_topic_status"
+}
+
+# Stubbed language probe used by --self-test; `fanout_stub_probe_mode` selects the behaviour.
+fanout_probe_stub() {
+    local language="$1" ready_file="$4" tsv="$5" stderr_file="$6"
+    : >"$tsv"
+    : >"$stderr_file"
+    case "$fanout_stub_probe_mode" in
+    ok)
+        printf 'P10F\tROUTE\t%s\tbroker-a\t0\n' "$language" >>"$tsv"
+        printf 'ready\n' >"$ready_file"
+        return 0
+        ;;
+    gate-timeout)
+        printf 'the admission gate was never reached: active=4/16\n' >"$stderr_file"
+        return 1
+        ;;
+    no-ready-file)
+        printf 'P10F\tROUTE\t%s\tbroker-a\t0\n' "$language" >>"$tsv"
+        return 0
+        ;;
+    esac
+    return 1
+}
+
+fanout_checker_stub() {
+    if [[ "$fanout_stub_checker_status" != "0" ]]; then
+        printf 'P10-V05 evidence contract failed: a target Pull response preceded the barrier\n' \
+            >"$evidence_dir/fanout-check.log"
+        return 1
+    fi
+    printf 'PASS P10-V05 checker stub\n' >"$evidence_dir/fanout-check.log"
+    return 0
+}
+
+# Exercise the P10-V05 evidence contract without a Broker: the empty-topic gate, each probe exit
+# status, ready-file presence and the checker verdict must all be enforced before any PASS line.
+selftest_fanout_evidence_contract() {
+    local dir failures=0
+    dir="$(mktemp -d)"
+    # This self-test exits afterwards, so the scenario globals are set directly.
+    topic="compat_p10_fanout"
+    consumer_group="compat_p10_push_fanout"
+    queue_count=16
+    namesrv_addr="127.0.0.1:9876"
+    fanout_topic_status_fn="fanout_topic_status_stub"
+    fanout_java_probe_fn="fanout_probe_stub"
+    fanout_rust_probe_fn="fanout_probe_stub"
+    fanout_checker_fn="fanout_checker_stub"
+    fanout_stub_checker_status=0
+
+    # A completed run records both topics' offsets and writes the PASS line.
+    evidence_dir="$dir/complete"
+    mkdir -p "$evidence_dir"
+    fanout_stub_topic_status=$'#Broker Name\t#QID\t#Min Offset\t#Max Offset\nbroker-a\t0\t0\t0\nbroker-a\t1\t0\t0\n\nTopic Put TPS: 0.0'
+    fanout_stub_probe_mode="ok"
+    if ! run_fanout_sequence >"$dir/complete.out" 2>&1; then
+        echo "fan-out self-test: a complete run should pass:" >&2
+        cat "$dir/complete.out" >&2
+        failures=$((failures + 1))
+    fi
+    if [[ ! -s "$evidence_dir/result.txt" ]]; then
+        echo "fan-out self-test: a complete run must write result.txt" >&2
+        failures=$((failures + 1))
+    fi
+    for fanout_topic in compat_p10_fanout_java compat_p10_fanout_rust; do
+        if ! grep -q -- "-t $fanout_topic" "$evidence_dir/topic-status.log"; then
+            echo "fan-out self-test: the offsets of $fanout_topic were not recorded" >&2
+            failures=$((failures + 1))
+        fi
+    done
+
+    # A topic that already holds messages must stop the run before any probe starts.
+    evidence_dir="$dir/not-empty"
+    mkdir -p "$evidence_dir"
+    fanout_stub_topic_status=$'#Broker Name\t#QID\t#Min Offset\t#Max Offset\nbroker-a\t0\t0\t3'
+    if run_fanout_sequence >"$dir/not-empty.out" 2>&1; then
+        echo "fan-out self-test: a non-empty fan-out topic must stop the run" >&2
+        failures=$((failures + 1))
+    fi
+    if [[ -e "$evidence_dir/java-p10-fanout.tsv" ]]; then
+        echo "fan-out self-test: no probe may start when the topics are not empty" >&2
+        failures=$((failures + 1))
+    fi
+    if [[ -s "$evidence_dir/result.txt" ]]; then
+        echo "fan-out self-test: a non-empty topic must not produce PASS evidence" >&2
+        failures=$((failures + 1))
+    fi
+
+    # A probe that never reached its gate exits non-zero and produces no PASS line.
+    evidence_dir="$dir/gate-timeout"
+    mkdir -p "$evidence_dir"
+    fanout_stub_topic_status=$'#Broker Name\t#QID\t#Min Offset\t#Max Offset\nbroker-a\t0\t0\t0'
+    fanout_stub_probe_mode="gate-timeout"
+    if run_fanout_sequence >"$dir/gate-timeout.out" 2>&1; then
+        echo "fan-out self-test: a probe gate timeout must fail the scenario" >&2
+        failures=$((failures + 1))
+    fi
+    if [[ -s "$evidence_dir/result.txt" ]]; then
+        echo "fan-out self-test: a probe gate timeout must not produce PASS evidence" >&2
+        failures=$((failures + 1))
+    fi
+    if ! grep -q 'admission gate was never reached' "$dir/gate-timeout.out"; then
+        echo "fan-out self-test: the gate timeout reason must reach the operator" >&2
+        failures=$((failures + 1))
+    fi
+
+    # A probe that exits zero without writing its ready file is still a failure.
+    evidence_dir="$dir/missing-ready"
+    mkdir -p "$evidence_dir"
+    fanout_stub_probe_mode="no-ready-file"
+    if run_fanout_sequence >"$dir/missing-ready.out" 2>&1; then
+        echo "fan-out self-test: a missing ready file must fail the scenario" >&2
+        failures=$((failures + 1))
+    fi
+    if ! grep -q 'ready file' "$dir/missing-ready.out"; then
+        echo "fan-out self-test: the missing ready file reason must reach the operator" >&2
+        failures=$((failures + 1))
+    fi
+
+    # A failing checker verdict overrides whatever the probes reported.
+    evidence_dir="$dir/checker-failure"
+    mkdir -p "$evidence_dir"
+    fanout_stub_probe_mode="ok"
+    fanout_stub_checker_status=1
+    if run_fanout_sequence >"$dir/checker-failure.out" 2>&1; then
+        echo "fan-out self-test: a failing checker must fail the scenario" >&2
+        failures=$((failures + 1))
+    fi
+    if [[ -s "$evidence_dir/result.txt" ]]; then
+        echo "fan-out self-test: a failing checker must not produce PASS evidence" >&2
+        failures=$((failures + 1))
+    fi
+
+    fanout_topic_status_fn="fanout_topic_status_compose"
+    fanout_java_probe_fn="fanout_java_probe_maven"
+    fanout_rust_probe_fn="fanout_rust_probe_cargo"
+    fanout_checker_fn="fanout_checker_python"
+    rm -rf "$dir"
+    if ((failures)); then
+        echo "run.sh fan-out evidence contract self-test FAIL ($failures check(s))" >&2
+        return 1
+    fi
+    return 0
+}
+
+selftest_fanout_group_cleanup() {
+    local dir failures=0 count
+    dir="$(mktemp -d)"
+    fanout_log="$dir/calls.log"
+    : >"$fanout_log"
+    fanout_groups=()
+    fanout_mqadmin_fn="fanout_mqadmin_stub"
+    fanout_stub_fail_group="selftest-group_rust"
+
+    if ! create_fanout_group "selftest-group_java"; then
+        echo "stubbed creation of the first fan-out subgroup failed" >&2
+        failures=$((failures + 1))
+    fi
+    if create_fanout_group "$fanout_stub_fail_group"; then
+        echo "stubbed creation of the second fan-out subgroup unexpectedly succeeded" >&2
+        failures=$((failures + 1))
+    fi
+    delete_fanout_groups || true
+
+    count=$(grep -c '^updateSubGroup -c RocketMQLocalTest -g selftest-group_java -n namesrv:9876$' "$fanout_log" || true)
+    if [[ "$count" != "1" ]]; then
+        echo "expected one creation attempt for the first subgroup, got $count" >&2
+        failures=$((failures + 1))
+    fi
+    count=$(grep -c '^updateSubGroup -c RocketMQLocalTest -g selftest-group_rust -n namesrv:9876$' "$fanout_log" || true)
+    if [[ "$count" != "1" ]]; then
+        echo "expected one creation attempt for the failing subgroup, got $count" >&2
+        failures=$((failures + 1))
+    fi
+    count=$(grep -c '^deleteSubGroup -c RocketMQLocalTest -g selftest-group_java -n namesrv:9876$' "$fanout_log" || true)
+    if [[ "$count" != "1" ]]; then
+        echo "expected the created subgroup to be deleted once, got $count" >&2
+        failures=$((failures + 1))
+    fi
+    count=$(grep -c '^deleteSubGroup -c RocketMQLocalTest -g selftest-group_rust -n namesrv:9876$' "$fanout_log" || true)
+    if [[ "$count" != "0" ]]; then
+        echo "the never-created subgroup was deleted $count time(s)" >&2
+        failures=$((failures + 1))
+    fi
+
+    fanout_stub_fail_group=""
+    fanout_mqadmin_fn="fanout_mqadmin_compose"
+    fanout_log=/dev/null
+    rm -rf "$dir"
+    if ((failures)); then
+        echo "run.sh fan-out subgroup self-test FAIL ($failures check(s))" >&2
+        return 1
+    fi
+    echo "run.sh fan-out subgroup self-test PASS (partial creation deletes only the recorded group)"
+    return 0
 }
 
 while (($#)); do
@@ -55,6 +401,11 @@ while (($#)); do
             selection="list"
             shift
             ;;
+        --self-test)
+            [[ -z "$selection" ]] || { usage >&2; exit 2; }
+            selection="self-test"
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -68,6 +419,12 @@ while (($#)); do
 done
 
 [[ -n "$selection" ]] || { usage >&2; exit 2; }
+if [[ "$selection" == "self-test" ]]; then
+    selftest_fanout_group_cleanup || exit 1
+    selftest_fanout_evidence_contract || exit 1
+    echo "run.sh fan-out self-tests PASS (group ownership, empty-topic gate, probe status, checker verdict)"
+    exit 0
+fi
 if [[ "$selection" == "scenario" && $scenario_id_count -eq 0 ]]; then
     echo "At least one scenario ID is required" >&2
     exit 2
@@ -197,6 +554,24 @@ for scenario in selected:
         ]
     ):
         raise SystemExit("P10-V03 retry and DLQ inputs differ from the reviewed live case")
+    if scenario_id == "P10-V05" and (
+        profile != "host-routed"
+        or inputs.get("topic") != "compat_p10_fanout"
+        or inputs.get("group") != "compat_p10_push_fanout"
+        or inputs.get("queues") != 16
+        or inputs.get("messages_per_queue") != 1
+        or inputs.get("admission_window_ms") != 5000
+        or inputs.get("delivery_window_ms") != 5000
+        or inputs.get("checks") != [
+            "full-target-topic-assignment",
+            "all-empty-queue-pulls-before-any-response",
+            "one-active-pull-per-queue-generation",
+            "pull-suspend-timeout-15000",
+            "bounded-first-delivery-per-queue",
+        ]
+        or scenario.get("assertions") != inputs.get("checks")
+    ):
+        raise SystemExit("P10-V05 fan-out inputs differ from the reviewed live case")
     if scenario_id == "P11-V03" and (
         scenario.get("profile") != "two-broker"
         or inputs.get("topic") != "compat_p11_mixed"
@@ -340,7 +715,7 @@ if [[ "$selection" == "list" ]]; then
     exit 0
 fi
 
-implemented=("ROUTE-001-get-existing-topic" "ROUTE-002-topic-not-exist" "HEARTBEAT-001" "PROD-001-sync-send" "PROD-002-async-send" "PROD-003-oneway-send" "PROD-004-batch-send" "PROD-005-send-timeout" "CONS-001-query-offset" "CONS-002-pull-found" "CONS-003-pull-no-new-msg" "CONS-004-update-offset" "ORDER-001-lock-unlock" "REBAL-001-average-10q-3c" "TX-001-commit" "TX-002-rollback" "P3-V04" "P5-V02-route" "P5-V02-producer" "P5-V02-consumer" "P5-V02-extensions" "P0-V03" "P6-V04" "P7-V02" "P7-V03" "P7-V04" "P9-V03" "P10-V03" "P11-V03" "P11-V04" "P12-V03" "P13-V02" "P14-V03" "P16-V02" "P17-V02" "REQ-001-request-reply-success" "P15-V03")
+implemented=("ROUTE-001-get-existing-topic" "ROUTE-002-topic-not-exist" "HEARTBEAT-001" "PROD-001-sync-send" "PROD-002-async-send" "PROD-003-oneway-send" "PROD-004-batch-send" "PROD-005-send-timeout" "CONS-001-query-offset" "CONS-002-pull-found" "CONS-003-pull-no-new-msg" "CONS-004-update-offset" "ORDER-001-lock-unlock" "REBAL-001-average-10q-3c" "TX-001-commit" "TX-002-rollback" "P3-V04" "P5-V02-route" "P5-V02-producer" "P5-V02-consumer" "P5-V02-extensions" "P0-V03" "P6-V04" "P7-V02" "P7-V03" "P7-V04" "P9-V03" "P10-V03" "P10-V05" "P11-V03" "P11-V04" "P12-V03" "P13-V02" "P14-V03" "P16-V02" "P17-V02" "REQ-001-request-reply-success" "P15-V03")
 unsupported=()
 while IFS=$'\t' read -r scenario_id profile topic producer_group body key_prefix java_expected_max_offset rust_expected_max_offset java_expected_queue_offset rust_expected_queue_offset message_count java_offset rust_offset queue_id pull_offset missing_topic queue_count consumer_ids consumer_group; do
     is_implemented=false
@@ -416,7 +791,7 @@ case "$profile:$scenario_id" in
     tls-auth:P16-V02) ;;
     transaction:TX-001-commit|transaction:TX-002-rollback) ;;
     tls:P3-V04) ;;
-    host-routed:P6-V04|host-routed:P7-V02|host-routed:P9-V03) ;;
+    host-routed:P6-V04|host-routed:P7-V02|host-routed:P9-V03|host-routed:P10-V05) ;;
     host-routed:REQ-001-request-reply-success) ;;
     *)
         echo "Scenario metadata differs from the implemented profile" >&2
@@ -593,6 +968,12 @@ case "$scenario_id:$topic" in
             exit 3
         fi
         ;;
+    P10-V05:compat_p10_fanout)
+        if [[ "$profile" != "host-routed" || "$consumer_group" != "compat_p10_push_fanout" || "$queue_count" != "16" ]]; then
+            echo "P10-V05 metadata differs from the reviewed Push Pull fan-out case" >&2
+            exit 3
+        fi
+        ;;
     REQ-001-request-reply-success:compat_phase0_request_java)
         if [[ "$profile" != "host-routed" || "$consumer_group" != "compat_req_responder" ]]; then
             echo "Request/reply metadata differs from the reviewed host-routed case" >&2
@@ -622,7 +1003,7 @@ case "$scenario_id:$topic" in
         exit 3
         ;;
 esac
-if [[ "$scenario_id" != "ROUTE-001-get-existing-topic" && "$scenario_id" != "ROUTE-002-topic-not-exist" && "$scenario_id" != "HEARTBEAT-001" && "$scenario_id" != "PROD-001-sync-send" && "$scenario_id" != "PROD-002-async-send" && "$scenario_id" != "PROD-003-oneway-send" && "$scenario_id" != "PROD-004-batch-send" && "$scenario_id" != "PROD-005-send-timeout" && "$scenario_id" != "CONS-001-query-offset" && "$scenario_id" != "CONS-004-update-offset" && "$scenario_id" != "CONS-002-pull-found" && "$scenario_id" != "CONS-003-pull-no-new-msg" && "$scenario_id" != "ORDER-001-lock-unlock" && "$scenario_id" != "REBAL-001-average-10q-3c" && "$scenario_id" != "TX-001-commit" && "$scenario_id" != "TX-002-rollback" && "$scenario_id" != "P3-V04" && "$scenario_id" != "P5-V02-route" && "$scenario_id" != "P5-V02-producer" && "$scenario_id" != "P5-V02-consumer" && "$scenario_id" != "P5-V02-extensions" && "$scenario_id" != "P0-V03" && "$scenario_id" != "P6-V04" && "$scenario_id" != "P7-V02" && "$scenario_id" != "P7-V03" && "$scenario_id" != "P7-V04" && "$scenario_id" != "P9-V03" && "$scenario_id" != "P10-V03" && "$scenario_id" != "P11-V03" && "$scenario_id" != "P11-V04" && "$scenario_id" != "P12-V03" && "$scenario_id" != "P13-V02" && "$scenario_id" != "P14-V03" && "$scenario_id" != "P16-V02" && "$scenario_id" != "P17-V02" && "$scenario_id" != "REQ-001-request-reply-success" && "$scenario_id" != "P15-V03" ]]; then
+if [[ "$scenario_id" != "ROUTE-001-get-existing-topic" && "$scenario_id" != "ROUTE-002-topic-not-exist" && "$scenario_id" != "HEARTBEAT-001" && "$scenario_id" != "PROD-001-sync-send" && "$scenario_id" != "PROD-002-async-send" && "$scenario_id" != "PROD-003-oneway-send" && "$scenario_id" != "PROD-004-batch-send" && "$scenario_id" != "PROD-005-send-timeout" && "$scenario_id" != "CONS-001-query-offset" && "$scenario_id" != "CONS-004-update-offset" && "$scenario_id" != "CONS-002-pull-found" && "$scenario_id" != "CONS-003-pull-no-new-msg" && "$scenario_id" != "ORDER-001-lock-unlock" && "$scenario_id" != "REBAL-001-average-10q-3c" && "$scenario_id" != "TX-001-commit" && "$scenario_id" != "TX-002-rollback" && "$scenario_id" != "P3-V04" && "$scenario_id" != "P5-V02-route" && "$scenario_id" != "P5-V02-producer" && "$scenario_id" != "P5-V02-consumer" && "$scenario_id" != "P5-V02-extensions" && "$scenario_id" != "P0-V03" && "$scenario_id" != "P6-V04" && "$scenario_id" != "P7-V02" && "$scenario_id" != "P7-V03" && "$scenario_id" != "P7-V04" && "$scenario_id" != "P9-V03" && "$scenario_id" != "P10-V03" && "$scenario_id" != "P10-V05" && "$scenario_id" != "P11-V03" && "$scenario_id" != "P11-V04" && "$scenario_id" != "P12-V03" && "$scenario_id" != "P13-V02" && "$scenario_id" != "P14-V03" && "$scenario_id" != "P16-V02" && "$scenario_id" != "P17-V02" && "$scenario_id" != "REQ-001-request-reply-success" && "$scenario_id" != "P15-V03" ]]; then
     echo "No implementation is registered for scenario '$scenario_id'" >&2
     exit 3
 fi
@@ -1158,6 +1539,20 @@ target/debug/live_client p10-push $namesrv_addr $topic $consumer_group <evidence
 mvn -q -f compat/java-reference/pom.xml -Dexec.args="seed-p10 $namesrv_addr $topic failure" exec:java@live-high-level-producer-probe
 The manifest profile is two-broker; the host-routed two-Broker Compose profile publishes NameServer-advertised Broker endpoints to the host Java/Rust clients. The runner releases the failure seed gate after Java sends the failure message; Rust records callbacks and verifies the retry-topic/DLQ transition before shutdown. Broker 5.3.4 stores the terminal DLQ copy with reconsumeTimes=retryMaxTimes+1 after the final send-back.
 EOF
+elif [[ "$scenario_id" == "P10-V05" ]]; then
+    cat >"$evidence_dir/commands.txt" <<EOF
+ROCKETMQ_CLASSIC_TEST_ENV=local-disposable ROCKETMQ_PROFILE=host-routed COMPOSE_PROJECT_NAME=$project_name bash integration-tests/setup.sh
+docker compose --project-name $project_name --file integration-tests/compose.yaml --profile host-routed exec broker-host ./mqadmin updateTopic -c RocketMQLocalTest -t ${topic}_java -r 16 -w 16 -n namesrv:9876
+docker compose --project-name $project_name --file integration-tests/compose.yaml --profile host-routed exec broker-host ./mqadmin updateTopic -c RocketMQLocalTest -t ${topic}_rust -r 16 -w 16 -n namesrv:9876
+docker compose --project-name $project_name --file integration-tests/compose.yaml --profile host-routed exec broker-host ./mqadmin updateSubGroup -c RocketMQLocalTest -g ${consumer_group}_java -n namesrv:9876
+docker compose --project-name $project_name --file integration-tests/compose.yaml --profile host-routed exec broker-host ./mqadmin updateSubGroup -c RocketMQLocalTest -g ${consumer_group}_rust -n namesrv:9876
+docker compose --project-name $project_name --file integration-tests/compose.yaml --profile host-routed exec broker ./mqadmin topicStatus -n namesrv:9876 -t ${topic}_java
+docker compose --project-name $project_name --file integration-tests/compose.yaml --profile host-routed exec broker ./mqadmin topicStatus -n namesrv:9876 -t ${topic}_rust
+mvn -q -f compat/java-reference/pom.xml -Dexec.args="probe $namesrv_addr ${topic}_java ${consumer_group}_java <evidence>/java-p10-fanout.ready" exec:java@live-pull-fanout-probe
+cargo run --locked --quiet -p rocketmq-classic-integration --bin live_client -- p10-fanout $namesrv_addr ${topic}_rust ${consumer_group}_rust <evidence>/rust-p10-fanout.ready
+python3 tests/differential/check_p10_fanout.py <evidence> $topic --queues=$queue_count
+Each language runs one Push consumer with the default Average allocation on its own 16-queue topic and group, never both at once. The probe records every target-topic PULL_MESSAGE request/response boundary through an RPCHook, gates on all 16 distinct queue admissions before any of those Pull responses completes, then seeds one message per queue and records the first delivery per queue. Timestamps are process-local monotonic nanoseconds and are never compared across languages.
+EOF
 elif [[ "$scenario_id" == "P9-V03" ]]; then
     cat >"$evidence_dir/commands.txt" <<EOF
 ROCKETMQ_CLASSIC_TEST_ENV=local-disposable ROCKETMQ_PROFILE=host-routed COMPOSE_PROJECT_NAME=$project_name bash integration-tests/setup.sh
@@ -1343,6 +1738,9 @@ EOF
 fi
 topic_created=false
 topic_cleanup_list=("$topic")
+if [[ "$scenario_id" == "P10-V05" ]]; then
+    topic_cleanup_list=("${topic}_java" "${topic}_rust")
+fi
 if [[ "$scenario_id" == "P11-V04" ]]; then
     topic_cleanup_list+=("%RETRY%${consumer_group}")
 fi
@@ -1463,6 +1861,11 @@ cleanup() {
                 echo "Scenario consumer-group cleanup failed for $consumer_group on $topic_broker; see $evidence_dir/group-cleanup.log" >&2
             fi
         done
+    fi
+    if ((${#fanout_groups[@]} > 0)); then
+        fanout_log="$evidence_dir/group-cleanup.log"
+        : >"$fanout_log"
+        delete_fanout_groups || status=1
     fi
     if [[ "$topic_created" == true ]]; then
         : >"$evidence_dir/topic-cleanup.log"
@@ -1958,7 +2361,7 @@ if [[ "$scenario_id" == "P5-V02-extensions" ]]; then
     done
 fi
 
-if [[ "$scenario_id" == "ROUTE-001-get-existing-topic" || "$scenario_id" == "PROD-001-sync-send" || "$scenario_id" == "PROD-002-async-send" || "$scenario_id" == "PROD-003-oneway-send" || "$scenario_id" == "PROD-004-batch-send" || "$scenario_id" == "PROD-005-send-timeout" || "$scenario_id" == "CONS-001-query-offset" || "$scenario_id" == "CONS-002-pull-found" || "$scenario_id" == "CONS-003-pull-no-new-msg" || "$scenario_id" == "CONS-004-update-offset" || "$scenario_id" == "ORDER-001-lock-unlock" || "$scenario_id" == "REBAL-001-average-10q-3c" || "$scenario_id" == "TX-001-commit" || "$scenario_id" == "TX-002-rollback" || "$scenario_id" == "P3-V04" || "$scenario_id" == "P5-V02-route" || "$scenario_id" == "P5-V02-producer" || "$scenario_id" == "P5-V02-consumer" || "$scenario_id" == "P6-V04" || "$scenario_id" == "P7-V02" || "$scenario_id" == "P7-V03" || "$scenario_id" == "P7-V04" || "$scenario_id" == "P9-V03" || "$scenario_id" == "P10-V03" || "$scenario_id" == "P11-V03" || "$scenario_id" == "P11-V04" || "$scenario_id" == "P12-V03" || "$scenario_id" == "P13-V02" || "$scenario_id" == "P14-V03" || "$scenario_id" == "REQ-001-request-reply-success" || "$scenario_id" == "P15-V03" ]]; then
+if [[ "$scenario_id" == "ROUTE-001-get-existing-topic" || "$scenario_id" == "PROD-001-sync-send" || "$scenario_id" == "PROD-002-async-send" || "$scenario_id" == "PROD-003-oneway-send" || "$scenario_id" == "PROD-004-batch-send" || "$scenario_id" == "PROD-005-send-timeout" || "$scenario_id" == "CONS-001-query-offset" || "$scenario_id" == "CONS-002-pull-found" || "$scenario_id" == "CONS-003-pull-no-new-msg" || "$scenario_id" == "CONS-004-update-offset" || "$scenario_id" == "ORDER-001-lock-unlock" || "$scenario_id" == "REBAL-001-average-10q-3c" || "$scenario_id" == "TX-001-commit" || "$scenario_id" == "TX-002-rollback" || "$scenario_id" == "P3-V04" || "$scenario_id" == "P5-V02-route" || "$scenario_id" == "P5-V02-producer" || "$scenario_id" == "P5-V02-consumer" || "$scenario_id" == "P6-V04" || "$scenario_id" == "P7-V02" || "$scenario_id" == "P7-V03" || "$scenario_id" == "P7-V04" || "$scenario_id" == "P9-V03" || "$scenario_id" == "P10-V03" || "$scenario_id" == "P10-V05" || "$scenario_id" == "P11-V03" || "$scenario_id" == "P11-V04" || "$scenario_id" == "P12-V03" || "$scenario_id" == "P13-V02" || "$scenario_id" == "P14-V03" || "$scenario_id" == "REQ-001-request-reply-success" || "$scenario_id" == "P15-V03" ]]; then
     echo "Creating scenario-owned topic $topic"
     topic_created=true
     topic_queue_count=4
@@ -1968,8 +2371,22 @@ if [[ "$scenario_id" == "ROUTE-001-get-existing-topic" || "$scenario_id" == "PRO
         topic_queue_count=5
     elif [[ "$scenario_id" == "TX-001-commit" || "$scenario_id" == "TX-002-rollback" ]]; then
         topic_queue_count=1
+    elif [[ "$scenario_id" == "P10-V05" ]]; then
+        topic_queue_count="$queue_count"
     fi
-    if [[ "$profile" == "two-broker-host" ]]; then
+    if [[ "$scenario_id" == "P10-V05" ]]; then
+        # Only the language-specific topics exist; the manifest names are prefixes.
+        echo "Creating the Java and Rust fan-out topics with $topic_queue_count queues each"
+        : >"$evidence_dir/topic-create.log"
+        for fanout_topic in "${topic}_java" "${topic}_rust"; do
+            if ! "${compose[@]}" exec --no-TTY "$broker_service" ./mqadmin updateTopic -c RocketMQLocalTest \
+                -t "$fanout_topic" -r "$topic_queue_count" -w "$topic_queue_count" -n namesrv:9876 \
+                >>"$evidence_dir/topic-create.log" 2>&1; then
+                cat "$evidence_dir/topic-create.log" >&2
+                exit 1
+            fi
+        done
+    elif [[ "$profile" == "two-broker-host" ]]; then
         for broker_admin_target in "broker-a-host:127.0.0.1:50911" "broker-b-host:127.0.0.1:50921"; do
             topic_service="${broker_admin_target%%:*}"
             topic_broker="${broker_admin_target#*:}"
@@ -2050,6 +2467,16 @@ if [[ "$scenario_id" == "ROUTE-001-get-existing-topic" || "$scenario_id" == "PRO
             pull_group="${consumer_group}_${group_suffix}"
             if ! "${compose[@]}" exec --no-TTY "$broker_service" ./mqadmin updateSubGroup -c RocketMQLocalTest -g "$pull_group" -n namesrv:9876 \
                 >>"$evidence_dir/group-create.log" 2>&1; then
+                cat "$evidence_dir/group-create.log" >&2
+                exit 1
+            fi
+        done
+    elif [[ "$scenario_id" == "P10-V05" ]]; then
+        echo "Creating the Java and Rust fan-out Push consumer groups"
+        fanout_log="$evidence_dir/group-create.log"
+        : >"$fanout_log"
+        for language in java rust; do
+            if ! create_fanout_group "${consumer_group}_${language}"; then
                 cat "$evidence_dir/group-create.log" >&2
                 exit 1
             fi
@@ -4207,6 +4634,11 @@ PY
     else
         printf 'PASS %s: Java/Rust rollbacks matched; no message was visible and max offset was %s\n' \
             "$scenario_id" "$expected_max_offset" | tee "$evidence_dir/result.txt"
+    fi
+elif [[ "$scenario_id" == "P10-V05" ]]; then
+    # One Push consumer per language, never concurrently, each on its own empty topic and group.
+    if ! run_fanout_sequence; then
+        exit 1
     fi
 elif [[ "$scenario_id" == "P9-V03" ]]; then
     if ! mvn -q -f "$repo_root/compat/java-reference/pom.xml" \

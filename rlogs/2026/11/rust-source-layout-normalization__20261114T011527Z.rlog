@@ -1,0 +1,25 @@
+Rust workspace naming and test layout review — 2026-11-14
+User-authorized scope: normalize temporary names and move tests to conventional trailing positions; do not change logic. Initial working tree was clean at 17b54482. No implementation plan was created or modified.
+
+Reviewed all Rust sources under crates/ and integration-tests/, plus the four root examples. Replaced 777 identifier occurrences of __phase18_header_N with scoped header names using Rust token spans (not string replacement). Macro-contained Rust tokens were included; string literals and historical fixture/log identifiers were not renamed. Three apparent existing-header capture candidates were examined: each was the module path rocketmq_classic_protocol::header, not a competing value binding.
+
+Moved top-level unit-test and #[cfg(test)] items after production items, retaining their original module scope, ordering within each category, attributes, helpers, assertions and attached comments. Inlined the three external unit modules into their original parent module at the end of the owning file:
+- push/consumer/tests.rs into push/consumer.rs;
+- header/basic/tests.rs into header/basic.rs;
+- client/tests.rs into client/mod.rs.
+Compile-time include_str!/include_bytes! paths were rebased to the same resolved files. Cargo integration tests and shared support modules remain separate. No API, dependency, configuration, runtime or test assertion was changed. External unit modules are valid Rust; inline placement is the user-requested repository convention, not a language restriction.
+
+Independent mechanical verification: saved the original sources outside the repository; expanded their external unit modules with resolved fixture paths, normalized identifiers, and ran the same rustfmt version. Compared sorted parsed Rust item token streams against the final sources using syn/proc_macro2. Result: all 258 remaining source files have identical parsed item tokens modulo the explicitly allowed renaming, placement and module/path transformations. The first unformatted comparison showed rustfmt-only trailing commas/closure braces after inlining; formatting the reference resolved these differences. The temporary comparison utilities/dependencies remain outside the repository and do not change Cargo.toml or Cargo.lock.
+
+Validation executed locally:
+- cargo clippy --workspace --all-targets --all-features --locked -- -D warnings: pass.
+- cargo test --workspace --lib --locked: 8 suites, 1085 passed, 0 failed/ignored.
+- cargo test --workspace --test '*' --locked: 79 suites, 755 passed, 0 failed/ignored (local scripted peers; no remote Broker/production service).
+- cargo test --workspace --bins --locked: 11 passed, 0 failed/ignored.
+- cargo test --workspace --doc --locked: 7 suites, 258 passed, 0 failed/ignored.
+- Total: 2109 passed. No test was removed or weakened.
+- cargo fmt --all -- --check and git diff --check: pass.
+- No __phaseN identifiers remain in Rust sources. Parent test-module identities are retained. No external mod tests declaration remains. Root examples required no changes.
+
+Added docs/guides/rust-source-layout.md describing the chosen layout, integration-test/support exceptions and naming convention. No current documentation referenced the removed external unit-test paths; historical plans/rlogs were left intact.
+This is a source-only structural change, so live Broker/Java parity runs were not repeated. Previous behavioral evidence remains historical rather than falsely attributed to this revision.

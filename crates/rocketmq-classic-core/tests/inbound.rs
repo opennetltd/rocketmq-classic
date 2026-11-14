@@ -30,6 +30,43 @@ async fn write(stream: &mut TcpStream, command: &RemotingCommand) {
         .unwrap();
 }
 
+struct Handler {
+    remote: String,
+    calls: AtomicUsize,
+}
+impl RequestProcessor for Handler {
+    fn process(&self, _: RemotingCommand) -> Result<Option<RemotingCommand>, String> {
+        panic!("channel context missing");
+    }
+    fn process_with_context(
+        &self,
+        remote: &str,
+        command: RemotingCommand,
+    ) -> Result<Option<RemotingCommand>, String> {
+        assert_eq!(remote, self.remote);
+        assert_eq!(command.code, request::CONSUME_MESSAGE_DIRECTLY);
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(Some(RemotingCommand {
+            code: 0,
+            remark: Some("owner activated".into()),
+            ..Default::default()
+        }))
+    }
+}
+struct Consumer(Arc<Handler>);
+impl ConsumerRuntime for Consumer {
+    fn heartbeat_data(&self) -> ConsumerData {
+        ConsumerData {
+            group_name: Some("consumer".into()),
+            ..Default::default()
+        }
+    }
+    fn inbound_processor(&self, operation: ConsumerOperation) -> Option<Arc<dyn RequestProcessor>> {
+        (operation == ConsumerOperation::ConsumeDirectly)
+            .then(|| self.0.clone() as Arc<dyn RequestProcessor>)
+    }
+}
+
 #[tokio::test]
 async fn inactive_runtime_slots_match_phase_errors_and_no_dispatch_silence() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -124,43 +161,6 @@ async fn inactive_runtime_slots_match_phase_errors_and_no_dispatch_silence() {
             .remoting()
             .with_processor_table(|table| table.is_empty())
     );
-}
-
-struct Handler {
-    remote: String,
-    calls: AtomicUsize,
-}
-impl RequestProcessor for Handler {
-    fn process(&self, _: RemotingCommand) -> Result<Option<RemotingCommand>, String> {
-        panic!("channel context missing");
-    }
-    fn process_with_context(
-        &self,
-        remote: &str,
-        command: RemotingCommand,
-    ) -> Result<Option<RemotingCommand>, String> {
-        assert_eq!(remote, self.remote);
-        assert_eq!(command.code, request::CONSUME_MESSAGE_DIRECTLY);
-        self.calls.fetch_add(1, Ordering::SeqCst);
-        Ok(Some(RemotingCommand {
-            code: 0,
-            remark: Some("owner activated".into()),
-            ..Default::default()
-        }))
-    }
-}
-struct Consumer(Arc<Handler>);
-impl ConsumerRuntime for Consumer {
-    fn heartbeat_data(&self) -> ConsumerData {
-        ConsumerData {
-            group_name: Some("consumer".into()),
-            ..Default::default()
-        }
-    }
-    fn inbound_processor(&self, operation: ConsumerOperation) -> Option<Arc<dyn RequestProcessor>> {
-        (operation == ConsumerOperation::ConsumeDirectly)
-            .then(|| self.0.clone() as Arc<dyn RequestProcessor>)
-    }
 }
 
 #[tokio::test]

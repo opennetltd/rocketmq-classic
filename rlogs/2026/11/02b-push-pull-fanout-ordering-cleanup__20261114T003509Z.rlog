@@ -1,0 +1,23 @@
+Plan 02b completion/review session — 2026-11-14 UTC
+Started from 8d69ad51 with eight existing modified implementation/documentation files; retained and reviewed that partial work. Plan files and production dispatcher are unchanged.
+
+Phase 3.1: reviewed Java/Rust locked clock sampling and concurrency/response-race fixtures. Commit 5f1d635c includes both recorders and tests. Rust probe tests: 11 passed. Java targeted command `mvn -o -q -f compat/java-reference/pom.xml exec:java@verify-live-pull-fanout-fixtures`: exit 0, 151 checks passed.
+Phase 3.2: reviewed raw-nanosecond elapsed gate deadline and delayed/exact-limit/one-nanosecond-past fixtures. Commit 9a1521d3. Checker --self-test: 23 synthetic cases passed.
+Phase 3.3: partial implementation still detached the scenario on timeout and dropped an aborted task on a second timeout. Fixed both by retaining the scenario/peer handle and awaiting abort completion. Added Drop-based harness ownership (including cancellation before run's first poll), abort guards for cleanup iteration and scenario ownership, direct await of early-abort witness, and scenario-timeout, harness-cancellation and child-panic regressions. Commit e282accd. Peer tests: 8 passed, including original two rounds, abandoned socket, injected assertion, forced timeouts, early abort and the three new cases. Graceful cleanup has a budget; abort draining is awaited rather than detached at another deadline.
+
+Verification actually executed:
+- cargo test -p rocketmq-classic-consumer --test push_pull_fanout --locked: 8 passed.
+- cargo test -p rocketmq-classic-integration --bin live_client --locked: 11 passed.
+- cargo test -p rocketmq-classic-consumer push::pull_service::tests --locked: 17 passed.
+- python3 tests/differential/check_p10_fanout.py --self-test: 23 cases passed.
+- bash tests/differential/run.sh --self-test: passed subgroup ownership and evidence-contract self-tests.
+- bash tests/differential/run.sh --check-all: 38 supported rows, no Docker resources started.
+- cargo fmt --all -- --check: passed.
+- cargo clippy --workspace --all-targets --all-features --locked -- -D warnings: passed after final changes.
+- git diff --check: passed.
+- mvn -o -q -f compat/java-reference/pom.xml verify: exit 1 at verify-runtime-address-fixtures, fixtures/runtime/address.json drift. Existing exact-environment limitation; did not regenerate the fixture or weaken its gate. Host java -version reports Zulu 21.0.13.0.3; Maven uses its configured Java launcher.
+- Supplemental portable verify is recorded below when complete; it is not a substitute for a passing standard gate.
+
+Final plan audit: 3.1 recorder transitions and 3.2 gate bound verified; 3.3 cleanup now preserves ownership through timeout, panic, cancellation and abort-before-first-poll; 3.4 current docs describe local evidence only. Phase commits separate recorder, checker and peer work; final documentation/log commit records this session. No new dependencies or public APIs; no original plan changes.
+Owner-only outstanding verification: run P10-V05 using the Plan 02b host-routed disposable Broker command, archive both language logs and checker verdict, then run the final local aggregate. These live commands were not executed. P10-V05 remains PENDING_PHASE_19 and earlier 37-case evidence is not extended to this case.
+Supplemental completion: `mvn -o -q -f compat/java-reference/pom.xml verify -Druntime.address.fixture.verify.mode=--verify-portable` exited 0. Final output includes Java decoded 19 Rust typed body fixtures and LivePullFanoutProbe fixtures PASS (151 checks). Standard verify remains failed only at the exact-environment address fixture gate above.

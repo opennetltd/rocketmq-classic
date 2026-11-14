@@ -384,17 +384,17 @@ impl TransactionProducer {
                 .map(str::to_owned))
             .ok_or_else(|| ProducerError::NoRoute(message.topic().to_owned()))?;
         let header = {
-            let mut __phase18_header_0 = EndTransactionRequestHeader::default();
-            __phase18_header_0.set_topic(Some(message.topic().to_owned()));
-            __phase18_header_0.set_producer_group(self.producer.producer_group());
-            __phase18_header_0.set_tran_state_table_offset(Some(send_result.queue_offset));
-            __phase18_header_0.set_commit_log_offset(Some(commit_log_offset));
-            __phase18_header_0.set_commit_or_rollback(Some(transaction_flag(state)));
-            __phase18_header_0.set_from_transaction_check(Some(false));
-            __phase18_header_0.set_msg_id(Some(send_result.msg_id.clone()));
-            __phase18_header_0.set_transaction_id(send_result.transaction_id.clone());
-            __phase18_header_0.set_broker_name(Some(send_result.broker_name.clone()));
-            __phase18_header_0
+            let mut header = EndTransactionRequestHeader::default();
+            header.set_topic(Some(message.topic().to_owned()));
+            header.set_producer_group(self.producer.producer_group());
+            header.set_tran_state_table_offset(Some(send_result.queue_offset));
+            header.set_commit_log_offset(Some(commit_log_offset));
+            header.set_commit_or_rollback(Some(transaction_flag(state)));
+            header.set_from_transaction_check(Some(false));
+            header.set_msg_id(Some(send_result.msg_id.clone()));
+            header.set_transaction_id(send_result.transaction_id.clone());
+            header.set_broker_name(Some(send_result.broker_name.clone()));
+            header
         };
         let remark =
             callback_error.map(|error| format!("executeLocalTransactionBranch exception: {error}"));
@@ -808,19 +808,17 @@ impl TransactionRuntime {
             .cloned()
             .unwrap_or_else(|| message.message_id().unwrap_or_default().to_owned());
         let header = {
-            let mut __phase18_header_1 = EndTransactionRequestHeader::default();
-            __phase18_header_1.set_topic(check_header.get_topic().map(str::to_owned));
-            __phase18_header_1.set_producer_group(producer.producer_group());
-            __phase18_header_1
-                .set_tran_state_table_offset(Some(check_header.get_tran_state_table_offset()));
-            __phase18_header_1.set_commit_log_offset(Some(check_header.get_commit_log_offset()));
-            __phase18_header_1.set_commit_or_rollback(Some(transaction_flag(state)));
-            __phase18_header_1.set_from_transaction_check(Some(true));
-            __phase18_header_1.set_msg_id(Some(unique_key));
-            __phase18_header_1
-                .set_transaction_id(check_header.get_transaction_id().map(str::to_owned));
-            __phase18_header_1.set_broker_name(check_header.get_broker_name().map(str::to_owned));
-            __phase18_header_1
+            let mut header = EndTransactionRequestHeader::default();
+            header.set_topic(check_header.get_topic().map(str::to_owned));
+            header.set_producer_group(producer.producer_group());
+            header.set_tran_state_table_offset(Some(check_header.get_tran_state_table_offset()));
+            header.set_commit_log_offset(Some(check_header.get_commit_log_offset()));
+            header.set_commit_or_rollback(Some(transaction_flag(state)));
+            header.set_from_transaction_check(Some(true));
+            header.set_msg_id(Some(unique_key));
+            header.set_transaction_id(check_header.get_transaction_id().map(str::to_owned));
+            header.set_broker_name(check_header.get_broker_name().map(str::to_owned));
+            header
         };
         let remark =
             callback_error.map(|error| format!("checkLocalTransactionState Exception: {error}"));

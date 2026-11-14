@@ -27,9 +27,6 @@ use crate::{
     validation,
 };
 
-#[cfg(test)]
-use crate::producer::ScriptedSendAttempt;
-
 struct PreparedMessage {
     topic: String,
     body: Vec<u8>,
@@ -1726,21 +1723,21 @@ impl Producer {
             return Err(ProducerError::Timeout);
         }
         let header = {
-            let mut __phase18_header_0 = SendMessageRequestHeaderV1::default();
-            __phase18_header_0.set_producer_group(self.producer_group());
-            __phase18_header_0.set_topic(attempt.prepared.topic.clone());
-            __phase18_header_0.set_default_topic(self.config.create_topic_key());
-            __phase18_header_0.set_default_topic_queue_nums(self.config.default_topic_queue_nums());
-            __phase18_header_0.set_queue_id(attempt.queue.queue_id());
-            __phase18_header_0.set_sys_flag(attempt.prepared.sys_flag);
-            __phase18_header_0.set_born_timestamp(attempt.prepared.born_timestamp);
-            __phase18_header_0.set_flag(attempt.prepared.flag);
-            __phase18_header_0.set_properties(attempt.prepared.properties.clone());
-            __phase18_header_0.set_reconsume_times(attempt.prepared.reconsume_times);
-            __phase18_header_0.set_unit_mode(Some(self.config.client_config().unit_mode()));
-            __phase18_header_0.set_max_reconsume_times(attempt.prepared.max_reconsume_times);
-            __phase18_header_0.set_batch(Some(attempt.prepared.batch));
-            __phase18_header_0
+            let mut header = SendMessageRequestHeaderV1::default();
+            header.set_producer_group(self.producer_group());
+            header.set_topic(attempt.prepared.topic.clone());
+            header.set_default_topic(self.config.create_topic_key());
+            header.set_default_topic_queue_nums(self.config.default_topic_queue_nums());
+            header.set_queue_id(attempt.queue.queue_id());
+            header.set_sys_flag(attempt.prepared.sys_flag);
+            header.set_born_timestamp(attempt.prepared.born_timestamp);
+            header.set_flag(attempt.prepared.flag);
+            header.set_properties(attempt.prepared.properties.clone());
+            header.set_reconsume_times(attempt.prepared.reconsume_times);
+            header.set_unit_mode(Some(self.config.client_config().unit_mode()));
+            header.set_max_reconsume_times(attempt.prepared.max_reconsume_times);
+            header.set_batch(Some(attempt.prepared.batch));
+            header
         };
         let send_kind = rocketmq_classic_core::api::MQClientApi::send_kind_for_message(
             attempt.prepared.batch,
@@ -2223,6 +2220,9 @@ fn classify_fault(error: &RpcError, mode: SendMode, detector_enabled: bool) -> (
         },
     }
 }
+
+#[cfg(test)]
+use crate::producer::ScriptedSendAttempt;
 
 #[cfg(test)]
 mod tests {

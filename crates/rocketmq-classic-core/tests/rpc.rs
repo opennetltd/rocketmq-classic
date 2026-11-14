@@ -123,6 +123,39 @@ macro_rules! broker_attempt {
     }};
 }
 
+async fn route_reply(code: i32, body: Option<Vec<u8>>) -> (MQClientApi, RemotingClient) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut length = [0; 4];
+        stream.read_exact(&mut length).await.unwrap();
+        let mut bytes = BytesMut::from(&length[..]);
+        let size = u32::from_be_bytes(length) as usize;
+        bytes.resize(size + 4, 0);
+        stream.read_exact(&mut bytes[4..]).await.unwrap();
+        let incoming = frame::decode_next(&mut bytes).unwrap().unwrap();
+        assert_eq!(incoming.code, request::GET_ROUTEINFO_BY_TOPIC);
+        assert_eq!(incoming.ext_fields.unwrap()["topic"], "test-topic");
+        let mut reply = RemotingCommand {
+            code,
+            opaque: incoming.opaque,
+            remark: Some("not found".into()),
+            body,
+            ..RemotingCommand::default()
+        };
+        reply.mark_response();
+        stream
+            .write_all(&frame::encode(&reply).unwrap())
+            .await
+            .unwrap();
+    });
+    let client = RemotingClient::new(TransportMode::Plain);
+    client.update_name_server_address_list(vec![address.to_string()]);
+    client.start().unwrap();
+    (MQClientApi::new(client.clone()), client)
+}
+
 #[tokio::test]
 async fn broker_methods_use_one_attempt_and_honor_deadline() {
     broker_attempt!(
@@ -132,9 +165,9 @@ async fn broker_methods_use_one_attempt_and_honor_deadline() {
         |api, addr, deadline| api.pull_message(
             addr,
             &{
-                let mut __phase18_header_0 = PullMessageRequestHeader::default();
-                __phase18_header_0.set_sys_flag(Some(0));
-                __phase18_header_0
+                let mut header = PullMessageRequestHeader::default();
+                header.set_sys_flag(Some(0));
+                header
             },
             deadline
         )
@@ -146,9 +179,9 @@ async fn broker_methods_use_one_attempt_and_honor_deadline() {
         |api, addr, deadline| api.pull_message_future(
             addr,
             &{
-                let mut __phase18_header_1 = PullMessageRequestHeader::default();
-                __phase18_header_1.set_sys_flag(Some(0));
-                __phase18_header_1
+                let mut header = PullMessageRequestHeader::default();
+                header.set_sys_flag(Some(0));
+                header
             },
             deadline
         )
@@ -160,13 +193,13 @@ async fn broker_methods_use_one_attempt_and_honor_deadline() {
         |api, addr, deadline| api.pull_message(
             addr,
             &{
-                let mut __phase18_header_2 = PullMessageRequestHeader::default();
-                __phase18_header_2.set_sys_flag(Some(
+                let mut header = PullMessageRequestHeader::default();
+                header.set_sys_flag(Some(
                     rocketmq_classic_common::sysflag::pull::build_pull_sys_flag_with_lite(
                         false, false, false, false, true,
                     ),
                 ));
-                __phase18_header_2
+                header
             },
             deadline
         )
@@ -178,13 +211,13 @@ async fn broker_methods_use_one_attempt_and_honor_deadline() {
         |api, addr, deadline| api.pull_message_future(
             addr,
             &{
-                let mut __phase18_header_3 = PullMessageRequestHeader::default();
-                __phase18_header_3.set_sys_flag(Some(
+                let mut header = PullMessageRequestHeader::default();
+                header.set_sys_flag(Some(
                     rocketmq_classic_common::sysflag::pull::build_pull_sys_flag_with_lite(
                         false, false, false, false, true,
                     ),
                 ));
-                __phase18_header_3
+                header
             },
             deadline
         )
@@ -380,12 +413,12 @@ async fn broker_methods_use_one_attempt_and_honor_deadline() {
         |api, addr, deadline| api.recall_message(
             addr,
             &{
-                let mut __phase18_header_4 = RecallMessageRequestHeader::default();
-                __phase18_header_4.set_producer_group(Some("recall-group".into()));
-                __phase18_header_4.set_topic("recall-topic".into());
-                __phase18_header_4.set_recall_handle("v1-handle".into());
-                __phase18_header_4.set_broker_name(Some("broker-a".into()));
-                __phase18_header_4
+                let mut header = RecallMessageRequestHeader::default();
+                header.set_producer_group(Some("recall-group".into()));
+                header.set_topic("recall-topic".into());
+                header.set_recall_handle("v1-handle".into());
+                header.set_broker_name(Some("broker-a".into()));
+                header
             },
             deadline
         )
@@ -429,12 +462,12 @@ async fn recall_message_matches_java_request_header_and_decodes_broker_msg_id() 
     client.start().unwrap();
     let api = MQClientApi::new(client.clone());
     let header = {
-        let mut __phase18_header_5 = RecallMessageRequestHeader::default();
-        __phase18_header_5.set_producer_group(Some("recall-group".into()));
-        __phase18_header_5.set_topic("recall-topic".into());
-        __phase18_header_5.set_recall_handle("v1-handle".into());
-        __phase18_header_5.set_broker_name(Some("broker-a".into()));
-        __phase18_header_5
+        let mut header = RecallMessageRequestHeader::default();
+        header.set_producer_group(Some("recall-group".into()));
+        header.set_topic("recall-topic".into());
+        header.set_recall_handle("v1-handle".into());
+        header.set_broker_name(Some("broker-a".into()));
+        header
     };
 
     assert_eq!(
@@ -473,10 +506,10 @@ async fn recall_message_preserves_broker_errors_and_nullable_success_header() {
         .recall_message(
             &addr,
             &{
-                let mut __phase18_header_6 = RecallMessageRequestHeader::default();
-                __phase18_header_6.set_topic("recall-topic".into());
-                __phase18_header_6.set_recall_handle("v1-handle".into());
-                __phase18_header_6
+                let mut header = RecallMessageRequestHeader::default();
+                header.set_topic("recall-topic".into());
+                header.set_recall_handle("v1-handle".into());
+                header
             },
             Instant::now() + Duration::from_secs(1),
         )
@@ -496,10 +529,10 @@ async fn recall_message_preserves_broker_errors_and_nullable_success_header() {
         .recall_message(
             &addr,
             &{
-                let mut __phase18_header_7 = RecallMessageRequestHeader::default();
-                __phase18_header_7.set_topic("recall-topic".into());
-                __phase18_header_7.set_recall_handle("v1-handle".into());
-                __phase18_header_7
+                let mut header = RecallMessageRequestHeader::default();
+                header.set_topic("recall-topic".into());
+                header.set_recall_handle("v1-handle".into());
+                header
             },
             Instant::now() + Duration::from_secs(1),
         )
@@ -516,10 +549,10 @@ async fn recall_message_preserves_broker_errors_and_nullable_success_header() {
         .recall_message(
             &addr,
             &{
-                let mut __phase18_header_8 = RecallMessageRequestHeader::default();
-                __phase18_header_8.set_topic("recall-topic".into());
-                __phase18_header_8.set_recall_handle("v1-handle".into());
-                __phase18_header_8
+                let mut header = RecallMessageRequestHeader::default();
+                header.set_topic("recall-topic".into());
+                header.set_recall_handle("v1-handle".into());
+                header
             },
             Instant::now() + Duration::from_secs(1),
         )
@@ -527,39 +560,6 @@ async fn recall_message_preserves_broker_errors_and_nullable_success_header() {
     assert_eq!(result.unwrap(), None);
     assert_eq!(peer.await.unwrap()[0].code, request::RECALL_MESSAGE);
     client.shutdown().await;
-}
-
-async fn route_reply(code: i32, body: Option<Vec<u8>>) -> (MQClientApi, RemotingClient) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        let (mut stream, _) = listener.accept().await.unwrap();
-        let mut length = [0; 4];
-        stream.read_exact(&mut length).await.unwrap();
-        let mut bytes = BytesMut::from(&length[..]);
-        let size = u32::from_be_bytes(length) as usize;
-        bytes.resize(size + 4, 0);
-        stream.read_exact(&mut bytes[4..]).await.unwrap();
-        let incoming = frame::decode_next(&mut bytes).unwrap().unwrap();
-        assert_eq!(incoming.code, request::GET_ROUTEINFO_BY_TOPIC);
-        assert_eq!(incoming.ext_fields.unwrap()["topic"], "test-topic");
-        let mut reply = RemotingCommand {
-            code,
-            opaque: incoming.opaque,
-            remark: Some("not found".into()),
-            body,
-            ..RemotingCommand::default()
-        };
-        reply.mark_response();
-        stream
-            .write_all(&frame::encode(&reply).unwrap())
-            .await
-            .unwrap();
-    });
-    let client = RemotingClient::new(TransportMode::Plain);
-    client.update_name_server_address_list(vec![address.to_string()]);
-    client.start().unwrap();
-    (MQClientApi::new(client.clone()), client)
 }
 
 #[tokio::test]

@@ -190,18 +190,18 @@ async fn java_invoked_cases_match_rust_requests_and_outcomes() {
             }
             name if name.starts_with("send-") => {
                 let header = {
-                    let mut __phase18_header_0 = SendMessageRequestHeaderV1::default();
-                    __phase18_header_0.set_producer_group(Some("producer".into()));
-                    __phase18_header_0.set_topic("oracle-topic".into());
-                    __phase18_header_0.set_default_topic("TBW102".into());
-                    __phase18_header_0.set_default_topic_queue_nums(4);
-                    __phase18_header_0.set_queue_id(2);
-                    __phase18_header_0.set_born_timestamp(1);
-                    __phase18_header_0.set_properties(Some(String::new()));
-                    __phase18_header_0.set_reconsume_times(Some(0));
-                    __phase18_header_0.set_unit_mode(Some(false));
-                    __phase18_header_0.set_batch(Some(false));
-                    __phase18_header_0
+                    let mut header = SendMessageRequestHeaderV1::default();
+                    header.set_producer_group(Some("producer".into()));
+                    header.set_topic("oracle-topic".into());
+                    header.set_default_topic("TBW102".into());
+                    header.set_default_topic_queue_nums(4);
+                    header.set_queue_id(2);
+                    header.set_born_timestamp(1);
+                    header.set_properties(Some(String::new()));
+                    header.set_reconsume_times(Some(0));
+                    header.set_unit_mode(Some(false));
+                    header.set_batch(Some(false));
+                    header
                 };
                 match api
                     .send_message(

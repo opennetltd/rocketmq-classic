@@ -16,25 +16,6 @@ use tokio::{
     time::{Duration, Instant},
 };
 
-#[cfg(test)]
-#[derive(Default)]
-pub(super) struct TaskProbe {
-    pub created: std::sync::atomic::AtomicUsize,
-    pub live: std::sync::atomic::AtomicUsize,
-}
-
-#[cfg(test)]
-pub(super) struct LiveTask(pub(super) Arc<TaskProbe>);
-
-#[cfg(test)]
-impl Drop for LiveTask {
-    fn drop(&mut self) {
-        self.0
-            .live
-            .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
-    }
-}
-
 #[derive(Clone, Copy, Debug)]
 pub(super) enum TaskKind {
     Discovery,
@@ -1367,6 +1348,25 @@ impl Drop for OwnedTasks {
         if let Some(task) = self.task.take() {
             task.abort();
         }
+    }
+}
+
+#[cfg(test)]
+#[derive(Default)]
+pub(super) struct TaskProbe {
+    pub created: std::sync::atomic::AtomicUsize,
+    pub live: std::sync::atomic::AtomicUsize,
+}
+
+#[cfg(test)]
+pub(super) struct LiveTask(pub(super) Arc<TaskProbe>);
+
+#[cfg(test)]
+impl Drop for LiveTask {
+    fn drop(&mut self) {
+        self.0
+            .live
+            .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
     }
 }
 

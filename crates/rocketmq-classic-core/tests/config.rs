@@ -132,6 +132,31 @@ fn client_config_from_java_text_fields(fields: &Value) -> ClientConfig {
     config
 }
 
+fn message_queue_value(queue: &MessageQueue) -> Value {
+    serde_json::json!({
+        "topic": queue.topic(),
+        "brokerName": queue.broker_name(),
+        "queueId": queue.queue_id(),
+    })
+}
+
+fn message_queue_rows(queues: Option<&[Option<MessageQueue>]>) -> Value {
+    match queues {
+        None => Value::Null,
+        Some(queues) => Value::Array(
+            queues
+                .iter()
+                .map(|queue| {
+                    queue
+                        .as_ref()
+                        .map(message_queue_value)
+                        .unwrap_or(Value::Null)
+                })
+                .collect(),
+        ),
+    }
+}
+
 #[test]
 fn default_constructor_selects_a_local_ip_before_identity_construction() {
     let config = ClientConfig::default();
@@ -1024,31 +1049,6 @@ fn access_channel_enum_methods_match_invoked_java() {
             }
             kind => panic!("unknown Java AccessChannel case: {kind}"),
         }
-    }
-}
-
-fn message_queue_value(queue: &MessageQueue) -> Value {
-    serde_json::json!({
-        "topic": queue.topic(),
-        "brokerName": queue.broker_name(),
-        "queueId": queue.queue_id(),
-    })
-}
-
-fn message_queue_rows(queues: Option<&[Option<MessageQueue>]>) -> Value {
-    match queues {
-        None => Value::Null,
-        Some(queues) => Value::Array(
-            queues
-                .iter()
-                .map(|queue| {
-                    queue
-                        .as_ref()
-                        .map(message_queue_value)
-                        .unwrap_or(Value::Null)
-                })
-                .collect(),
-        ),
     }
 }
 

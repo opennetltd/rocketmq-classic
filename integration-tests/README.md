@@ -158,10 +158,14 @@ configuration, output, and cleanup records are written outside the checkout to
 `ROCKETMQ_CLASSIC_EVIDENCE_DIR` or a system temporary directory. A manifest row
 becomes `PASS` in the local run copy only after comparison and cleanup succeed.
 
-The runner now implements all 37 manifest scenarios. The full local aggregate
-run reconciled every row after comparison and cleanup; the checked-in manifest
-records `PASS_RECORDED` summaries, while raw test artifacts remain local and
-are not committed. Set `ROCKETMQ_CLASSIC_EVIDENCE_DIR` to choose an output
+The runner now implements all 38 manifest scenarios. The recorded full local
+aggregate run reconciled the previous 37 rows after comparison and cleanup; the
+checked-in manifest keeps their `PASS_RECORDED` summaries, while raw test
+artifacts remain local and are not committed. The additional `P10-V05` case passed
+on clean revision `6d6db7ed` against the disposable 5.3.4 host-routed Broker on
+2026-11-14, including comparison and cleanup. Its summary is `PASS_RECORDED`;
+the full 38-case aggregate has not been rerun. See the
+[re-review log](../rlogs/2026/11/02b-push-pull-fanout-ordering-cleanup__20261114T004734Z.rlog). Set `ROCKETMQ_CLASSIC_EVIDENCE_DIR` to choose an output
 directory outside the checkout. This establishes the registered local
 compatibility matrix only; owner-specific deployment validation remains in
 [docs/owner-validation.md](../docs/owner-validation.md). See

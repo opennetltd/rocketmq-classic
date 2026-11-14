@@ -115,14 +115,14 @@ async fn java_invoked_producer_requests_and_outcomes_match() {
         let deadline = Instant::now() + Duration::from_secs(3);
         let outcome = if name == "end-transaction-oneway" {
             let header = {
-                let mut __phase18_header_0 = EndTransactionRequestHeader::default();
-                __phase18_header_0.set_producer_group(Some("producer".into()));
-                __phase18_header_0.set_tran_state_table_offset(Some(3));
-                __phase18_header_0.set_commit_log_offset(Some(9));
-                __phase18_header_0.set_commit_or_rollback(Some(8));
-                __phase18_header_0.set_from_transaction_check(Some(false));
-                __phase18_header_0.set_msg_id(Some("transaction-id".into()));
-                __phase18_header_0
+                let mut header = EndTransactionRequestHeader::default();
+                header.set_producer_group(Some("producer".into()));
+                header.set_tran_state_table_offset(Some(3));
+                header.set_commit_log_offset(Some(9));
+                header.set_commit_or_rollback(Some(8));
+                header.set_from_transaction_check(Some(false));
+                header.set_msg_id(Some("transaction-id".into()));
+                header
             };
             api.end_transaction_oneway(&addr, &header, Some("offline end".into()), deadline)
                 .await
@@ -130,18 +130,18 @@ async fn java_invoked_producer_requests_and_outcomes_match() {
             "ok".to_owned()
         } else {
             let header = {
-                let mut __phase18_header_1 = SendMessageRequestHeaderV1::default();
-                __phase18_header_1.set_producer_group(Some("producer".into()));
-                __phase18_header_1.set_topic("oracle-topic".into());
-                __phase18_header_1.set_default_topic("TBW102".into());
-                __phase18_header_1.set_default_topic_queue_nums(4);
-                __phase18_header_1.set_queue_id(2);
-                __phase18_header_1.set_born_timestamp(1);
-                __phase18_header_1.set_properties(Some(String::new()));
-                __phase18_header_1.set_reconsume_times(Some(0));
-                __phase18_header_1.set_unit_mode(Some(false));
-                __phase18_header_1.set_batch(Some(name == "send-batch-oneway"));
-                __phase18_header_1
+                let mut header = SendMessageRequestHeaderV1::default();
+                header.set_producer_group(Some("producer".into()));
+                header.set_topic("oracle-topic".into());
+                header.set_default_topic("TBW102".into());
+                header.set_default_topic_queue_nums(4);
+                header.set_queue_id(2);
+                header.set_born_timestamp(1);
+                header.set_properties(Some(String::new()));
+                header.set_reconsume_times(Some(0));
+                header.set_unit_mode(Some(false));
+                header.set_batch(Some(name == "send-batch-oneway"));
+                header
             };
             let (kind, body) = match name {
                 "send-batch-oneway" => (

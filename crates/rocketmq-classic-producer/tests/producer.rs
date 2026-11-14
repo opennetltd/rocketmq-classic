@@ -32,6 +32,14 @@ type ProducerConstructorCase<'a> = (
     bool,
 );
 
+fn accumulator_fixture_config(group: &str, instance_name: &str) -> ProducerConfig {
+    let mut config = ProducerConfig::new(group).unwrap();
+    config
+        .client_config_mut()
+        .set_instance_name(Some(instance_name.to_owned()));
+    config
+}
+
 #[test]
 fn java_default_settings_are_present() {
     let config = ProducerConfig::new("producer-test").unwrap();
@@ -2503,14 +2511,6 @@ fn producer_auto_batch_getter_and_setter_follow_accumulator_lifecycle() {
         producer.auto_batch(),
         fixture["autoBatchLifecycle"]["enabledAfterRuntimeToggle"]
     );
-}
-
-fn accumulator_fixture_config(group: &str, instance_name: &str) -> ProducerConfig {
-    let mut config = ProducerConfig::new(group).unwrap();
-    config
-        .client_config_mut()
-        .set_instance_name(Some(instance_name.to_owned()));
-    config
 }
 
 #[test]

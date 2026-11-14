@@ -116,10 +116,9 @@ impl ConsumerRuntime for PushConsumerRegistration {
         let request = request.as_any().downcast_ref::<PullRequest>()?;
         let request = Arc::new(request.clone());
         if let Err(request) = self.pull_rpc_workers.try_submit(request) {
-            let _ = self.pull_scheduler.schedule(
-                request.clone(),
-                PULL_TIME_DELAY_MILLIS_WHEN_CACHE_FLOW_CONTROL,
-            );
+            // Admission is closed: release the queue-generation slot and drop
+            // the request instead of re-queuing it. The dispatcher owns the
+            // only path to a Pull RPC, so no attempt can follow.
             self.pull_scheduler.finish(&request);
         }
         Some(Box::pin(async {}))
