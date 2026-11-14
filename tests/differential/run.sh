@@ -81,7 +81,7 @@ fanout_require_empty_topic() {
     fi
     printf '# mqadmin topicStatus -n namesrv:9876 -t %s\n%s\n' "$1" "$output" \
         >>"$evidence_dir/topic-status.log"
-    rows=$(printf '%s\n' "$output" | awk '$1 !~ /^#/ && NF >= 4 { print $4 }')
+    rows=$(printf '%s\n' "$output" | awk '$1 !~ /^#/ && NF >= 4 && $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ { print $4 }')
     if [[ -z "$rows" ]]; then
         printf 'P10-V05 topic %s reports no queue offsets, so it is not a usable empty topic\n' \
             "$1" >&2
@@ -227,7 +227,7 @@ selftest_fanout_evidence_contract() {
     # A completed run records both topics' offsets and writes the PASS line.
     evidence_dir="$dir/complete"
     mkdir -p "$evidence_dir"
-    fanout_stub_topic_status=$'#Broker Name\t#QID\t#Min Offset\t#Max Offset\nbroker-a\t0\t0\t0\nbroker-a\t1\t0\t0'
+    fanout_stub_topic_status=$'#Broker Name\t#QID\t#Min Offset\t#Max Offset\nbroker-a\t0\t0\t0\nbroker-a\t1\t0\t0\n\nTopic Put TPS: 0.0'
     fanout_stub_probe_mode="ok"
     if ! run_fanout_sequence >"$dir/complete.out" 2>&1; then
         echo "fan-out self-test: a complete run should pass:" >&2
