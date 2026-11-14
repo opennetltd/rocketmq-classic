@@ -6417,12 +6417,12 @@ async fn push_pull_outcomes_insert_found_messages_and_correct_only_drained_offse
 
 #[tokio::test]
 async fn push_pull_request_uses_live_batch_settings_from_consumer_config() {
-    assert_push_pull_live_batch_settings(false).await;
+    assert_push_pull_live_batch_settings(false, Some(42)).await;
 }
 
 #[tokio::test]
 async fn push_pull_slave_clears_commit_flag_but_preserves_commit_value() {
-    assert_push_pull_live_batch_settings(true).await;
+    assert_push_pull_live_batch_settings(true, Some(42)).await;
 }
 
 fn java_push_pull_dispatch_fixture() -> serde_json::Value {
@@ -6432,7 +6432,7 @@ fn java_push_pull_dispatch_fixture() -> serde_json::Value {
     .unwrap()
 }
 
-async fn assert_push_pull_live_batch_settings(slave: bool) {
+async fn assert_push_pull_live_batch_settings(slave: bool, commit: Option<i64>) {
     let nameserver = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let nameserver_address = nameserver.local_addr().unwrap().to_string();
     let broker_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -6475,7 +6475,11 @@ async fn assert_push_pull_live_batch_settings(slave: bool) {
         let java = java_push_pull_dispatch_fixture();
         assert_eq!(
             fields.get("commitOffset"),
-            Some(&java["slaveCommitOffset"].as_i64().unwrap().to_string())
+            Some(
+                &commit
+                    .unwrap_or(java["missingMemoryCommitOffset"].as_i64().unwrap())
+                    .to_string()
+            )
         );
         // Java simple-consumer suspend value; the POP path keeps 20000.
         assert_eq!(
@@ -6486,7 +6490,7 @@ async fn assert_push_pull_live_batch_settings(slave: bool) {
             rocketmq_classic_common::sysflag::pull::has_commit_offset_flag(
                 fields.get("sysFlag").unwrap().parse().unwrap()
             ),
-            !slave
+            !slave && commit.is_some_and(|offset| offset > 0)
         );
         write_remoting_reply(
             stream.as_mut().unwrap(),
@@ -6535,7 +6539,9 @@ async fn assert_push_pull_live_batch_settings(slave: bool) {
     assert_eq!(consumer.config().pull_batch_size_in_bytes(), 12_345);
     let queue = MessageQueue::new("orders", "broker-a", 0);
     let offset_store = Arc::new(RecordingOffsetStore::default());
-    offset_store.update_offset(&queue, 42, false);
+    if let Some(offset) = commit {
+        offset_store.update_offset(&queue, offset, false);
+    }
 
     let request = PullRequest::new(
         "push-live-pull-batch",
@@ -10894,4 +10900,11 @@ async fn orderly_pull_ignores_concurrent_span_but_keeps_cache_limits() {
     );
     consumer.shutdown().await.unwrap();
     runtime.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn push_pull_preserves_disabled_commit_offset_values() {
+    for offset in [None, Some(-2), Some(0)] {
+        assert_push_pull_live_batch_settings(false, offset).await;
+    }
 }

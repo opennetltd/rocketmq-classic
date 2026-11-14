@@ -248,8 +248,8 @@ impl PushConsumer {
                 .await
                 .map_err(|error| self.pull_retry_error(error.to_string()))?
             {
-                OffsetRead::Found(offset) if offset > 0 => offset,
-                OffsetRead::Found(_) | OffsetRead::NotFound => 0,
+                OffsetRead::Found(offset) => offset,
+                OffsetRead::NotFound => -1,
             }
         } else {
             0

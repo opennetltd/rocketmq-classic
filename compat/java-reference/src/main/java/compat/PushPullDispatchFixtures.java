@@ -39,6 +39,7 @@ public final class PushPullDispatchFixtures {
         factory.api = allocate(Api.class);
         factory.service = new Service();
         factory.slave = true;
+        factory.commit = 42L;
         try {
             impl.setServiceState(ServiceState.RUNNING);
             impl.setmQClientFactory(factory);
@@ -47,7 +48,7 @@ public final class PushPullDispatchFixtures {
             wrapper.set(impl, new PullAPIWrapper(factory, "pull-parity", false));
             impl.setOffsetStore((OffsetStore) Proxy.newProxyInstance(OffsetStore.class.getClassLoader(),
                 new Class<?>[] {OffsetStore.class}, (proxy, method, values) -> {
-                    if ("readOffset".equals(method.getName())) { return 42L; }
+                    if ("readOffset".equals(method.getName())) { return factory.commit; }
                     return null;
                 }));
             impl.getRebalanceImpl().getSubscriptionInner().put("orders",
@@ -63,6 +64,13 @@ public final class PushPullDispatchFixtures {
             require(factory.api.header.getCommitOffset() == 42L, "slave retains commitOffset");
             require(!PullSysFlag.hasCommitOffsetFlag(factory.api.header.getSysFlag()),
                 "slave clears only commit flag");
+
+            factory.commit = -1L;
+            impl.pullMessage(request(81));
+            long missingCommit = factory.api.header.getCommitOffset();
+            require(missingCommit == -1L && !PullSysFlag.hasCommitOffsetFlag(factory.api.header.getSysFlag()),
+                "missing memory offset stays -1 with commit disabled");
+            factory.commit = 42L;
 
             consumer.setConsumeConcurrentlyMaxSpan(1);
             PullRequest spaced = request(80);
@@ -89,6 +97,7 @@ public final class PushPullDispatchFixtures {
             result.put("communicationMode", factory.api.mode.name());
             result.put("brokerSuspendMillis", factory.api.header.getSuspendTimeoutMillis());
             result.put("rpcTimeoutMillisAfterRouteRefresh", factory.api.timeout);
+            result.put("missingMemoryCommitOffset", missingCommit);
             result.put("slaveCommitOffset", factory.api.header.getCommitOffset());
             result.put("slaveCommitFlag", PullSysFlag.hasCommitOffsetFlag(factory.api.header.getSysFlag()));
             result.put("concurrentMaxSpanDelayMillis", factory.service.delay);
@@ -141,6 +150,7 @@ public final class PushPullDispatchFixtures {
         Api api;
         Service service;
         boolean slave;
+        long commit;
         int refreshes;
         private Factory() { super(new ClientConfig(), 1, "offline-pull-parity"); }
         @Override public String getBrokerNameFromMessageQueue(MessageQueue queue) { return queue.getBrokerName(); }
