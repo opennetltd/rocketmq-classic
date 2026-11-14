@@ -7,6 +7,15 @@ use rocketmq_classic_protocol::header::{
 };
 use rocketmq_classic_remoting::codec::frame;
 
+fn hex(bytes: &[u8]) -> String {
+    use std::fmt::Write;
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        write!(output, "{byte:02x}").unwrap();
+    }
+    output
+}
+
 #[test]
 fn pinned_java_rpc_replies_decode_in_rust() {
     let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/rpc");
@@ -114,13 +123,4 @@ fn pinned_java_rpc_replies_decode_in_rust() {
             code => panic!("unexpected successful request code {code}"),
         }
     }
-}
-
-fn hex(bytes: &[u8]) -> String {
-    use std::fmt::Write;
-    let mut output = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        write!(output, "{byte:02x}").unwrap();
-    }
-    output
 }

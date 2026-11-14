@@ -126,15 +126,15 @@ async fn java_invoked_consumer_requests_and_outcomes_match() {
             }
         } else {
             let header = {
-                let mut __phase18_header_0 = ConsumerSendMsgBackRequestHeader::default();
-                __phase18_header_0.set_group("consumer".into());
-                __phase18_header_0.set_broker_name(Some("broker".into()));
-                __phase18_header_0.set_origin_topic("oracle-topic".into());
-                __phase18_header_0.set_offset(19);
-                __phase18_header_0.set_delay_level(3);
-                __phase18_header_0.set_origin_msg_id(Some("retry-id".into()));
-                __phase18_header_0.set_max_reconsume_times(Some(5));
-                __phase18_header_0
+                let mut header = ConsumerSendMsgBackRequestHeader::default();
+                header.set_group("consumer".into());
+                header.set_broker_name(Some("broker".into()));
+                header.set_origin_topic("oracle-topic".into());
+                header.set_offset(19);
+                header.set_delay_level(3);
+                header.set_origin_msg_id(Some("retry-id".into()));
+                header.set_max_reconsume_times(Some(5));
+                header
             };
             match api
                 .consumer_send_message_back(&addr, &header, deadline)

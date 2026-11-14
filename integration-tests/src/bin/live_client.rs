@@ -3302,21 +3302,21 @@ async fn oneway_send_and_query(
             .as_millis(),
     )?;
     let header = {
-        let mut __phase18_header_0 = SendMessageRequestHeaderV1::default();
-        __phase18_header_0.set_producer_group(Some("compat_phase0".into()));
-        __phase18_header_0.set_topic(topic.to_owned());
-        __phase18_header_0.set_default_topic("TBW102".into());
-        __phase18_header_0.set_default_topic_queue_nums(4);
-        __phase18_header_0.set_queue_id(0);
-        __phase18_header_0.set_sys_flag(0);
-        __phase18_header_0.set_born_timestamp(born_timestamp);
-        __phase18_header_0.set_flag(0);
-        __phase18_header_0.set_properties(Some(encode_properties(&message.properties())));
-        __phase18_header_0.set_reconsume_times(Some(0));
-        __phase18_header_0.set_unit_mode(Some(false));
-        __phase18_header_0.set_batch(Some(false));
-        __phase18_header_0.set_broker_name(Some("broker-a".into()));
-        __phase18_header_0
+        let mut header = SendMessageRequestHeaderV1::default();
+        header.set_producer_group(Some("compat_phase0".into()));
+        header.set_topic(topic.to_owned());
+        header.set_default_topic("TBW102".into());
+        header.set_default_topic_queue_nums(4);
+        header.set_queue_id(0);
+        header.set_sys_flag(0);
+        header.set_born_timestamp(born_timestamp);
+        header.set_flag(0);
+        header.set_properties(Some(encode_properties(&message.properties())));
+        header.set_reconsume_times(Some(0));
+        header.set_unit_mode(Some(false));
+        header.set_batch(Some(false));
+        header.set_broker_name(Some("broker-a".into()));
+        header
     };
     let result = api
         .send_message(
@@ -3386,25 +3386,25 @@ async fn batch_send(
     let batch_id = ids.set_if_missing(&mut batch_message);
     let body = encode_compact_messages(&messages)?;
     let header = {
-        let mut __phase18_header_1 = SendMessageRequestHeaderV1::default();
-        __phase18_header_1.set_producer_group(Some("compat_phase0".into()));
-        __phase18_header_1.set_topic(topic.to_owned());
-        __phase18_header_1.set_default_topic("TBW102".into());
-        __phase18_header_1.set_default_topic_queue_nums(4);
-        __phase18_header_1.set_queue_id(0);
-        __phase18_header_1.set_sys_flag(0);
-        __phase18_header_1.set_born_timestamp(i64::try_from(
+        let mut header = SendMessageRequestHeaderV1::default();
+        header.set_producer_group(Some("compat_phase0".into()));
+        header.set_topic(topic.to_owned());
+        header.set_default_topic("TBW102".into());
+        header.set_default_topic_queue_nums(4);
+        header.set_queue_id(0);
+        header.set_sys_flag(0);
+        header.set_born_timestamp(i64::try_from(
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?
                 .as_millis(),
         )?);
-        __phase18_header_1.set_flag(0);
-        __phase18_header_1.set_properties(Some(encode_properties(&batch_message.properties())));
-        __phase18_header_1.set_reconsume_times(Some(0));
-        __phase18_header_1.set_unit_mode(Some(false));
-        __phase18_header_1.set_batch(Some(true));
-        __phase18_header_1.set_broker_name(Some("broker-a".into()));
-        __phase18_header_1
+        header.set_flag(0);
+        header.set_properties(Some(encode_properties(&batch_message.properties())));
+        header.set_reconsume_times(Some(0));
+        header.set_unit_mode(Some(false));
+        header.set_batch(Some(true));
+        header.set_broker_name(Some("broker-a".into()));
+        header
     };
     let result = api
         .send_message(
@@ -3463,21 +3463,21 @@ async fn send_with_mode(
             .as_millis(),
     )?;
     let header = {
-        let mut __phase18_header_2 = SendMessageRequestHeaderV1::default();
-        __phase18_header_2.set_producer_group(Some("compat_phase0".into()));
-        __phase18_header_2.set_topic(topic.to_owned());
-        __phase18_header_2.set_default_topic("TBW102".into());
-        __phase18_header_2.set_default_topic_queue_nums(4);
-        __phase18_header_2.set_queue_id(0);
-        __phase18_header_2.set_sys_flag(0);
-        __phase18_header_2.set_born_timestamp(born_timestamp);
-        __phase18_header_2.set_flag(0);
-        __phase18_header_2.set_properties(Some(encode_properties(&message.properties())));
-        __phase18_header_2.set_reconsume_times(Some(0));
-        __phase18_header_2.set_unit_mode(Some(false));
-        __phase18_header_2.set_batch(Some(false));
-        __phase18_header_2.set_broker_name(Some("broker-a".into()));
-        __phase18_header_2
+        let mut header = SendMessageRequestHeaderV1::default();
+        header.set_producer_group(Some("compat_phase0".into()));
+        header.set_topic(topic.to_owned());
+        header.set_default_topic("TBW102".into());
+        header.set_default_topic_queue_nums(4);
+        header.set_queue_id(0);
+        header.set_sys_flag(0);
+        header.set_born_timestamp(born_timestamp);
+        header.set_flag(0);
+        header.set_properties(Some(encode_properties(&message.properties())));
+        header.set_reconsume_times(Some(0));
+        header.set_unit_mode(Some(false));
+        header.set_batch(Some(false));
+        header.set_broker_name(Some("broker-a".into()));
+        header
     };
     let result = api
         .send_message(
@@ -4702,10 +4702,10 @@ async fn view(
         .view_message(
             broker_address,
             &{
-                let mut __phase18_header_0 = ViewMessageRequestHeader::default();
-                __phase18_header_0.set_topic(Some(topic.to_owned()));
-                __phase18_header_0.set_offset(Some(physical_offset));
-                __phase18_header_0
+                let mut header = ViewMessageRequestHeader::default();
+                header.set_topic(Some(topic.to_owned()));
+                header.set_offset(Some(physical_offset));
+                header
             },
             Instant::now() + Duration::from_secs(10),
         )
@@ -4740,10 +4740,10 @@ async fn view_batch(
                 .view_message(
                     broker_address,
                     &{
-                        let mut __phase18_header_1 = ViewMessageRequestHeader::default();
-                        __phase18_header_1.set_topic(Some(topic.to_owned()));
-                        __phase18_header_1.set_offset(Some(physical_offset));
-                        __phase18_header_1
+                        let mut header = ViewMessageRequestHeader::default();
+                        header.set_topic(Some(topic.to_owned()));
+                        header.set_offset(Some(physical_offset));
+                        header
                     },
                     Instant::now() + Duration::from_secs(10),
                 )

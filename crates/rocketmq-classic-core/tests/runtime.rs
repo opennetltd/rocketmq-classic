@@ -25,6 +25,55 @@ struct IdentityHook;
 
 impl RpcHook for IdentityHook {}
 
+struct RouteObserver {
+    runtime: Weak<ClientRuntime>,
+    updates: AtomicUsize,
+    needed: AtomicBool,
+    need_checks: AtomicUsize,
+}
+
+impl ProducerRuntime for RouteObserver {
+    fn update_topic_publish_info(
+        &self,
+        topic: &str,
+        info: Arc<rocketmq_classic_core::route::TopicSnapshot>,
+    ) {
+        let runtime = self.runtime.upgrade().unwrap();
+        assert!(runtime.select_producer("producer").unwrap().is_some());
+        assert_eq!(
+            runtime.route_snapshot().unwrap().topics[topic].publish_queues,
+            info.publish_queues
+        );
+        self.updates.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+impl ConsumerRuntime for RouteObserver {
+    fn heartbeat_data(&self) -> rocketmq_classic_protocol::heartbeat::ConsumerData {
+        rocketmq_classic_protocol::heartbeat::ConsumerData {
+            group_name: Some("consumer".into()),
+            ..Default::default()
+        }
+    }
+    fn is_subscribe_topic_need_update(&self, _: &str) -> bool {
+        self.need_checks.fetch_add(1, Ordering::SeqCst);
+        self.needed.load(Ordering::SeqCst)
+    }
+    fn update_topic_subscribe_info(
+        &self,
+        topic: &str,
+        queues: std::collections::BTreeSet<rocketmq_classic_common::message::MessageQueue>,
+    ) {
+        let runtime = self.runtime.upgrade().unwrap();
+        assert!(runtime.select_consumer("consumer").unwrap().is_some());
+        assert_eq!(
+            runtime.route_snapshot().unwrap().topics[topic].subscribe_queues,
+            queues
+        );
+        self.updates.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
 #[test]
 fn service_names_match_invoked_java_public_methods() {
     let fixture: serde_json::Value =
@@ -261,55 +310,6 @@ async fn pull_service_handle_retains_its_client_runtime_owner() {
     assert!(!pull.is_stopped());
     pull.shutdown_with_interrupt(true).await.unwrap();
     assert!(pull.is_stopped());
-}
-
-struct RouteObserver {
-    runtime: Weak<ClientRuntime>,
-    updates: AtomicUsize,
-    needed: AtomicBool,
-    need_checks: AtomicUsize,
-}
-
-impl ProducerRuntime for RouteObserver {
-    fn update_topic_publish_info(
-        &self,
-        topic: &str,
-        info: Arc<rocketmq_classic_core::route::TopicSnapshot>,
-    ) {
-        let runtime = self.runtime.upgrade().unwrap();
-        assert!(runtime.select_producer("producer").unwrap().is_some());
-        assert_eq!(
-            runtime.route_snapshot().unwrap().topics[topic].publish_queues,
-            info.publish_queues
-        );
-        self.updates.fetch_add(1, Ordering::SeqCst);
-    }
-}
-
-impl ConsumerRuntime for RouteObserver {
-    fn heartbeat_data(&self) -> rocketmq_classic_protocol::heartbeat::ConsumerData {
-        rocketmq_classic_protocol::heartbeat::ConsumerData {
-            group_name: Some("consumer".into()),
-            ..Default::default()
-        }
-    }
-    fn is_subscribe_topic_need_update(&self, _: &str) -> bool {
-        self.need_checks.fetch_add(1, Ordering::SeqCst);
-        self.needed.load(Ordering::SeqCst)
-    }
-    fn update_topic_subscribe_info(
-        &self,
-        topic: &str,
-        queues: std::collections::BTreeSet<rocketmq_classic_common::message::MessageQueue>,
-    ) {
-        let runtime = self.runtime.upgrade().unwrap();
-        assert!(runtime.select_consumer("consumer").unwrap().is_some());
-        assert_eq!(
-            runtime.route_snapshot().unwrap().topics[topic].subscribe_queues,
-            queues
-        );
-        self.updates.fetch_add(1, Ordering::SeqCst);
-    }
 }
 
 #[tokio::test]

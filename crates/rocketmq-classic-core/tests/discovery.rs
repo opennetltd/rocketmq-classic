@@ -91,6 +91,23 @@ impl NameServerUpdateCallback for EchoCallback {
     }
 }
 
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpListener,
+};
+
+async fn read_http_headers(stream: &mut tokio::net::TcpStream) -> String {
+    let mut request = Vec::new();
+    loop {
+        let mut byte = [0];
+        stream.read_exact(&mut byte).await.unwrap();
+        request.push(byte[0]);
+        if request.ends_with(b"\r\n\r\n") {
+            return String::from_utf8(request).unwrap();
+        }
+    }
+}
+
 #[tokio::test]
 async fn failed_provider_registration_is_not_published_and_can_retry() {
     let manager = ClientRuntimeManager::with_top_addressing(Arc::new(PanickingRegistration));
@@ -261,10 +278,6 @@ async fn chained_addressing_providers_match_java_service_loader_order() {
         assert!(Arc::ptr_eq(&callback, &registered));
     }
 }
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpListener,
-};
 
 #[tokio::test]
 async fn http_discovery_uses_java_url_headers_and_newline_normalization() {
@@ -307,18 +320,6 @@ async fn http_discovery_uses_java_url_headers_and_newline_normalization() {
         Some("127.0.0.1:9876;127.0.0.2:9876\nignored")
     );
     peer.await.unwrap();
-}
-
-async fn read_http_headers(stream: &mut tokio::net::TcpStream) -> String {
-    let mut request = Vec::new();
-    loop {
-        let mut byte = [0];
-        stream.read_exact(&mut byte).await.unwrap();
-        request.push(byte[0]);
-        if request.ends_with(b"\r\n\r\n") {
-            return String::from_utf8(request).unwrap();
-        }
-    }
 }
 
 #[tokio::test]

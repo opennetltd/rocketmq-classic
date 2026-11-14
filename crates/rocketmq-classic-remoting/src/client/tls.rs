@@ -124,18 +124,6 @@ pub fn register_decryption_strategy(strategy: Option<Arc<dyn PrivateKeyDecryptio
     };
 }
 
-#[cfg(test)]
-fn replace_registered_decryption_strategy(
-    strategy: DecryptionStrategyRegistration,
-) -> DecryptionStrategyRegistration {
-    std::mem::replace(
-        &mut *decryption_strategy_registry()
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner),
-        strategy,
-    )
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TlsMode {
     Disabled,
@@ -957,6 +945,18 @@ impl ServerCertVerifier for TrustAllServerVerifier {
             .signature_verification_algorithms
             .supported_schemes()
     }
+}
+
+#[cfg(test)]
+fn replace_registered_decryption_strategy(
+    strategy: DecryptionStrategyRegistration,
+) -> DecryptionStrategyRegistration {
+    std::mem::replace(
+        &mut *decryption_strategy_registry()
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+        strategy,
+    )
 }
 
 #[cfg(test)]

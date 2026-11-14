@@ -586,75 +586,75 @@ fn generate_p4_headers(output: &std::path::Path) {
     );
 
     write_typed(output, "typed-route.bin", 105, &{
-        let mut __phase18_header_0 = GetRouteInfoRequestHeader::default();
-        __phase18_header_0.set_topic("orders".into());
-        __phase18_header_0.set_accept_standard_json_only(None);
-        __phase18_header_0
+        let mut header = GetRouteInfoRequestHeader::default();
+        header.set_topic("orders".into());
+        header.set_accept_standard_json_only(None);
+        header
     });
     write_typed(output, "typed-send-v1.bin", 10, &{
-        let mut __phase18_header_1 = SendMessageRequestHeaderV1::default();
-        __phase18_header_1.set_producer_group(Some("producers".into()));
-        __phase18_header_1.set_topic("orders".into());
-        __phase18_header_1.set_default_topic("TBW102".into());
-        __phase18_header_1.set_default_topic_queue_nums(4);
-        __phase18_header_1.set_queue_id(2);
-        __phase18_header_1.set_sys_flag(1);
-        __phase18_header_1.set_born_timestamp(1_712_345_678_901);
-        __phase18_header_1.set_flag(7);
-        __phase18_header_1.set_properties(Some("TAGS\\u0001blue".into()));
-        __phase18_header_1.set_reconsume_times(Some(0));
-        __phase18_header_1.set_unit_mode(Some(false));
-        __phase18_header_1.set_max_reconsume_times(Some(16));
-        __phase18_header_1.set_batch(Some(false));
-        __phase18_header_1
+        let mut header = SendMessageRequestHeaderV1::default();
+        header.set_producer_group(Some("producers".into()));
+        header.set_topic("orders".into());
+        header.set_default_topic("TBW102".into());
+        header.set_default_topic_queue_nums(4);
+        header.set_queue_id(2);
+        header.set_sys_flag(1);
+        header.set_born_timestamp(1_712_345_678_901);
+        header.set_flag(7);
+        header.set_properties(Some("TAGS\\u0001blue".into()));
+        header.set_reconsume_times(Some(0));
+        header.set_unit_mode(Some(false));
+        header.set_max_reconsume_times(Some(16));
+        header.set_batch(Some(false));
+        header
     });
     write_typed(output, "typed-send-v2.bin", 310, &{
-        let mut __phase18_header_2 = SendMessageRequestHeaderV2::default();
-        __phase18_header_2.set_a(Some("producers".into()));
-        __phase18_header_2.set_b(Some("orders".into()));
-        __phase18_header_2.set_c(Some("TBW102".into()));
-        __phase18_header_2.set_d(Some(4));
-        __phase18_header_2.set_e(Some(2));
-        __phase18_header_2.set_f(Some(1));
-        __phase18_header_2.set_g(Some(1_712_345_678_901));
-        __phase18_header_2.set_h(Some(7));
-        __phase18_header_2.set_i(Some("TAGS\\u0001blue".into()));
-        __phase18_header_2.set_j(Some(0));
-        __phase18_header_2.set_k(Some(false));
-        __phase18_header_2.set_l(Some(16));
-        __phase18_header_2.set_m(Some(false));
-        __phase18_header_2
+        let mut header = SendMessageRequestHeaderV2::default();
+        header.set_a(Some("producers".into()));
+        header.set_b(Some("orders".into()));
+        header.set_c(Some("TBW102".into()));
+        header.set_d(Some(4));
+        header.set_e(Some(2));
+        header.set_f(Some(1));
+        header.set_g(Some(1_712_345_678_901));
+        header.set_h(Some(7));
+        header.set_i(Some("TAGS\\u0001blue".into()));
+        header.set_j(Some(0));
+        header.set_k(Some(false));
+        header.set_l(Some(16));
+        header.set_m(Some(false));
+        header
     });
     write_typed(output, "typed-send-batch-v2.bin", 320, &{
-        let mut __phase18_header_3 = SendMessageRequestHeaderV2::default();
-        __phase18_header_3.set_a(Some("producers".into()));
-        __phase18_header_3.set_b(Some("orders".into()));
-        __phase18_header_3.set_c(Some("TBW102".into()));
-        __phase18_header_3.set_d(Some(4));
-        __phase18_header_3.set_e(Some(2));
-        __phase18_header_3.set_f(Some(1));
-        __phase18_header_3.set_g(Some(1_712_345_678_901));
-        __phase18_header_3.set_h(Some(7));
-        __phase18_header_3.set_i(Some("TAGS\\u0001blue".into()));
-        __phase18_header_3.set_j(Some(0));
-        __phase18_header_3.set_k(Some(false));
-        __phase18_header_3.set_l(Some(16));
-        __phase18_header_3.set_m(Some(false));
-        __phase18_header_3
+        let mut header = SendMessageRequestHeaderV2::default();
+        header.set_a(Some("producers".into()));
+        header.set_b(Some("orders".into()));
+        header.set_c(Some("TBW102".into()));
+        header.set_d(Some(4));
+        header.set_e(Some(2));
+        header.set_f(Some(1));
+        header.set_g(Some(1_712_345_678_901));
+        header.set_h(Some(7));
+        header.set_i(Some("TAGS\\u0001blue".into()));
+        header.set_j(Some(0));
+        header.set_k(Some(false));
+        header.set_l(Some(16));
+        header.set_m(Some(false));
+        header
     });
     write_typed(output, "typed-pull.bin", 11, &{
-        let mut __phase18_header_4 = PullMessageRequestHeader::default();
-        __phase18_header_4.set_consumer_group(Some("workers".into()));
-        __phase18_header_4.set_topic(Some("orders".into()));
-        __phase18_header_4.set_lite_topic(Some("lite-orders".into()));
-        __phase18_header_4.set_queue_id(Some(1));
-        __phase18_header_4.set_queue_offset(Some(9));
-        __phase18_header_4.set_max_msg_nums(Some(32));
-        __phase18_header_4.set_sys_flag(Some(0));
-        __phase18_header_4.set_commit_offset(Some(8));
-        __phase18_header_4.set_suspend_timeout_millis(Some(15_000));
-        __phase18_header_4.set_sub_version(Some(1_712_345_678_901));
-        __phase18_header_4
+        let mut header = PullMessageRequestHeader::default();
+        header.set_consumer_group(Some("workers".into()));
+        header.set_topic(Some("orders".into()));
+        header.set_lite_topic(Some("lite-orders".into()));
+        header.set_queue_id(Some(1));
+        header.set_queue_offset(Some(9));
+        header.set_max_msg_nums(Some(32));
+        header.set_sys_flag(Some(0));
+        header.set_commit_offset(Some(8));
+        header.set_suspend_timeout_millis(Some(15_000));
+        header.set_sub_version(Some(1_712_345_678_901));
+        header
     });
     write_typed(output, "typed-query-offset.bin", 14, &{
         let mut header = QueryConsumerOffsetRequestHeader::default();
@@ -672,34 +672,34 @@ fn generate_p4_headers(output: &std::path::Path) {
         header
     });
     write_typed(output, "typed-end-transaction.bin", 37, &{
-        let mut __phase18_header_5 = EndTransactionRequestHeader::default();
-        __phase18_header_5.set_topic(Some("orders".into()));
-        __phase18_header_5.set_producer_group(Some("producers".into()));
-        __phase18_header_5.set_tran_state_table_offset(Some(3));
-        __phase18_header_5.set_commit_log_offset(Some(9));
-        __phase18_header_5.set_commit_or_rollback(Some(8));
-        __phase18_header_5.set_from_transaction_check(Some(false));
-        __phase18_header_5.set_msg_id(Some("msg-1".into()));
-        __phase18_header_5.set_transaction_id(Some("tx-1".into()));
-        __phase18_header_5.set_namespace(None);
-        __phase18_header_5.set_namespaced(None);
-        __phase18_header_5.set_broker_name(None);
-        __phase18_header_5.set_oneway(None);
-        __phase18_header_5
+        let mut header = EndTransactionRequestHeader::default();
+        header.set_topic(Some("orders".into()));
+        header.set_producer_group(Some("producers".into()));
+        header.set_tran_state_table_offset(Some(3));
+        header.set_commit_log_offset(Some(9));
+        header.set_commit_or_rollback(Some(8));
+        header.set_from_transaction_check(Some(false));
+        header.set_msg_id(Some("msg-1".into()));
+        header.set_transaction_id(Some("tx-1".into()));
+        header.set_namespace(None);
+        header.set_namespaced(None);
+        header.set_broker_name(None);
+        header.set_oneway(None);
+        header
     });
     write_typed(output, "typed-check-transaction.bin", 39, &{
-        let mut __phase18_header_6 = CheckTransactionStateRequestHeader::default();
-        __phase18_header_6.set_topic(Some("orders".into()));
-        __phase18_header_6.set_tran_state_table_offset(3);
-        __phase18_header_6.set_commit_log_offset(9);
-        __phase18_header_6.set_msg_id(Some("msg-1".into()));
-        __phase18_header_6.set_transaction_id(Some("tx-1".into()));
-        __phase18_header_6.set_offset_msg_id(Some("offset-1".into()));
-        __phase18_header_6.set_namespace(None);
-        __phase18_header_6.set_namespaced(None);
-        __phase18_header_6.set_broker_name(None);
-        __phase18_header_6.set_oneway(None);
-        __phase18_header_6
+        let mut header = CheckTransactionStateRequestHeader::default();
+        header.set_topic(Some("orders".into()));
+        header.set_tran_state_table_offset(3);
+        header.set_commit_log_offset(9);
+        header.set_msg_id(Some("msg-1".into()));
+        header.set_transaction_id(Some("tx-1".into()));
+        header.set_offset_msg_id(Some("offset-1".into()));
+        header.set_namespace(None);
+        header.set_namespaced(None);
+        header.set_broker_name(None);
+        header.set_oneway(None);
+        header
     });
     let mut check_transaction_response = CheckTransactionStateResponseHeader::default();
     check_transaction_response.set_producer_group(Some("producers".into()));
@@ -713,22 +713,22 @@ fn generate_p4_headers(output: &std::path::Path) {
         &check_transaction_response,
     );
     write_typed(output, "typed-reply.bin", 324, &{
-        let mut __phase18_header_7 = ReplyMessageRequestHeader::default();
-        __phase18_header_7.set_producer_group("producers".into());
-        __phase18_header_7.set_topic("orders".into());
-        __phase18_header_7.set_default_topic("TBW102".into());
-        __phase18_header_7.set_default_topic_queue_nums(4);
-        __phase18_header_7.set_queue_id(2);
-        __phase18_header_7.set_sys_flag(1);
-        __phase18_header_7.set_born_timestamp(5);
-        __phase18_header_7.set_flag(7);
-        __phase18_header_7.set_properties(Some("CORRELATION_ID=correlation-1".into()));
-        __phase18_header_7.set_reconsume_times(None);
-        __phase18_header_7.set_unit_mode(false);
-        __phase18_header_7.set_born_host("127.0.0.1:1001".into());
-        __phase18_header_7.set_store_host("127.0.0.1:10911".into());
-        __phase18_header_7.set_store_timestamp(6);
-        __phase18_header_7
+        let mut header = ReplyMessageRequestHeader::default();
+        header.set_producer_group("producers".into());
+        header.set_topic("orders".into());
+        header.set_default_topic("TBW102".into());
+        header.set_default_topic_queue_nums(4);
+        header.set_queue_id(2);
+        header.set_sys_flag(1);
+        header.set_born_timestamp(5);
+        header.set_flag(7);
+        header.set_properties(Some("CORRELATION_ID=correlation-1".into()));
+        header.set_reconsume_times(None);
+        header.set_unit_mode(false);
+        header.set_born_host("127.0.0.1:1001".into());
+        header.set_store_host("127.0.0.1:10911".into());
+        header.set_store_timestamp(6);
+        header
     });
     let binary_reply = vec![0, 255, 128, 42, 10];
     write_typed_body(
@@ -736,21 +736,21 @@ fn generate_p4_headers(output: &std::path::Path) {
         "typed-reply-v2.bin",
         325,
         &{
-            let mut __phase18_header_8 = SendMessageRequestHeaderV2::default();
-            __phase18_header_8.set_a(Some("producers".into()));
-            __phase18_header_8.set_b(Some("orders".into()));
-            __phase18_header_8.set_c(Some("TBW102".into()));
-            __phase18_header_8.set_d(Some(4));
-            __phase18_header_8.set_e(Some(2));
-            __phase18_header_8.set_f(Some(1));
-            __phase18_header_8.set_g(Some(5));
-            __phase18_header_8.set_h(Some(7));
-            __phase18_header_8.set_i(Some("CORRELATION_ID=correlation-1".into()));
-            __phase18_header_8.set_j(Some(0));
-            __phase18_header_8.set_k(Some(false));
-            __phase18_header_8.set_l(None);
-            __phase18_header_8.set_m(Some(false));
-            __phase18_header_8
+            let mut header = SendMessageRequestHeaderV2::default();
+            header.set_a(Some("producers".into()));
+            header.set_b(Some("orders".into()));
+            header.set_c(Some("TBW102".into()));
+            header.set_d(Some(4));
+            header.set_e(Some(2));
+            header.set_f(Some(1));
+            header.set_g(Some(5));
+            header.set_h(Some(7));
+            header.set_i(Some("CORRELATION_ID=correlation-1".into()));
+            header.set_j(Some(0));
+            header.set_k(Some(false));
+            header.set_l(None);
+            header.set_m(Some(false));
+            header
         },
         binary_reply.clone(),
     );
@@ -759,22 +759,22 @@ fn generate_p4_headers(output: &std::path::Path) {
         "typed-reply-push.bin",
         326,
         &{
-            let mut __phase18_header_9 = ReplyMessageRequestHeader::default();
-            __phase18_header_9.set_producer_group("producers".into());
-            __phase18_header_9.set_topic("orders".into());
-            __phase18_header_9.set_default_topic("TBW102".into());
-            __phase18_header_9.set_default_topic_queue_nums(4);
-            __phase18_header_9.set_queue_id(2);
-            __phase18_header_9.set_sys_flag(1);
-            __phase18_header_9.set_born_timestamp(5);
-            __phase18_header_9.set_flag(7);
-            __phase18_header_9.set_properties(Some("CORRELATION_ID=correlation-1".into()));
-            __phase18_header_9.set_reconsume_times(None);
-            __phase18_header_9.set_unit_mode(false);
-            __phase18_header_9.set_born_host("127.0.0.1:1001".into());
-            __phase18_header_9.set_store_host("127.0.0.1:10911".into());
-            __phase18_header_9.set_store_timestamp(6);
-            __phase18_header_9
+            let mut header = ReplyMessageRequestHeader::default();
+            header.set_producer_group("producers".into());
+            header.set_topic("orders".into());
+            header.set_default_topic("TBW102".into());
+            header.set_default_topic_queue_nums(4);
+            header.set_queue_id(2);
+            header.set_sys_flag(1);
+            header.set_born_timestamp(5);
+            header.set_flag(7);
+            header.set_properties(Some("CORRELATION_ID=correlation-1".into()));
+            header.set_reconsume_times(None);
+            header.set_unit_mode(false);
+            header.set_born_host("127.0.0.1:1001".into());
+            header.set_store_host("127.0.0.1:10911".into());
+            header.set_store_timestamp(6);
+            header
         },
         binary_reply,
     );
@@ -790,14 +790,14 @@ fn generate_p4_headers(output: &std::path::Path) {
     send_response.set_queue_offset(Some(99));
     write_typed(output, "typed-send-response.bin", 0, &send_response);
     write_typed(output, "typed-notification.bin", 200054, &{
-        let mut __phase18_header_10 = NotificationRequestHeader::default();
-        __phase18_header_10.set_consumer_group("workers".into());
-        __phase18_header_10.set_topic("orders".into());
-        __phase18_header_10.set_queue_id(1);
-        __phase18_header_10.set_poll_time(1000);
-        __phase18_header_10.set_born_time(1_712_345_678_901);
-        __phase18_header_10.set_order(Some(false));
-        __phase18_header_10
+        let mut header = NotificationRequestHeader::default();
+        header.set_consumer_group("workers".into());
+        header.set_topic("orders".into());
+        header.set_queue_id(1);
+        header.set_poll_time(1000);
+        header.set_born_time(1_712_345_678_901);
+        header.set_order(Some(false));
+        header
     });
     let mut notification_response = NotificationResponseHeader::default();
     notification_response.set_has_msg(true);
@@ -808,14 +808,14 @@ fn generate_p4_headers(output: &std::path::Path) {
         &notification_response,
     );
     write_typed(output, "typed-reset-offset.bin", 211, &{
-        let mut __phase18_header_11 = ResetOffsetRequestHeader::default();
-        __phase18_header_11.set_group("workers".into());
-        __phase18_header_11.set_topic("orders".into());
-        __phase18_header_11.set_queue_id(1);
-        __phase18_header_11.set_offset(Some(9));
-        __phase18_header_11.set_timestamp(1_712_345_678_901);
-        __phase18_header_11.set_force(true);
-        __phase18_header_11
+        let mut header = ResetOffsetRequestHeader::default();
+        header.set_group("workers".into());
+        header.set_topic("orders".into());
+        header.set_queue_id(1);
+        header.set_offset(Some(9));
+        header.set_timestamp(1_712_345_678_901);
+        header.set_force(true);
+        header
     });
     write_typed(output, "typed-reset-master-flush-offset.bin", 908, &{
         let mut header = ResetMasterFlushOffsetHeader::default();
@@ -843,17 +843,17 @@ fn generate_p4_headers(output: &std::path::Path) {
         },
     );
     write_typed(output, "typed-pop.bin", 200050, &{
-        let mut __phase18_header_12 = PopMessageRequestHeader::default();
-        __phase18_header_12.set_consumer_group(Some("workers".into()));
-        __phase18_header_12.set_topic(Some("orders".into()));
-        __phase18_header_12.set_queue_id(1);
-        __phase18_header_12.set_max_msg_nums(16);
-        __phase18_header_12.set_invisible_time(30_000);
-        __phase18_header_12.set_poll_time(1_000);
-        __phase18_header_12.set_born_time(1_712_345_678_901);
-        __phase18_header_12.set_init_mode(0);
-        __phase18_header_12.set_order(Some(false));
-        __phase18_header_12
+        let mut header = PopMessageRequestHeader::default();
+        header.set_consumer_group(Some("workers".into()));
+        header.set_topic(Some("orders".into()));
+        header.set_queue_id(1);
+        header.set_max_msg_nums(16);
+        header.set_invisible_time(30_000);
+        header.set_poll_time(1_000);
+        header.set_born_time(1_712_345_678_901);
+        header.set_init_mode(0);
+        header.set_order(Some(false));
+        header
     });
     let mut pop_lite_response = PopLiteMessageResponseHeader::default();
     pop_lite_response.set_pop_time(10);
@@ -873,27 +873,26 @@ fn generate_p4_headers(output: &std::path::Path) {
     pop_response.set_order_count_info(Some("0".into()));
     write_typed(output, "typed-pop-response.bin", 0, &pop_response);
     write_typed(output, "typed-ack.bin", 200051, &{
-        let mut __phase18_header_13 = AckMessageRequestHeader::default();
-        __phase18_header_13.set_consumer_group("workers".into());
-        __phase18_header_13.set_topic("orders".into());
-        __phase18_header_13.set_queue_id(1);
-        __phase18_header_13.set_extra_info("startOffset popTime invisibleTime queueId".into());
-        __phase18_header_13.set_offset(9);
-        __phase18_header_13.set_lite_topic(None);
-        __phase18_header_13
+        let mut header = AckMessageRequestHeader::default();
+        header.set_consumer_group("workers".into());
+        header.set_topic("orders".into());
+        header.set_queue_id(1);
+        header.set_extra_info("startOffset popTime invisibleTime queueId".into());
+        header.set_offset(9);
+        header.set_lite_topic(None);
+        header
     });
     write_typed(output, "typed-change-invisible.bin", 200053, &{
-        let mut __phase18_header_14 = ChangeInvisibleTimeRequestHeader::default();
-        __phase18_header_14.set_consumer_group(Some("workers".into()));
-        __phase18_header_14.set_topic(Some("orders".into()));
-        __phase18_header_14.set_queue_id(Some(1));
-        __phase18_header_14
-            .set_extra_info(Some("startOffset popTime invisibleTime queueId".into()));
-        __phase18_header_14.set_offset(Some(9));
-        __phase18_header_14.set_invisible_time(Some(60_000));
-        __phase18_header_14.set_lite_topic(None);
-        __phase18_header_14.set_suspend(false);
-        __phase18_header_14
+        let mut header = ChangeInvisibleTimeRequestHeader::default();
+        header.set_consumer_group(Some("workers".into()));
+        header.set_topic(Some("orders".into()));
+        header.set_queue_id(Some(1));
+        header.set_extra_info(Some("startOffset popTime invisibleTime queueId".into()));
+        header.set_offset(Some(9));
+        header.set_invisible_time(Some(60_000));
+        header.set_lite_topic(None);
+        header.set_suspend(false);
+        header
     });
 }
 

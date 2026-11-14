@@ -8,9 +8,6 @@ use std::{
     time::Duration,
 };
 
-#[cfg(test)]
-use std::collections::VecDeque;
-
 use rocketmq_classic_common::{
     message::{DecodeOptions, MessageExt, MessageQueue, decode_message_id},
     sysflag::pull::{build_pull_sys_flag_with_lite, clear_commit_offset_flag},
@@ -1790,10 +1787,10 @@ impl PullConsumer {
         });
         if let Some((address, offset)) = decoded {
             let header = {
-                let mut __phase18_header_0 = ViewMessageRequestHeader::default();
-                __phase18_header_0.set_topic(Some(topic.to_owned()));
-                __phase18_header_0.set_offset(Some(offset));
-                __phase18_header_0
+                let mut header = ViewMessageRequestHeader::default();
+                header.set_topic(Some(topic.to_owned()));
+                header.set_offset(Some(offset));
+                header
             };
             let timeout_millis =
                 i64::from(self.config.client_config().mq_client_api_timeout()).max(0) as u64;
@@ -1976,23 +1973,21 @@ impl PullConsumer {
         };
 
         let header = {
-            let mut __phase18_header_1 = PullMessageRequestHeader::default();
-            __phase18_header_1.set_consumer_group(Some(self.effective_consumer_group()?));
-            __phase18_header_1.set_topic(Some(topic.to_owned()));
-            __phase18_header_1.set_queue_id(Some(queue.queue_id()));
-            __phase18_header_1.set_queue_offset(Some(offset));
-            __phase18_header_1.set_max_msg_nums(Some(max_message_count));
-            __phase18_header_1.set_sys_flag(Some(sys_flag));
-            __phase18_header_1.set_commit_offset(Some(0));
-            __phase18_header_1
-                .set_suspend_timeout_millis(Some(self.broker_suspend_max_time_millis()));
-            __phase18_header_1.set_subscription(subscription.get_sub_string().map(str::to_owned));
-            __phase18_header_1.set_sub_version(Some(sub_version));
-            __phase18_header_1
-                .set_expression_type(subscription.get_expression_type().map(str::to_owned));
-            __phase18_header_1.set_max_msg_bytes(Some(max_size_in_bytes));
-            __phase18_header_1.set_broker_name(Some(broker_name));
-            __phase18_header_1
+            let mut header = PullMessageRequestHeader::default();
+            header.set_consumer_group(Some(self.effective_consumer_group()?));
+            header.set_topic(Some(topic.to_owned()));
+            header.set_queue_id(Some(queue.queue_id()));
+            header.set_queue_offset(Some(offset));
+            header.set_max_msg_nums(Some(max_message_count));
+            header.set_sys_flag(Some(sys_flag));
+            header.set_commit_offset(Some(0));
+            header.set_suspend_timeout_millis(Some(self.broker_suspend_max_time_millis()));
+            header.set_subscription(subscription.get_sub_string().map(str::to_owned));
+            header.set_sub_version(Some(sub_version));
+            header.set_expression_type(subscription.get_expression_type().map(str::to_owned));
+            header.set_max_msg_bytes(Some(max_size_in_bytes));
+            header.set_broker_name(Some(broker_name));
+            header
         };
         let pull_result = runtime
             .api()
@@ -3021,6 +3016,9 @@ fn write_lock<T>(lock: &RwLock<T>) -> std::sync::RwLockWriteGuard<'_, T> {
     lock.write()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
+
+#[cfg(test)]
+use std::collections::VecDeque;
 
 #[cfg(test)]
 mod tests {

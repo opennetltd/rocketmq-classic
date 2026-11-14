@@ -58,6 +58,636 @@ fn config_is_accepted(config: ClientConfig) -> Result<(), TransportError> {
     RemotingClient::with_config(config).map(drop)
 }
 
+async fn write_command<S: AsyncWriteExt + Unpin>(stream: &mut S, command: &RemotingCommand) {
+    stream
+        .write_all(&frame::encode(command).unwrap())
+        .await
+        .unwrap();
+}
+
+fn command(code: i32) -> RemotingCommand {
+    RemotingCommand {
+        code,
+        serialization: SerializeType::Json,
+        ..RemotingCommand::default()
+    }
+}
+
+struct ContextCallback {
+    sender: tokio::sync::mpsc::UnboundedSender<CallbackSnapshot>,
+    events: Arc<std::sync::Mutex<Vec<&'static str>>>,
+}
+
+struct CallbackSnapshot {
+    request: RemotingCommand,
+    response: Option<RemotingCommand>,
+    error: Option<TransportError>,
+    timeout_millis: i64,
+    send_request_ok: bool,
+    timed_out: bool,
+    channel_address: Option<String>,
+}
+
+struct EventCallback(Arc<std::sync::Mutex<Vec<&'static str>>>);
+
+impl InvokeCallback for EventCallback {
+    fn operation_complete(&self, _: &rocketmq_classic_remoting::client::ResponseFuture) {
+        self.0.lock().unwrap().push("complete");
+    }
+
+    fn operation_fail(&self, _: &TransportError) {
+        self.0.lock().unwrap().push("fail");
+    }
+}
+
+impl InvokeCallback for ContextCallback {
+    fn operation_complete(&self, future: &rocketmq_classic_remoting::client::ResponseFuture) {
+        self.events.lock().unwrap().push("complete");
+        let _ = self.sender.send(CallbackSnapshot {
+            request: future.request_command().unwrap(),
+            response: future.response_command(),
+            error: future.cause(),
+            timeout_millis: future.timeout_millis(),
+            send_request_ok: future.is_send_request_ok(),
+            timed_out: future.is_timeout(),
+            channel_address: future
+                .channel()
+                .map(|channel| channel.remote_addr().to_owned()),
+        });
+    }
+
+    fn operation_succeed(&self, _: &RemotingCommand) {
+        self.events.lock().unwrap().push("succeed");
+    }
+
+    fn operation_fail(&self, _: &TransportError) {
+        self.events.lock().unwrap().push("fail");
+    }
+}
+
+async fn wait_for_callback_events(
+    events: &Arc<std::sync::Mutex<Vec<&'static str>>>,
+    expected: &[&'static str],
+) {
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if events.lock().unwrap().as_slice() == expected {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("callback event sequence was incomplete");
+}
+
+struct IdleListener(tokio::sync::mpsc::UnboundedSender<String>);
+
+impl rocketmq_classic_remoting::client::ChannelEventListener for IdleListener {
+    fn on_idle(&self, remote_addr: &str, _: &ChannelHandle) {
+        let _ = self.0.send(remote_addr.to_owned());
+    }
+}
+
+struct PanickingCallbackExecutor;
+
+impl CallbackExecutor for PanickingCallbackExecutor {
+    fn execute(
+        &self,
+        _task: Box<dyn FnOnce() + Send + 'static>,
+    ) -> Result<(), Box<dyn FnOnce() + Send + 'static>> {
+        panic!("executor panic");
+    }
+}
+
+struct InlineCallbackExecutor;
+
+impl CallbackExecutor for InlineCallbackExecutor {
+    fn execute(
+        &self,
+        task: Box<dyn FnOnce() + Send + 'static>,
+    ) -> Result<(), Box<dyn FnOnce() + Send + 'static>> {
+        task();
+        Ok(())
+    }
+}
+
+struct RejectingCallbackExecutor;
+
+impl CallbackExecutor for RejectingCallbackExecutor {
+    fn execute(
+        &self,
+        task: Box<dyn FnOnce() + Send + 'static>,
+    ) -> Result<(), Box<dyn FnOnce() + Send + 'static>> {
+        Err(task)
+    }
+}
+
+struct ThreadCallbackExecutor;
+
+impl CallbackExecutor for ThreadCallbackExecutor {
+    fn execute(
+        &self,
+        task: Box<dyn FnOnce() + Send + 'static>,
+    ) -> Result<(), Box<dyn FnOnce() + Send + 'static>> {
+        std::thread::spawn(task);
+        Ok(())
+    }
+}
+
+struct CountingCallbackExecutor(Arc<AtomicUsize>);
+
+impl CallbackExecutor for CountingCallbackExecutor {
+    fn execute(
+        &self,
+        task: Box<dyn FnOnce() + Send + 'static>,
+    ) -> Result<(), Box<dyn FnOnce() + Send + 'static>> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        task();
+        Ok(())
+    }
+}
+
+struct TestHook(Arc<std::sync::Mutex<Vec<&'static str>>>);
+impl RpcHook for TestHook {
+    fn equality_key(&self) -> Option<String> {
+        Some("test-hook".into())
+    }
+
+    fn before_request(&self, _: &str, _: &RemotingCommand) {
+        self.0.lock().unwrap().push("before");
+    }
+    fn after_response(&self, _: &str, _: &RemotingCommand, _: &RemotingCommand) {
+        self.0.lock().unwrap().push("after");
+    }
+}
+
+struct BeforeCounter(Arc<AtomicUsize>);
+impl RpcHook for BeforeCounter {
+    fn before_request(&self, _: &str, _: &RemotingCommand) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+struct OnewayHookFlagRecorder(Arc<std::sync::Mutex<Vec<bool>>>);
+impl RpcHook for OnewayHookFlagRecorder {
+    fn before_request(&self, _: &str, request: &RemotingCommand) {
+        self.0.lock().unwrap().push(request.is_oneway());
+    }
+}
+
+struct AfterRequestRecorder(Arc<std::sync::Mutex<Vec<(RemotingCommand, RemotingCommand)>>>);
+impl RpcHook for AfterRequestRecorder {
+    fn after_response(&self, _: &str, request: &RemotingCommand, response: &RemotingCommand) {
+        self.0
+            .lock()
+            .unwrap()
+            .push((request.clone(), response.clone()));
+    }
+}
+
+struct TestEvents(Arc<std::sync::Mutex<Vec<&'static str>>>);
+impl ChannelEventListener for TestEvents {
+    fn on_connect(&self, _: &str, _: &ChannelHandle) {
+        self.0.lock().unwrap().push("connect");
+    }
+
+    fn on_exception(&self, _: &str, _: &ChannelHandle) {
+        self.0.lock().unwrap().push("exception");
+    }
+
+    fn on_close(&self, _: &str, _: &ChannelHandle) {
+        self.0.lock().unwrap().push("close");
+    }
+
+    fn on_active(&self, _: &str, _: &ChannelHandle) {
+        self.0.lock().unwrap().push("active");
+    }
+}
+
+struct AbortPipeline;
+
+impl RequestPipeline for AbortPipeline {
+    fn execute(&self, _: &RemotingCommand) -> Result<(), i32> {
+        Ok(())
+    }
+
+    fn execute_detailed(&self, _: &RemotingCommand) -> Result<(), RequestPipelineError> {
+        Err(RequestPipelineError::Abort {
+            response_code: 812,
+            remark: Some("pipeline stopped request".into()),
+        })
+    }
+}
+
+struct FailedPipeline;
+
+impl RequestPipeline for FailedPipeline {
+    fn execute(&self, _: &RemotingCommand) -> Result<(), i32> {
+        Ok(())
+    }
+
+    fn execute_detailed(&self, _: &RemotingCommand) -> Result<(), RequestPipelineError> {
+        Err(RequestPipelineError::Failed("pipeline failed".into()))
+    }
+}
+
+struct MutatingPipelineStage {
+    code: i32,
+    remark: String,
+    opaque: i32,
+    ext_field_key: &'static str,
+    ext_field_value: &'static str,
+}
+
+impl RequestPipeline for MutatingPipelineStage {
+    fn execute(&self, _: &RemotingCommand) -> Result<(), i32> {
+        Ok(())
+    }
+
+    fn execute_detailed_with_context_mut(
+        &self,
+        _: &RequestContext,
+        request: &mut RemotingCommand,
+    ) -> Result<(), RequestPipelineError> {
+        request.code = self.code;
+        request.remark = Some(self.remark.clone());
+        request.opaque = self.opaque;
+        request
+            .ext_fields
+            .get_or_insert_with(Default::default)
+            .insert(self.ext_field_key.into(), self.ext_field_value.into());
+        Ok(())
+    }
+}
+
+struct PipelineRequestObserver(Arc<std::sync::Mutex<Option<RemotingCommand>>>);
+
+impl RequestPipeline for PipelineRequestObserver {
+    fn execute(&self, request: &RemotingCommand) -> Result<(), i32> {
+        *self.0.lock().unwrap() = Some(request.clone());
+        Ok(())
+    }
+}
+
+struct AfterResponseCounter(Arc<AtomicUsize>);
+
+impl RpcHook for AfterResponseCounter {
+    fn after_response_optional_result(
+        &self,
+        _: &str,
+        _: &RemotingCommand,
+        _: Option<&RemotingCommand>,
+    ) -> Result<(), RpcHookError> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+struct MutatingAfterResponse {
+    request_code: i32,
+    request_remark: String,
+    code: i32,
+    remark: String,
+    ext_field_key: &'static str,
+    ext_field_value: &'static str,
+}
+
+impl RpcHook for MutatingAfterResponse {
+    fn after_response_mut_result(
+        &self,
+        _: &str,
+        request: &mut RemotingCommand,
+        response: &mut RemotingCommand,
+    ) -> Result<(), RpcHookError> {
+        request.code = self.request_code;
+        request.remark = Some(self.request_remark.clone());
+        request
+            .ext_fields
+            .get_or_insert_with(Default::default)
+            .insert("request-hook".into(), "changed".into());
+        response.code = self.code;
+        response.remark = Some(self.remark.clone());
+        response
+            .ext_fields
+            .get_or_insert_with(Default::default)
+            .insert(self.ext_field_key.into(), self.ext_field_value.into());
+        Ok(())
+    }
+}
+
+struct AfterResponseRequestObserver(Arc<std::sync::Mutex<Option<RemotingCommand>>>);
+
+impl RpcHook for AfterResponseRequestObserver {
+    fn after_response_mut_result(
+        &self,
+        _: &str,
+        request: &mut RemotingCommand,
+        _: &mut RemotingCommand,
+    ) -> Result<(), RpcHookError> {
+        *self.0.lock().unwrap() = Some(request.clone());
+        Ok(())
+    }
+}
+
+struct FallibleHook;
+
+impl RpcHook for FallibleHook {
+    fn before_request_result(
+        &self,
+        _: &str,
+        request: &RemotingCommand,
+    ) -> Result<(), RpcHookError> {
+        if request.code == 830 {
+            Err(RpcHookError::Abort {
+                response_code: 831,
+                remark: Some("hook stopped request".into()),
+            })
+        } else {
+            Ok(())
+        }
+    }
+
+    fn after_response_result(
+        &self,
+        _: &str,
+        request: &RemotingCommand,
+        _: &RemotingCommand,
+    ) -> Result<(), RpcHookError> {
+        if request.code == 832 {
+            Err(RpcHookError::Failed("after hook failed".into()))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+struct EquivalentTestHook {
+    key: &'static str,
+    counter: Arc<AtomicUsize>,
+}
+
+impl RpcHook for EquivalentTestHook {
+    fn equality_key(&self) -> Option<String> {
+        Some(self.key.into())
+    }
+
+    fn before_request(&self, _: &str, _: &RemotingCommand) {
+        self.counter.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+struct OutboundFailingHook;
+
+impl RpcHook for OutboundFailingHook {
+    fn before_request_result(
+        &self,
+        _: &str,
+        request: &RemotingCommand,
+    ) -> Result<(), RpcHookError> {
+        if request.code == 840 {
+            Err(RpcHookError::Failed("before rejected request".into()))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn after_response_result(
+        &self,
+        _: &str,
+        request: &RemotingCommand,
+        _: &RemotingCommand,
+    ) -> Result<(), RpcHookError> {
+        if request.code == 841 {
+            Err(RpcHookError::Failed("after rejected response".into()))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+struct BeforeHookFailure {
+    after_hook_code: Arc<AtomicUsize>,
+    after_hook_remark: Arc<std::sync::Mutex<Option<Option<String>>>>,
+}
+
+impl RpcHook for BeforeHookFailure {
+    fn before_request_result(&self, _: &str, _: &RemotingCommand) -> Result<(), RpcHookError> {
+        Err(RpcHookError::Failed("before hook failed".into()))
+    }
+
+    fn after_response_optional_result(
+        &self,
+        _: &str,
+        _: &RemotingCommand,
+        response: Option<&RemotingCommand>,
+    ) -> Result<(), RpcHookError> {
+        if let Some(response) = response {
+            self.after_hook_code
+                .store(response.code as usize, Ordering::SeqCst);
+        }
+        *self.after_hook_remark.lock().unwrap() = Some(response.and_then(|r| r.remark.clone()));
+        Ok(())
+    }
+}
+
+struct OptionalResponseHook(Arc<AtomicUsize>);
+
+impl RpcHook for OptionalResponseHook {
+    fn after_response_optional_result(
+        &self,
+        _: &str,
+        _: &RemotingCommand,
+        response: Option<&RemotingCommand>,
+    ) -> Result<(), RpcHookError> {
+        if response.is_none() {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+        Ok(())
+    }
+}
+
+struct InvokedFailureFlowHook {
+    case: String,
+    calls: Arc<Mutex<Vec<String>>>,
+}
+
+impl RpcHook for InvokedFailureFlowHook {
+    fn before_request_result(&self, _: &str, _: &RemotingCommand) -> Result<(), RpcHookError> {
+        self.calls.lock().unwrap().push("before".into());
+        match self.case.as_str() {
+            "before" => Err(RpcHookError::Failed("before failed".into())),
+            "abort_before" => Err(RpcHookError::Abort {
+                response_code: 831,
+                remark: Some("before aborted".into()),
+            }),
+            _ => Ok(()),
+        }
+    }
+
+    fn after_response_optional_result(
+        &self,
+        _: &str,
+        _: &RemotingCommand,
+        response: Option<&RemotingCommand>,
+    ) -> Result<(), RpcHookError> {
+        let code = response.map_or_else(|| "null".into(), |response| response.code.to_string());
+        self.calls.lock().unwrap().push(format!("after:{code}"));
+        match self.case.as_str() {
+            "after" => Err(RpcHookError::Failed("after failed".into())),
+            "abort_after" => Err(RpcHookError::Abort {
+                response_code: 832,
+                remark: Some("after aborted".into()),
+            }),
+            _ => Ok(()),
+        }
+    }
+}
+
+struct InvokedFailureFlowPipeline {
+    case: String,
+    calls: Arc<Mutex<Vec<String>>>,
+}
+
+impl RequestPipeline for InvokedFailureFlowPipeline {
+    fn execute(&self, _: &RemotingCommand) -> Result<(), i32> {
+        Ok(())
+    }
+
+    fn execute_detailed(&self, _: &RemotingCommand) -> Result<(), RequestPipelineError> {
+        self.calls.lock().unwrap().push("pipeline".into());
+        match self.case.as_str() {
+            "pipeline" => Err(RequestPipelineError::Failed("pipeline failed".into())),
+            "abort_pipeline" => Err(RequestPipelineError::Abort {
+                response_code: 833,
+                remark: Some("pipeline aborted".into()),
+            }),
+            _ => Ok(()),
+        }
+    }
+}
+
+struct ThreadRequestExecutor {
+    executions: Arc<AtomicUsize>,
+}
+
+impl RequestExecutor for ThreadRequestExecutor {
+    fn execute(&self, task: Box<dyn FnOnce() + Send + 'static>) -> Result<(), String> {
+        self.executions.fetch_add(1, Ordering::SeqCst);
+        std::thread::spawn(task);
+        Ok(())
+    }
+}
+
+struct RejectRequestExecutor;
+
+impl RequestExecutor for RejectRequestExecutor {
+    fn execute(&self, _task: Box<dyn FnOnce() + Send + 'static>) -> Result<(), String> {
+        Err("executor saturated".into())
+    }
+}
+
+struct RejectingProcessor;
+impl RequestProcessor for RejectingProcessor {
+    fn process(&self, _: RemotingCommand) -> Result<Option<RemotingCommand>, String> {
+        Ok(None)
+    }
+
+    fn reject_request(&self) -> bool {
+        true
+    }
+}
+
+async fn socks5_proxy_tunnels_a_remoting_request(username_password: bool) {
+    let broker = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let broker_address = broker.local_addr().unwrap();
+    let broker_peer = tokio::spawn(async move {
+        let (mut stream, _) = broker.accept().await.unwrap();
+        let request = read_command(&mut stream).await;
+        let mut response = command(42);
+        response.opaque = request.opaque;
+        response.mark_response();
+        write_command(&mut stream, &response).await;
+    });
+    let proxy = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let proxy_address = proxy.local_addr().unwrap();
+    let proxy_peer = tokio::spawn(async move {
+        let (mut client, _) = proxy.accept().await.unwrap();
+        let mut greeting_header = [0; 2];
+        client.read_exact(&mut greeting_header).await.unwrap();
+        assert_eq!(greeting_header[0], 5);
+        let mut methods = vec![0; usize::from(greeting_header[1])];
+        client.read_exact(&mut methods).await.unwrap();
+        if username_password {
+            assert_eq!(methods, [0, 2]);
+            client.write_all(&[5, 2]).await.unwrap();
+            let mut auth_header = [0; 2];
+            client.read_exact(&mut auth_header).await.unwrap();
+            assert_eq!(&auth_header, &[1, 6]);
+            let mut username = [0; 6];
+            client.read_exact(&mut username).await.unwrap();
+            assert_eq!(&username, b"rocket");
+            let mut password_length = [0; 1];
+            client.read_exact(&mut password_length).await.unwrap();
+            assert_eq!(password_length[0], 6);
+            let mut password = [0; 6];
+            client.read_exact(&mut password).await.unwrap();
+            assert_eq!(&password, b"secret");
+            client.write_all(&[1, 0]).await.unwrap();
+        } else {
+            assert_eq!(methods, [0]);
+            client.write_all(&[5, 0]).await.unwrap();
+        }
+        let mut request = [0; 10];
+        client.read_exact(&mut request[..4]).await.unwrap();
+        assert_eq!(&request[..4], &[5, 1, 0, 1]);
+        client.read_exact(&mut request[4..]).await.unwrap();
+        let target = std::net::SocketAddr::new(
+            std::net::Ipv4Addr::new(request[4], request[5], request[6], request[7]).into(),
+            u16::from_be_bytes([request[8], request[9]]),
+        );
+        assert_eq!(target, broker_address);
+        let upstream = tokio::net::TcpStream::connect(target).await.unwrap();
+        client
+            .write_all(&[5, 0, 0, 1, 127, 0, 0, 1, 0, 1])
+            .await
+            .unwrap();
+        let (mut client_read, mut client_write) = client.into_split();
+        let (mut upstream_read, mut upstream_write) = upstream.into_split();
+        let a = tokio::io::copy(&mut client_read, &mut upstream_write);
+        let b = tokio::io::copy(&mut upstream_read, &mut client_write);
+        let _ = tokio::join!(a, b);
+    });
+    let proxy_config = if username_password {
+        format!(
+            r#"{{"127.0.0.0/8":{{"addr":"{}","username":"rocket","password":"secret"}}}}"#,
+            proxy_address
+        )
+    } else {
+        format!(r#"{{"127.0.0.0/8":{{"addr":"{}"}}}}"#, proxy_address)
+    };
+    let config = ClientConfig {
+        socks_proxy_config: proxy_config,
+        client_socket_send_buffer_size: 64 * 1024,
+        client_socket_receive_buffer_size: 64 * 1024,
+        ..ClientConfig::default()
+    };
+    let client = RemotingClient::with_config(config).unwrap();
+    client.start().unwrap();
+    let response = client
+        .invoke(
+            &broker_address.to_string(),
+            command(1),
+            Instant::now() + Duration::from_secs(2),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.code, 42);
+    client.shutdown().await;
+    broker_peer.await.unwrap();
+    proxy_peer.await.unwrap();
+}
+
 #[test]
 fn response_future_wait_interrupt_types_are_public() {
     let interrupt = ResponseWaitInterrupt::new();
@@ -246,21 +876,6 @@ async fn mutable_inbound_hooks_reach_pipeline_processor_after_hook_and_response_
     client.shutdown().await;
 }
 
-async fn write_command<S: AsyncWriteExt + Unpin>(stream: &mut S, command: &RemotingCommand) {
-    stream
-        .write_all(&frame::encode(command).unwrap())
-        .await
-        .unwrap();
-}
-
-fn command(code: i32) -> RemotingCommand {
-    RemotingCommand {
-        code,
-        serialization: SerializeType::Json,
-        ..RemotingCommand::default()
-    }
-}
-
 #[tokio::test]
 async fn empty_host_endpoint_connects_to_java_ipv4_loopback_target() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -416,74 +1031,6 @@ async fn zero_timeout_connects_before_expiring_without_sending_a_frame() {
 
     client.shutdown().await;
     assert_eq!(socket.read(&mut byte).await.unwrap(), 0);
-}
-
-struct ContextCallback {
-    sender: tokio::sync::mpsc::UnboundedSender<CallbackSnapshot>,
-    events: Arc<std::sync::Mutex<Vec<&'static str>>>,
-}
-
-struct CallbackSnapshot {
-    request: RemotingCommand,
-    response: Option<RemotingCommand>,
-    error: Option<TransportError>,
-    timeout_millis: i64,
-    send_request_ok: bool,
-    timed_out: bool,
-    channel_address: Option<String>,
-}
-
-struct EventCallback(Arc<std::sync::Mutex<Vec<&'static str>>>);
-
-impl InvokeCallback for EventCallback {
-    fn operation_complete(&self, _: &rocketmq_classic_remoting::client::ResponseFuture) {
-        self.0.lock().unwrap().push("complete");
-    }
-
-    fn operation_fail(&self, _: &TransportError) {
-        self.0.lock().unwrap().push("fail");
-    }
-}
-
-impl InvokeCallback for ContextCallback {
-    fn operation_complete(&self, future: &rocketmq_classic_remoting::client::ResponseFuture) {
-        self.events.lock().unwrap().push("complete");
-        let _ = self.sender.send(CallbackSnapshot {
-            request: future.request_command().unwrap(),
-            response: future.response_command(),
-            error: future.cause(),
-            timeout_millis: future.timeout_millis(),
-            send_request_ok: future.is_send_request_ok(),
-            timed_out: future.is_timeout(),
-            channel_address: future
-                .channel()
-                .map(|channel| channel.remote_addr().to_owned()),
-        });
-    }
-
-    fn operation_succeed(&self, _: &RemotingCommand) {
-        self.events.lock().unwrap().push("succeed");
-    }
-
-    fn operation_fail(&self, _: &TransportError) {
-        self.events.lock().unwrap().push("fail");
-    }
-}
-
-async fn wait_for_callback_events(
-    events: &Arc<std::sync::Mutex<Vec<&'static str>>>,
-    expected: &[&'static str],
-) {
-    tokio::time::timeout(Duration::from_secs(1), async {
-        loop {
-            if events.lock().unwrap().as_slice() == expected {
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("callback event sequence was incomplete");
 }
 
 #[tokio::test]
@@ -2652,14 +3199,6 @@ async fn p3_nameserver_channel_interval_has_no_implicit_scan_behavior() {
     peer.await.unwrap();
 }
 
-struct IdleListener(tokio::sync::mpsc::UnboundedSender<String>);
-
-impl rocketmq_classic_remoting::client::ChannelEventListener for IdleListener {
-    fn on_idle(&self, remote_addr: &str, _: &ChannelHandle) {
-        let _ = self.0.send(remote_addr.to_owned());
-    }
-}
-
 #[tokio::test]
 async fn p3_max_idle_time_observes_partial_read_activity_like_all_idle_timer() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -3395,79 +3934,6 @@ async fn p3_controls_validate_defaults_hooks_callback_and_channel_events() {
     );
 }
 
-struct PanickingCallbackExecutor;
-
-impl CallbackExecutor for PanickingCallbackExecutor {
-    fn execute(
-        &self,
-        _task: Box<dyn FnOnce() + Send + 'static>,
-    ) -> Result<(), Box<dyn FnOnce() + Send + 'static>> {
-        panic!("executor panic");
-    }
-}
-
-struct InlineCallbackExecutor;
-
-impl CallbackExecutor for InlineCallbackExecutor {
-    fn execute(
-        &self,
-        task: Box<dyn FnOnce() + Send + 'static>,
-    ) -> Result<(), Box<dyn FnOnce() + Send + 'static>> {
-        task();
-        Ok(())
-    }
-}
-
-struct RejectingCallbackExecutor;
-
-impl CallbackExecutor for RejectingCallbackExecutor {
-    fn execute(
-        &self,
-        task: Box<dyn FnOnce() + Send + 'static>,
-    ) -> Result<(), Box<dyn FnOnce() + Send + 'static>> {
-        Err(task)
-    }
-}
-
-struct ThreadCallbackExecutor;
-
-impl CallbackExecutor for ThreadCallbackExecutor {
-    fn execute(
-        &self,
-        task: Box<dyn FnOnce() + Send + 'static>,
-    ) -> Result<(), Box<dyn FnOnce() + Send + 'static>> {
-        std::thread::spawn(task);
-        Ok(())
-    }
-}
-
-struct CountingCallbackExecutor(Arc<AtomicUsize>);
-
-impl CallbackExecutor for CountingCallbackExecutor {
-    fn execute(
-        &self,
-        task: Box<dyn FnOnce() + Send + 'static>,
-    ) -> Result<(), Box<dyn FnOnce() + Send + 'static>> {
-        self.0.fetch_add(1, Ordering::SeqCst);
-        task();
-        Ok(())
-    }
-}
-
-struct TestHook(Arc<std::sync::Mutex<Vec<&'static str>>>);
-impl RpcHook for TestHook {
-    fn equality_key(&self) -> Option<String> {
-        Some("test-hook".into())
-    }
-
-    fn before_request(&self, _: &str, _: &RemotingCommand) {
-        self.0.lock().unwrap().push("before");
-    }
-    fn after_response(&self, _: &str, _: &RemotingCommand, _: &RemotingCommand) {
-        self.0.lock().unwrap().push("after");
-    }
-}
-
 #[tokio::test]
 async fn p3_rpc_hook_live_list_can_be_mutated_and_is_shared() {
     let client = RemotingClient::new(TransportMode::Plain);
@@ -3528,49 +3994,6 @@ async fn p3_rpc_hooks_deduplicate_and_clear() {
     assert_eq!(*events.lock().unwrap(), vec!["before", "after"]);
     peer.await.unwrap();
     client.shutdown().await;
-}
-
-struct BeforeCounter(Arc<AtomicUsize>);
-impl RpcHook for BeforeCounter {
-    fn before_request(&self, _: &str, _: &RemotingCommand) {
-        self.0.fetch_add(1, Ordering::SeqCst);
-    }
-}
-
-struct OnewayHookFlagRecorder(Arc<std::sync::Mutex<Vec<bool>>>);
-impl RpcHook for OnewayHookFlagRecorder {
-    fn before_request(&self, _: &str, request: &RemotingCommand) {
-        self.0.lock().unwrap().push(request.is_oneway());
-    }
-}
-
-struct AfterRequestRecorder(Arc<std::sync::Mutex<Vec<(RemotingCommand, RemotingCommand)>>>);
-impl RpcHook for AfterRequestRecorder {
-    fn after_response(&self, _: &str, request: &RemotingCommand, response: &RemotingCommand) {
-        self.0
-            .lock()
-            .unwrap()
-            .push((request.clone(), response.clone()));
-    }
-}
-
-struct TestEvents(Arc<std::sync::Mutex<Vec<&'static str>>>);
-impl ChannelEventListener for TestEvents {
-    fn on_connect(&self, _: &str, _: &ChannelHandle) {
-        self.0.lock().unwrap().push("connect");
-    }
-
-    fn on_exception(&self, _: &str, _: &ChannelHandle) {
-        self.0.lock().unwrap().push("exception");
-    }
-
-    fn on_close(&self, _: &str, _: &ChannelHandle) {
-        self.0.lock().unwrap().push("close");
-    }
-
-    fn on_active(&self, _: &str, _: &ChannelHandle) {
-        self.0.lock().unwrap().push("active");
-    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -5103,131 +5526,6 @@ async fn p3_hooks_and_channel_connect_event_follow_successful_exchange() {
     );
 }
 
-struct AbortPipeline;
-
-impl RequestPipeline for AbortPipeline {
-    fn execute(&self, _: &RemotingCommand) -> Result<(), i32> {
-        Ok(())
-    }
-
-    fn execute_detailed(&self, _: &RemotingCommand) -> Result<(), RequestPipelineError> {
-        Err(RequestPipelineError::Abort {
-            response_code: 812,
-            remark: Some("pipeline stopped request".into()),
-        })
-    }
-}
-
-struct FailedPipeline;
-
-impl RequestPipeline for FailedPipeline {
-    fn execute(&self, _: &RemotingCommand) -> Result<(), i32> {
-        Ok(())
-    }
-
-    fn execute_detailed(&self, _: &RemotingCommand) -> Result<(), RequestPipelineError> {
-        Err(RequestPipelineError::Failed("pipeline failed".into()))
-    }
-}
-
-struct MutatingPipelineStage {
-    code: i32,
-    remark: String,
-    opaque: i32,
-    ext_field_key: &'static str,
-    ext_field_value: &'static str,
-}
-
-impl RequestPipeline for MutatingPipelineStage {
-    fn execute(&self, _: &RemotingCommand) -> Result<(), i32> {
-        Ok(())
-    }
-
-    fn execute_detailed_with_context_mut(
-        &self,
-        _: &RequestContext,
-        request: &mut RemotingCommand,
-    ) -> Result<(), RequestPipelineError> {
-        request.code = self.code;
-        request.remark = Some(self.remark.clone());
-        request.opaque = self.opaque;
-        request
-            .ext_fields
-            .get_or_insert_with(Default::default)
-            .insert(self.ext_field_key.into(), self.ext_field_value.into());
-        Ok(())
-    }
-}
-
-struct PipelineRequestObserver(Arc<std::sync::Mutex<Option<RemotingCommand>>>);
-
-impl RequestPipeline for PipelineRequestObserver {
-    fn execute(&self, request: &RemotingCommand) -> Result<(), i32> {
-        *self.0.lock().unwrap() = Some(request.clone());
-        Ok(())
-    }
-}
-
-struct AfterResponseCounter(Arc<AtomicUsize>);
-
-impl RpcHook for AfterResponseCounter {
-    fn after_response_optional_result(
-        &self,
-        _: &str,
-        _: &RemotingCommand,
-        _: Option<&RemotingCommand>,
-    ) -> Result<(), RpcHookError> {
-        self.0.fetch_add(1, Ordering::SeqCst);
-        Ok(())
-    }
-}
-
-struct MutatingAfterResponse {
-    request_code: i32,
-    request_remark: String,
-    code: i32,
-    remark: String,
-    ext_field_key: &'static str,
-    ext_field_value: &'static str,
-}
-
-impl RpcHook for MutatingAfterResponse {
-    fn after_response_mut_result(
-        &self,
-        _: &str,
-        request: &mut RemotingCommand,
-        response: &mut RemotingCommand,
-    ) -> Result<(), RpcHookError> {
-        request.code = self.request_code;
-        request.remark = Some(self.request_remark.clone());
-        request
-            .ext_fields
-            .get_or_insert_with(Default::default)
-            .insert("request-hook".into(), "changed".into());
-        response.code = self.code;
-        response.remark = Some(self.remark.clone());
-        response
-            .ext_fields
-            .get_or_insert_with(Default::default)
-            .insert(self.ext_field_key.into(), self.ext_field_value.into());
-        Ok(())
-    }
-}
-
-struct AfterResponseRequestObserver(Arc<std::sync::Mutex<Option<RemotingCommand>>>);
-
-impl RpcHook for AfterResponseRequestObserver {
-    fn after_response_mut_result(
-        &self,
-        _: &str,
-        request: &mut RemotingCommand,
-        _: &mut RemotingCommand,
-    ) -> Result<(), RpcHookError> {
-        *self.0.lock().unwrap() = Some(request.clone());
-        Ok(())
-    }
-}
-
 #[tokio::test]
 async fn p18_outbound_after_hook_can_mutate_response_returned_to_caller() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -5374,38 +5672,6 @@ async fn p18_inbound_after_hook_can_mutate_response_written_to_peer() {
     client.shutdown().await;
 }
 
-struct FallibleHook;
-
-impl RpcHook for FallibleHook {
-    fn before_request_result(
-        &self,
-        _: &str,
-        request: &RemotingCommand,
-    ) -> Result<(), RpcHookError> {
-        if request.code == 830 {
-            Err(RpcHookError::Abort {
-                response_code: 831,
-                remark: Some("hook stopped request".into()),
-            })
-        } else {
-            Ok(())
-        }
-    }
-
-    fn after_response_result(
-        &self,
-        _: &str,
-        request: &RemotingCommand,
-        _: &RemotingCommand,
-    ) -> Result<(), RpcHookError> {
-        if request.code == 832 {
-            Err(RpcHookError::Failed("after hook failed".into()))
-        } else {
-            Ok(())
-        }
-    }
-}
-
 #[tokio::test]
 async fn p3_rpc_hook_abort_and_failures_map_to_java_response_paths() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -5458,21 +5724,6 @@ async fn p3_rpc_hook_abort_and_failures_map_to_java_response_paths() {
     );
     assert_eq!(processor_calls.load(Ordering::SeqCst), 1);
     client.shutdown().await;
-}
-
-struct EquivalentTestHook {
-    key: &'static str,
-    counter: Arc<AtomicUsize>,
-}
-
-impl RpcHook for EquivalentTestHook {
-    fn equality_key(&self) -> Option<String> {
-        Some(self.key.into())
-    }
-
-    fn before_request(&self, _: &str, _: &RemotingCommand) {
-        self.counter.fetch_add(1, Ordering::SeqCst);
-    }
 }
 
 #[tokio::test]
@@ -5543,35 +5794,6 @@ async fn p3_rpc_hook_equality_keys_match_java_contains_semantics() {
     client.shutdown().await;
 }
 
-struct OutboundFailingHook;
-
-impl RpcHook for OutboundFailingHook {
-    fn before_request_result(
-        &self,
-        _: &str,
-        request: &RemotingCommand,
-    ) -> Result<(), RpcHookError> {
-        if request.code == 840 {
-            Err(RpcHookError::Failed("before rejected request".into()))
-        } else {
-            Ok(())
-        }
-    }
-
-    fn after_response_result(
-        &self,
-        _: &str,
-        request: &RemotingCommand,
-        _: &RemotingCommand,
-    ) -> Result<(), RpcHookError> {
-        if request.code == 841 {
-            Err(RpcHookError::Failed("after rejected response".into()))
-        } else {
-            Ok(())
-        }
-    }
-}
-
 #[tokio::test]
 async fn p3_outbound_hook_failures_are_not_ignored() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -5631,31 +5853,6 @@ async fn p3_outbound_hook_failures_are_not_ignored() {
     client.shutdown().await;
 }
 
-struct BeforeHookFailure {
-    after_hook_code: Arc<AtomicUsize>,
-    after_hook_remark: Arc<std::sync::Mutex<Option<Option<String>>>>,
-}
-
-impl RpcHook for BeforeHookFailure {
-    fn before_request_result(&self, _: &str, _: &RemotingCommand) -> Result<(), RpcHookError> {
-        Err(RpcHookError::Failed("before hook failed".into()))
-    }
-
-    fn after_response_optional_result(
-        &self,
-        _: &str,
-        _: &RemotingCommand,
-        response: Option<&RemotingCommand>,
-    ) -> Result<(), RpcHookError> {
-        if let Some(response) = response {
-            self.after_hook_code
-                .store(response.code as usize, Ordering::SeqCst);
-        }
-        *self.after_hook_remark.lock().unwrap() = Some(response.and_then(|r| r.remark.clone()));
-        Ok(())
-    }
-}
-
 #[tokio::test]
 async fn p3_before_hook_failure_runs_pipeline_and_after_hook_but_skips_processor() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -5708,22 +5905,6 @@ async fn p3_before_hook_failure_runs_pipeline_and_after_hook_but_skips_processor
     );
     assert_eq!(*after_hook_remark.lock().unwrap(), Some(None));
     client.shutdown().await;
-}
-
-struct OptionalResponseHook(Arc<AtomicUsize>);
-
-impl RpcHook for OptionalResponseHook {
-    fn after_response_optional_result(
-        &self,
-        _: &str,
-        _: &RemotingCommand,
-        response: Option<&RemotingCommand>,
-    ) -> Result<(), RpcHookError> {
-        if response.is_none() {
-            self.0.fetch_add(1, Ordering::SeqCst);
-        }
-        Ok(())
-    }
 }
 
 #[tokio::test]
@@ -5872,66 +6053,6 @@ async fn p18_pipeline_failure_maps_to_system_error_without_running_later_stages(
     assert_eq!(processor_calls.load(Ordering::SeqCst), 0);
     assert_eq!(after_hook_calls.load(Ordering::SeqCst), 0);
     client.shutdown().await;
-}
-
-struct InvokedFailureFlowHook {
-    case: String,
-    calls: Arc<Mutex<Vec<String>>>,
-}
-
-impl RpcHook for InvokedFailureFlowHook {
-    fn before_request_result(&self, _: &str, _: &RemotingCommand) -> Result<(), RpcHookError> {
-        self.calls.lock().unwrap().push("before".into());
-        match self.case.as_str() {
-            "before" => Err(RpcHookError::Failed("before failed".into())),
-            "abort_before" => Err(RpcHookError::Abort {
-                response_code: 831,
-                remark: Some("before aborted".into()),
-            }),
-            _ => Ok(()),
-        }
-    }
-
-    fn after_response_optional_result(
-        &self,
-        _: &str,
-        _: &RemotingCommand,
-        response: Option<&RemotingCommand>,
-    ) -> Result<(), RpcHookError> {
-        let code = response.map_or_else(|| "null".into(), |response| response.code.to_string());
-        self.calls.lock().unwrap().push(format!("after:{code}"));
-        match self.case.as_str() {
-            "after" => Err(RpcHookError::Failed("after failed".into())),
-            "abort_after" => Err(RpcHookError::Abort {
-                response_code: 832,
-                remark: Some("after aborted".into()),
-            }),
-            _ => Ok(()),
-        }
-    }
-}
-
-struct InvokedFailureFlowPipeline {
-    case: String,
-    calls: Arc<Mutex<Vec<String>>>,
-}
-
-impl RequestPipeline for InvokedFailureFlowPipeline {
-    fn execute(&self, _: &RemotingCommand) -> Result<(), i32> {
-        Ok(())
-    }
-
-    fn execute_detailed(&self, _: &RemotingCommand) -> Result<(), RequestPipelineError> {
-        self.calls.lock().unwrap().push("pipeline".into());
-        match self.case.as_str() {
-            "pipeline" => Err(RequestPipelineError::Failed("pipeline failed".into())),
-            "abort_pipeline" => Err(RequestPipelineError::Abort {
-                response_code: 833,
-                remark: Some("pipeline aborted".into()),
-            }),
-            _ => Ok(()),
-        }
-    }
 }
 
 #[tokio::test]
@@ -6116,26 +6237,6 @@ async fn p18_request_pipeline_mutates_request_before_later_stage_and_processor()
         );
     }
     client.shutdown().await;
-}
-
-struct ThreadRequestExecutor {
-    executions: Arc<AtomicUsize>,
-}
-
-impl RequestExecutor for ThreadRequestExecutor {
-    fn execute(&self, task: Box<dyn FnOnce() + Send + 'static>) -> Result<(), String> {
-        self.executions.fetch_add(1, Ordering::SeqCst);
-        std::thread::spawn(task);
-        Ok(())
-    }
-}
-
-struct RejectRequestExecutor;
-
-impl RequestExecutor for RejectRequestExecutor {
-    fn execute(&self, _task: Box<dyn FnOnce() + Send + 'static>) -> Result<(), String> {
-        Err("executor saturated".into())
-    }
 }
 
 #[tokio::test]
@@ -6378,17 +6479,6 @@ async fn p18_request_context_preserves_channel_identity_through_pipeline_and_pro
     client.shutdown().await;
 }
 
-struct RejectingProcessor;
-impl RequestProcessor for RejectingProcessor {
-    fn process(&self, _: RemotingCommand) -> Result<Option<RemotingCommand>, String> {
-        Ok(None)
-    }
-
-    fn reject_request(&self) -> bool {
-        true
-    }
-}
-
 #[tokio::test]
 async fn p3_u01_socks5_proxy_tunnels_a_remoting_request() {
     socks5_proxy_tunnels_a_remoting_request(true).await;
@@ -6455,96 +6545,6 @@ async fn p18_proxy_connect_timeout_uses_live_first_use_value_and_caches_it() {
         Ok(false),
         "cached proxy bootstrap changed its timeout"
     );
-}
-
-async fn socks5_proxy_tunnels_a_remoting_request(username_password: bool) {
-    let broker = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let broker_address = broker.local_addr().unwrap();
-    let broker_peer = tokio::spawn(async move {
-        let (mut stream, _) = broker.accept().await.unwrap();
-        let request = read_command(&mut stream).await;
-        let mut response = command(42);
-        response.opaque = request.opaque;
-        response.mark_response();
-        write_command(&mut stream, &response).await;
-    });
-    let proxy = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let proxy_address = proxy.local_addr().unwrap();
-    let proxy_peer = tokio::spawn(async move {
-        let (mut client, _) = proxy.accept().await.unwrap();
-        let mut greeting_header = [0; 2];
-        client.read_exact(&mut greeting_header).await.unwrap();
-        assert_eq!(greeting_header[0], 5);
-        let mut methods = vec![0; usize::from(greeting_header[1])];
-        client.read_exact(&mut methods).await.unwrap();
-        if username_password {
-            assert_eq!(methods, [0, 2]);
-            client.write_all(&[5, 2]).await.unwrap();
-            let mut auth_header = [0; 2];
-            client.read_exact(&mut auth_header).await.unwrap();
-            assert_eq!(&auth_header, &[1, 6]);
-            let mut username = [0; 6];
-            client.read_exact(&mut username).await.unwrap();
-            assert_eq!(&username, b"rocket");
-            let mut password_length = [0; 1];
-            client.read_exact(&mut password_length).await.unwrap();
-            assert_eq!(password_length[0], 6);
-            let mut password = [0; 6];
-            client.read_exact(&mut password).await.unwrap();
-            assert_eq!(&password, b"secret");
-            client.write_all(&[1, 0]).await.unwrap();
-        } else {
-            assert_eq!(methods, [0]);
-            client.write_all(&[5, 0]).await.unwrap();
-        }
-        let mut request = [0; 10];
-        client.read_exact(&mut request[..4]).await.unwrap();
-        assert_eq!(&request[..4], &[5, 1, 0, 1]);
-        client.read_exact(&mut request[4..]).await.unwrap();
-        let target = std::net::SocketAddr::new(
-            std::net::Ipv4Addr::new(request[4], request[5], request[6], request[7]).into(),
-            u16::from_be_bytes([request[8], request[9]]),
-        );
-        assert_eq!(target, broker_address);
-        let upstream = tokio::net::TcpStream::connect(target).await.unwrap();
-        client
-            .write_all(&[5, 0, 0, 1, 127, 0, 0, 1, 0, 1])
-            .await
-            .unwrap();
-        let (mut client_read, mut client_write) = client.into_split();
-        let (mut upstream_read, mut upstream_write) = upstream.into_split();
-        let a = tokio::io::copy(&mut client_read, &mut upstream_write);
-        let b = tokio::io::copy(&mut upstream_read, &mut client_write);
-        let _ = tokio::join!(a, b);
-    });
-    let proxy_config = if username_password {
-        format!(
-            r#"{{"127.0.0.0/8":{{"addr":"{}","username":"rocket","password":"secret"}}}}"#,
-            proxy_address
-        )
-    } else {
-        format!(r#"{{"127.0.0.0/8":{{"addr":"{}"}}}}"#, proxy_address)
-    };
-    let config = ClientConfig {
-        socks_proxy_config: proxy_config,
-        client_socket_send_buffer_size: 64 * 1024,
-        client_socket_receive_buffer_size: 64 * 1024,
-        ..ClientConfig::default()
-    };
-    let client = RemotingClient::with_config(config).unwrap();
-    client.start().unwrap();
-    let response = client
-        .invoke(
-            &broker_address.to_string(),
-            command(1),
-            Instant::now() + Duration::from_secs(2),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.code, 42);
-    client.shutdown().await;
-    broker_peer.await.unwrap();
-    proxy_peer.await.unwrap();
 }
 
 #[tokio::test]

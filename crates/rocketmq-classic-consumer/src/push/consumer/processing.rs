@@ -279,23 +279,21 @@ impl PushConsumer {
         };
         let mut client_config = self.config.client_config().clone();
         let header = {
-            let mut __phase18_header_1 = PullMessageRequestHeader::default();
-            __phase18_header_1.set_consumer_group(Some(request.consumer_group().to_owned()));
-            __phase18_header_1.set_topic(Some(topic.to_owned()));
-            __phase18_header_1.set_queue_id(Some(queue.queue_id()));
-            __phase18_header_1.set_queue_offset(Some(request.next_offset()));
-            __phase18_header_1.set_max_msg_nums(Some(self.config.pull_batch_size()));
-            __phase18_header_1.set_sys_flag(Some(sys_flag));
-            __phase18_header_1.set_commit_offset(Some(commit_offset));
-            __phase18_header_1
-                .set_suspend_timeout_millis(Some(PULL_BROKER_SUSPEND_MAX_TIME_MILLIS));
-            __phase18_header_1.set_subscription(sub_expression);
-            __phase18_header_1.set_sub_version(Some(subscription.get_sub_version()));
-            __phase18_header_1
-                .set_expression_type(subscription.get_expression_type().map(str::to_owned));
-            __phase18_header_1.set_max_msg_bytes(Some(self.config.pull_batch_size_in_bytes()));
-            __phase18_header_1.set_broker_name(Some(broker_name.to_owned()));
-            __phase18_header_1
+            let mut header = PullMessageRequestHeader::default();
+            header.set_consumer_group(Some(request.consumer_group().to_owned()));
+            header.set_topic(Some(topic.to_owned()));
+            header.set_queue_id(Some(queue.queue_id()));
+            header.set_queue_offset(Some(request.next_offset()));
+            header.set_max_msg_nums(Some(self.config.pull_batch_size()));
+            header.set_sys_flag(Some(sys_flag));
+            header.set_commit_offset(Some(commit_offset));
+            header.set_suspend_timeout_millis(Some(PULL_BROKER_SUSPEND_MAX_TIME_MILLIS));
+            header.set_subscription(sub_expression);
+            header.set_sub_version(Some(subscription.get_sub_version()));
+            header.set_expression_type(subscription.get_expression_type().map(str::to_owned));
+            header.set_max_msg_bytes(Some(self.config.pull_batch_size_in_bytes()));
+            header.set_broker_name(Some(broker_name.to_owned()));
+            header
         };
         let pull_started = Instant::now();
         let deadline =
@@ -1379,16 +1377,16 @@ impl PushConsumer {
         }
         .map(str::to_owned);
         let header = {
-            let mut __phase18_header_2 = ConsumerSendMsgBackRequestHeader::default();
-            __phase18_header_2.set_group(consumer_group.clone());
-            __phase18_header_2.set_broker_name(broker_name.clone());
-            __phase18_header_2.set_origin_topic(origin_topic.clone());
-            __phase18_header_2.set_offset(message.commit_log_offset());
-            __phase18_header_2.set_delay_level(delay_level);
-            __phase18_header_2.set_origin_msg_id(message.message_id().map(str::to_owned));
-            __phase18_header_2.set_max_reconsume_times(Some(max_reconsume_times));
-            __phase18_header_2.set_unit_mode(self.config.unit_mode());
-            __phase18_header_2
+            let mut header = ConsumerSendMsgBackRequestHeader::default();
+            header.set_group(consumer_group.clone());
+            header.set_broker_name(broker_name.clone());
+            header.set_origin_topic(origin_topic.clone());
+            header.set_offset(message.commit_log_offset());
+            header.set_delay_level(delay_level);
+            header.set_origin_msg_id(message.message_id().map(str::to_owned));
+            header.set_max_reconsume_times(Some(max_reconsume_times));
+            header.set_unit_mode(self.config.unit_mode());
+            header
         };
         let store_host = message
             .store_host()

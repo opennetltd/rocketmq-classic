@@ -23,6 +23,10 @@ fn assert_same_wire_fields(actual: &RemotingCommand, expected: &RemotingCommand)
     assert_eq!(actual.serialization, expected.serialization);
 }
 
+fn fixture_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/remoting")
+}
+
 #[test]
 fn nullable_language_matches_invoked_java_json_and_binary_boundaries() {
     let fixture: serde_json::Value =
@@ -116,10 +120,6 @@ fn unknown_binary_language_code_matches_java_value_of_byte_null() {
     let mut bytes = rocketmq_header::encode(&command).unwrap();
     bytes[2] = u8::MAX;
     assert_eq!(rocketmq_header::decode(&bytes).unwrap().language, None);
-}
-
-fn fixture_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/remoting")
 }
 
 #[test]

@@ -30,8 +30,6 @@ const TRACE_QUEUE_CAPACITY: usize = 2_048;
 const TRACE_MAX_BATCH_SIZE: usize = 20;
 const TRACE_MAX_MESSAGE_SIZE: usize = 128_000;
 
-#[cfg(test)]
-use crate::SendMessageType;
 use crate::{
     EndTransactionContext, EndTransactionHook, Producer, ProducerConfig, ProducerError,
     SendMessageContext, SendMessageHook,
@@ -877,6 +875,9 @@ async fn send_trace_message(
 }
 
 #[cfg(test)]
+use crate::SendMessageType;
+
+#[cfg(test)]
 mod tests {
     use std::{
         collections::HashMap,
@@ -1285,11 +1286,11 @@ mod tests {
         let recall_handle =
             crate::RecallMessageHandle::build_handle("orders", "broker-a", "123", "message-1");
         let header = {
-            let mut __phase18_header_0 = RecallMessageRequestHeader::default();
-            __phase18_header_0.set_producer_group(Some("other%producer-group".into()));
-            __phase18_header_0.set_topic("other%orders".into());
-            __phase18_header_0.set_recall_handle(recall_handle);
-            __phase18_header_0
+            let mut header = RecallMessageRequestHeader::default();
+            header.set_producer_group(Some("other%producer-group".into()));
+            header.set_topic("other%orders".into());
+            header.set_recall_handle(recall_handle);
+            header
         };
         let mut fields = rocketmq_classic_protocol::header::HeaderMap::new();
         header.encode_fields(&mut fields);

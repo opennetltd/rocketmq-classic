@@ -37,6 +37,34 @@ impl ConsumerRuntime for ResetOwner {
     }
 }
 
+struct RunningInfoOwner {
+    snapshot: ConsumerRunningInfoBody,
+    name: String,
+    consume_type: Option<ConsumeType>,
+    calls: Mutex<Vec<&'static str>>,
+}
+
+impl ConsumerRuntime for RunningInfoOwner {
+    fn heartbeat_data(&self) -> ConsumerData {
+        panic!("Running Info must use consumeType directly")
+    }
+
+    fn consume_type(&self) -> Option<ConsumeType> {
+        self.calls.lock().unwrap().push("type");
+        self.consume_type
+    }
+
+    fn consumer_running_info(&self) -> Result<ConsumerRunningInfoBody, RuntimeError> {
+        self.calls.lock().unwrap().push("info");
+        match self.name.as_str() {
+            "null-snapshot" | "snapshot-throws" => {
+                Err(RuntimeError::ConsumerOperation(self.name.clone()))
+            }
+            _ => Ok(self.snapshot.clone()),
+        }
+    }
+}
+
 #[tokio::test]
 async fn reset_shares_java_monitor_with_registration_and_start_but_not_raw_maps() {
     let fixture: Value = serde_json::from_str(include_str!(
@@ -128,34 +156,6 @@ async fn reset_shares_java_monitor_with_registration_and_start_but_not_raw_maps(
         runtime.consumer_table().remove(group).await.unwrap();
     }
     runtime.shutdown().await.unwrap();
-}
-
-struct RunningInfoOwner {
-    snapshot: ConsumerRunningInfoBody,
-    name: String,
-    consume_type: Option<ConsumeType>,
-    calls: Mutex<Vec<&'static str>>,
-}
-
-impl ConsumerRuntime for RunningInfoOwner {
-    fn heartbeat_data(&self) -> ConsumerData {
-        panic!("Running Info must use consumeType directly")
-    }
-
-    fn consume_type(&self) -> Option<ConsumeType> {
-        self.calls.lock().unwrap().push("type");
-        self.consume_type
-    }
-
-    fn consumer_running_info(&self) -> Result<ConsumerRunningInfoBody, RuntimeError> {
-        self.calls.lock().unwrap().push("info");
-        match self.name.as_str() {
-            "null-snapshot" | "snapshot-throws" => {
-                Err(RuntimeError::ConsumerOperation(self.name.clone()))
-            }
-            _ => Ok(self.snapshot.clone()),
-        }
-    }
 }
 
 #[tokio::test]

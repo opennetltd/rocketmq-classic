@@ -47,10 +47,10 @@ impl Producer {
         });
         if let Some((address, offset)) = decoded {
             let header = {
-                let mut __phase18_header_0 = ViewMessageRequestHeader::default();
-                __phase18_header_0.set_topic(Some(topic.to_owned()));
-                __phase18_header_0.set_offset(Some(offset));
-                __phase18_header_0
+                let mut header = ViewMessageRequestHeader::default();
+                header.set_topic(Some(topic.to_owned()));
+                header.set_offset(Some(offset));
+                header
             };
             let timeout = std::time::Duration::from_millis(
                 i64::from(self.config.client_config().mq_client_api_timeout()).max(0) as u64,
@@ -298,18 +298,18 @@ impl Producer {
         });
 
         let header = {
-            let mut __phase18_header_1 = CreateTopicRequestHeader::default();
-            __phase18_header_1.set_topic(Some(topic));
-            __phase18_header_1.set_default_topic(Some(route_topic));
-            __phase18_header_1.set_read_queue_nums(Some(queue_num));
-            __phase18_header_1.set_write_queue_nums(Some(queue_num));
-            __phase18_header_1.set_perm(Some(6));
-            __phase18_header_1.set_topic_filter_type(Some("SINGLE_TAG".into()));
-            __phase18_header_1.set_topic_sys_flag(Some(topic_sys_flag));
-            __phase18_header_1.set_order(Some(false));
-            __phase18_header_1.set_attributes(Some(String::new()));
-            __phase18_header_1.set_force(Some(false));
-            __phase18_header_1
+            let mut header = CreateTopicRequestHeader::default();
+            header.set_topic(Some(topic));
+            header.set_default_topic(Some(route_topic));
+            header.set_read_queue_nums(Some(queue_num));
+            header.set_write_queue_nums(Some(queue_num));
+            header.set_perm(Some(6));
+            header.set_topic_filter_type(Some("SINGLE_TAG".into()));
+            header.set_topic_sys_flag(Some(topic_sys_flag));
+            header.set_order(Some(false));
+            header.set_attributes(Some(String::new()));
+            header.set_force(Some(false));
+            header
         };
         let vip_enabled = runtime
             .config()

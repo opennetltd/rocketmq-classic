@@ -28,8 +28,6 @@ pub mod push;
 pub mod rebalance;
 mod service_state;
 mod stack;
-#[cfg(test)]
-mod test_support;
 
 pub use config::PullConsumerConfig;
 pub use consume::{
@@ -53,3 +51,6 @@ pub use push::{
 pub use rocketmq_classic_core::api::admin::QueryResult;
 pub use rocketmq_classic_core::runtime::ConsumerStatsManager;
 pub use service_state::ConsumerServiceState;
+
+#[cfg(test)]
+mod test_support;

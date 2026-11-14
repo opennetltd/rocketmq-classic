@@ -124,15 +124,15 @@ async fn invoked_pop_ack_callbacks_match_rust_domain_outcomes() {
                     api.pop_message(
                         &addr,
                         &{
-                            let mut __phase18_header_0 = PopMessageRequestHeader::default();
-                            __phase18_header_0.set_consumer_group(Some("consumer".into()));
-                            __phase18_header_0.set_topic(Some("oracle-topic".into()));
-                            __phase18_header_0.set_queue_id(2);
-                            __phase18_header_0.set_max_msg_nums(1);
-                            __phase18_header_0.set_invisible_time(456);
-                            __phase18_header_0.set_born_time(123);
-                            __phase18_header_0.set_order(Some(false));
-                            __phase18_header_0
+                            let mut header = PopMessageRequestHeader::default();
+                            header.set_consumer_group(Some("consumer".into()));
+                            header.set_topic(Some("oracle-topic".into()));
+                            header.set_queue_id(2);
+                            header.set_max_msg_nums(1);
+                            header.set_invisible_time(456);
+                            header.set_born_time(123);
+                            header.set_order(Some(false));
+                            header
                         },
                         deadline,
                     )
@@ -157,14 +157,14 @@ async fn invoked_pop_ack_callbacks_match_rust_domain_outcomes() {
                     api.pop_lite_message(
                         &addr,
                         &{
-                            let mut __phase18_header_1 = PopLiteMessageRequestHeader::default();
-                            __phase18_header_1.set_client_id(Some("client".into()));
-                            __phase18_header_1.set_consumer_group(Some("consumer".into()));
-                            __phase18_header_1.set_topic(Some("oracle-topic".into()));
-                            __phase18_header_1.set_max_msg_num(1);
-                            __phase18_header_1.set_invisible_time(456);
-                            __phase18_header_1.set_born_time(123);
-                            __phase18_header_1
+                            let mut header = PopLiteMessageRequestHeader::default();
+                            header.set_client_id(Some("client".into()));
+                            header.set_consumer_group(Some("consumer".into()));
+                            header.set_topic(Some("oracle-topic".into()));
+                            header.set_max_msg_num(1);
+                            header.set_invisible_time(456);
+                            header.set_born_time(123);
+                            header
                         },
                         deadline,
                     )
@@ -204,13 +204,13 @@ async fn invoked_pop_ack_callbacks_match_rust_domain_outcomes() {
                 api.ack_message(
                     &addr,
                     &{
-                        let mut __phase18_header_2 = AckMessageRequestHeader::default();
-                        __phase18_header_2.set_consumer_group("consumer".into());
-                        __phase18_header_2.set_topic("oracle-topic".into());
-                        __phase18_header_2.set_queue_id(2);
-                        __phase18_header_2.set_offset(17);
-                        __phase18_header_2.set_extra_info("checkpoint".into());
-                        __phase18_header_2
+                        let mut header = AckMessageRequestHeader::default();
+                        header.set_consumer_group("consumer".into());
+                        header.set_topic("oracle-topic".into());
+                        header.set_queue_id(2);
+                        header.set_offset(17);
+                        header.set_extra_info("checkpoint".into());
+                        header
                     },
                     deadline,
                 )
@@ -228,15 +228,14 @@ async fn invoked_pop_ack_callbacks_match_rust_domain_outcomes() {
                         &addr,
                         "broker",
                         &{
-                            let mut __phase18_header_3 =
-                                ChangeInvisibleTimeRequestHeader::default();
-                            __phase18_header_3.set_consumer_group(Some("consumer".into()));
-                            __phase18_header_3.set_topic(Some("oracle-topic".into()));
-                            __phase18_header_3.set_queue_id(Some(2));
-                            __phase18_header_3.set_offset(Some(17));
-                            __phase18_header_3.set_extra_info(Some("checkpoint".into()));
-                            __phase18_header_3.set_invisible_time(Some(456));
-                            __phase18_header_3
+                            let mut header = ChangeInvisibleTimeRequestHeader::default();
+                            header.set_consumer_group(Some("consumer".into()));
+                            header.set_topic(Some("oracle-topic".into()));
+                            header.set_queue_id(Some(2));
+                            header.set_offset(Some(17));
+                            header.set_extra_info(Some("checkpoint".into()));
+                            header.set_invisible_time(Some(456));
+                            header
                         },
                         deadline,
                     )
