@@ -62,6 +62,33 @@ impl PushConsumer {
         }
 
         let orderly_lock_settings = self.current_orderly_lock_settings().await;
+        // Java applies cache limits before lock/offset work, and max-span only to concurrent Pull.
+        let thresholds = self.active_pull_queue_thresholds();
+        if let Ok(snapshot) = process_queue.snapshot(generation) {
+            if let Some(reason) = flow_control_reason(&snapshot, thresholds).filter(|reason| {
+                !self.is_consume_orderly()
+                    || !matches!(
+                        reason,
+                        crate::push::pull_service::PullFlowControlReason::MaxSpan
+                    )
+            }) {
+                tracing::trace!(
+                    consumer_group = %request.consumer_group(),
+                    queue_id = queue.queue_id(),
+                    generation,
+                    ?reason,
+                    cached_count = snapshot.cached_count,
+                    cached_bytes = snapshot.cached_bytes,
+                    max_span = snapshot.max_span,
+                    "push pull paused by queue flow control"
+                );
+                let _ = context
+                    .scheduler
+                    .schedule(request, PULL_TIME_DELAY_MILLIS_WHEN_CACHE_FLOW_CONTROL);
+                return;
+            }
+        }
+
         if orderly_lock_settings.is_some()
             && self.config.message_model()
                 == rocketmq_classic_protocol::heartbeat::MessageModel::Clustering
@@ -113,26 +140,6 @@ impl PushConsumer {
                         .schedule(request, self.pull_time_delay_millis_when_exception());
                     return;
                 }
-            }
-        }
-
-        let thresholds = self.active_pull_queue_thresholds();
-        if let Ok(snapshot) = process_queue.snapshot(generation) {
-            if let Some(reason) = flow_control_reason(&snapshot, thresholds) {
-                tracing::trace!(
-                    consumer_group = %request.consumer_group(),
-                    queue_id = queue.queue_id(),
-                    generation,
-                    ?reason,
-                    cached_count = snapshot.cached_count,
-                    cached_bytes = snapshot.cached_bytes,
-                    max_span = snapshot.max_span,
-                    "push pull paused by queue flow control"
-                );
-                let _ = context
-                    .scheduler
-                    .schedule(request, PULL_TIME_DELAY_MILLIS_WHEN_CACHE_FLOW_CONTROL);
-                return;
             }
         }
 
@@ -192,8 +199,6 @@ impl PushConsumer {
             .broker_name()
             .filter(|broker| !broker.is_empty())
             .ok_or_else(|| self.pull_retry_error("message queue has no broker name"))?;
-        let deadline =
-            Instant::now() + Duration::from_millis(CONSUMER_TIMEOUT_MILLIS_WHEN_SUSPEND as u64);
         let suggested_broker_id = self.pull_api.recalculate_pull_from_which_node(queue);
         let mut route = context
             .runtime
@@ -203,9 +208,17 @@ impl PushConsumer {
             .subscribe_address(broker_name, suggested_broker_id, false)
             .map_err(|error| self.pull_retry_error(error.to_string()))?;
         if broker.is_none() {
+            // Route lookup has its own client-config timeout; it must not spend the Pull RPC budget.
+            let route_timeout = context
+                .runtime
+                .config()
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .mq_client_api_timeout()
+                .max(0) as u64;
             context
                 .runtime
-                .update_topic_route(topic, deadline)
+                .update_topic_route(topic, Instant::now() + Duration::from_millis(route_timeout))
                 .await
                 .map_err(|error| self.pull_retry_error(error.to_string()))?;
             route = context
@@ -247,12 +260,10 @@ impl PushConsumer {
             sub_expression.is_some(),
             class_filter,
         );
-        let commit_offset = if broker.slave {
+        if broker.slave {
+            // PullAPIWrapper clears only the bit; Java retains the supplied header value.
             sys_flag = clear_commit_offset_flag(sys_flag);
-            0
-        } else {
-            commit_offset
-        };
+        }
         let broker_address = if class_filter {
             let route_data = route
                 .raw_routes
@@ -287,6 +298,8 @@ impl PushConsumer {
             __phase18_header_1
         };
         let pull_started = Instant::now();
+        let deadline =
+            pull_started + Duration::from_millis(CONSUMER_TIMEOUT_MILLIS_WHEN_SUSPEND as u64);
         // Java ASYNC pull: the admitted dispatcher task awaits this future
         // directly instead of occupying a shared PullMessageService worker.
         let pull_result = context

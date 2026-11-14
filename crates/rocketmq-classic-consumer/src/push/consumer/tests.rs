@@ -6417,11 +6417,34 @@ async fn push_pull_outcomes_insert_found_messages_and_correct_only_drained_offse
 
 #[tokio::test]
 async fn push_pull_request_uses_live_batch_settings_from_consumer_config() {
+    assert_push_pull_live_batch_settings(false).await;
+}
+
+#[tokio::test]
+async fn push_pull_slave_clears_commit_flag_but_preserves_commit_value() {
+    assert_push_pull_live_batch_settings(true).await;
+}
+
+fn java_push_pull_dispatch_fixture() -> serde_json::Value {
+    serde_json::from_str(include_str!(
+        "../../../../../fixtures/consumer/push-pull-dispatch.json"
+    ))
+    .unwrap()
+}
+
+async fn assert_push_pull_live_batch_settings(slave: bool) {
     let nameserver = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let nameserver_address = nameserver.local_addr().unwrap().to_string();
     let broker_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let broker_address = broker_listener.local_addr().unwrap().to_string();
-    let broker_route = pop_test_route(&broker_address);
+    let broker_route = if slave {
+        let mut route: serde_json::Value =
+            serde_json::from_slice(&pop_test_route(&broker_address)).unwrap();
+        route["brokerDatas"][0]["brokerAddrs"] = serde_json::json!({"1": broker_address});
+        serde_json::to_vec(&route).unwrap()
+    } else {
+        pop_test_route(&broker_address)
+    };
 
     let nameserver_peer = tokio::spawn(async move {
         let (mut stream, _) = nameserver.accept().await.unwrap();
@@ -6449,16 +6472,21 @@ async fn push_pull_request_uses_live_batch_settings_from_consumer_config() {
         assert_eq!(fields.get("maxMsgNums"), Some(&"7".to_owned()));
         assert_eq!(fields.get("maxMsgBytes"), Some(&"12345".to_owned()));
         assert_eq!(fields.get("subscription"), Some(&"tagA".to_owned()));
-        assert_eq!(fields.get("commitOffset"), Some(&"42".to_owned()));
+        let java = java_push_pull_dispatch_fixture();
+        assert_eq!(
+            fields.get("commitOffset"),
+            Some(&java["slaveCommitOffset"].as_i64().unwrap().to_string())
+        );
         // Java simple-consumer suspend value; the POP path keeps 20000.
         assert_eq!(
             fields.get("suspendTimeoutMillis"),
             Some(&"15000".to_owned())
         );
-        assert!(
+        assert_eq!(
             rocketmq_classic_common::sysflag::pull::has_commit_offset_flag(
                 fields.get("sysFlag").unwrap().parse().unwrap()
-            )
+            ),
+            !slave
         );
         write_remoting_reply(
             stream.as_mut().unwrap(),
@@ -6696,6 +6724,15 @@ async fn one_pull_attempt_is_made_per_admission_and_a_follow_up_waits_for_releas
 
 #[tokio::test(start_paused = true)]
 async fn push_pull_uses_the_future_rpc_mode_within_the_thirty_second_deadline() {
+    assert_push_pull_future_deadline(false).await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn push_pull_route_refresh_does_not_spend_the_rpc_timeout() {
+    assert_push_pull_future_deadline(true).await;
+}
+
+async fn assert_push_pull_future_deadline(cold_route: bool) {
     let nameserver = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let nameserver_address = nameserver.local_addr().unwrap().to_string();
     let broker_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -6706,6 +6743,9 @@ async fn push_pull_uses_the_future_rpc_mode_within_the_thirty_second_deadline() 
         let (mut stream, _) = nameserver.accept().await.unwrap();
         let incoming = read_remoting_command(&mut stream).await;
         assert_eq!(incoming.code, request::GET_ROUTEINFO_BY_TOPIC);
+        if cold_route {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        }
         write_remoting_reply_with_body(
             &mut stream,
             &incoming,
@@ -6732,7 +6772,10 @@ async fn push_pull_uses_the_future_rpc_mode_within_the_thirty_second_deadline() 
             Some(&"15000".to_owned())
         );
         tokio::time::sleep(Duration::from_millis(
-            CONSUMER_TIMEOUT_MILLIS_WHEN_SUSPEND as u64 + 500,
+            java_push_pull_dispatch_fixture()["rpcTimeoutMillisAfterRouteRefresh"]
+                .as_u64()
+                .unwrap()
+                + 500,
         ))
         .await;
         write_remoting_reply(
@@ -6763,11 +6806,12 @@ async fn push_pull_uses_the_future_rpc_mode_within_the_thirty_second_deadline() 
         .await
         .unwrap();
     runtime.remoting().start().unwrap();
-    runtime
-        .update_topic_route("orders", Instant::now() + Duration::from_secs(3))
-        .await
-        .unwrap();
-    nameserver_peer.await.unwrap();
+    if !cold_route {
+        runtime
+            .update_topic_route("orders", Instant::now() + Duration::from_secs(3))
+            .await
+            .unwrap();
+    }
 
     let queue = MessageQueue::new("orders", "broker-a", 0);
     let request = PullRequest::new(
@@ -6800,6 +6844,7 @@ async fn push_pull_uses_the_future_rpc_mode_within_the_thirty_second_deadline() 
     assert_eq!(pull_result.result.next_begin_offset, 9);
     assert_eq!(pull_result.result.status, PullStatus::NoNewMessage);
 
+    nameserver_peer.await.unwrap();
     broker_peer.await.unwrap();
     runtime.shutdown().await.unwrap();
 }
@@ -10776,5 +10821,77 @@ async fn orderly_shutdown_persists_offsets_and_reports_unconfirmed_unlock() {
             .len(),
         1
     );
+    runtime.shutdown().await.unwrap();
+}
+
+#[tokio::test(start_paused = true)]
+async fn orderly_pull_ignores_concurrent_span_but_keeps_cache_limits() {
+    let java = java_push_pull_dispatch_fixture();
+    assert_eq!(java["orderlyIgnoresConcurrentMaxSpan"], true);
+    assert_eq!(java["orderlyRetainsCacheCountLimit"], true);
+    let cache_delay = java["concurrentMaxSpanDelayMillis"].as_u64().unwrap();
+    let mut config = PushConsumerConfig::new("orderly-span-parity").unwrap();
+    config.client_config_mut().set_namesrv_addr(None);
+    config.set_message_model(rocketmq_classic_protocol::heartbeat::MessageModel::Broadcasting);
+    config.set_consume_concurrently_max_span(1);
+    let manager = ClientRuntimeManager::new();
+    let consumer = Arc::new(PushConsumer::with_manager(config, manager.clone()));
+    let runtime = install_started_orderly_consumer(
+        &consumer,
+        &manager,
+        Arc::new(RecordingOffsetStore::default()),
+        Arc::new(EmptyOrderlyListener),
+        None,
+    )
+    .await;
+    let scheduler = match &*consumer.state.lock().await {
+        State::Started { pull_scheduler, .. } => pull_scheduler.clone(),
+        _ => unreachable!(),
+    };
+    let queue = Arc::new(ProcessQueue::new_for_assignment(
+        MessageQueue::new("orders", "broker-a", 0),
+        1,
+    ));
+    queue
+        .insert_messages(1, vec![message(0), message(100)])
+        .unwrap();
+    let request = Arc::new(PullRequest::new("orderly-span-parity", queue, 0));
+    // No subscription: after ignoring the concurrent-only span, Java reaches the ordinary
+    // missing-subscription retry rather than the 50 ms cache-flow-control path.
+    consumer
+        .clone()
+        .run_pull_worker_request(request.clone())
+        .await;
+    tokio::time::advance(Duration::from_millis(cache_delay)).await;
+    assert!(
+        scheduler.take_due().is_none(),
+        "orderly Pull must ignore concurrent max span"
+    );
+    tokio::time::advance(Duration::from_millis(
+        consumer.pull_time_delay_millis_when_exception() as u64 - cache_delay,
+    ))
+    .await;
+    let due = scheduler.take_due().unwrap();
+    scheduler.finish(&due);
+    // Java reads its live consumeOrderly flag, even when the installed service is orderly.
+    consumer.set_consume_orderly(false);
+    consumer
+        .clone()
+        .run_pull_worker_request(request.clone())
+        .await;
+    tokio::time::advance(Duration::from_millis(cache_delay)).await;
+    let due = scheduler
+        .take_due()
+        .expect("concurrent max span must apply after a live flag change");
+    scheduler.finish(&due);
+    consumer.set_consume_orderly(true);
+    consumer.config().set_pull_threshold_for_queue(1);
+    consumer.clone().run_pull_worker_request(request).await;
+    tokio::time::advance(Duration::from_millis(cache_delay)).await;
+    assert!(
+        scheduler.take_due().is_some(),
+        "message-count flow control still applies to orderly Pull"
+    );
+    consumer.shutdown().await.unwrap();
     runtime.shutdown().await.unwrap();
 }

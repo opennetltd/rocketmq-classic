@@ -1137,6 +1137,12 @@
             </configuration>
           </execution>
           <execution>
+            <id>verify-push-pull-dispatch-fixtures</id>
+            <phase>verify</phase>
+            <goals><goal>java</goal></goals>
+            <configuration><mainClass>compat.PushPullDispatchFixtures</mainClass></configuration>
+          </execution>
+          <execution>
             <id>verify-live-pull-fanout-fixtures</id>
             <phase>verify</phase>
             <goals><goal>java</goal></goals>
