@@ -1,7 +1,11 @@
 package compat;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
@@ -34,6 +38,10 @@ public final class LivePullFanoutProbeFixtures {
         checks += recorderFlagsDuplicateActiveStart(failures);
         checks += recorderAllowsFollowUpAfterLatchedGate(failures);
         checks += recorderLogsEveryDeliveryCallback(failures);
+        checks += recorderStampsADelayedStartWithItsTransition(failures);
+        checks += recorderOrdersConcurrentStartsAndTheGate(failures);
+        checks += recorderKeepsARacingResponseConsistentWithTheGate(failures);
+        checks += recorderStampsAStartOnlyAfterTheRecorderLockIsFree(failures);
 
         if (!failures.isEmpty()) {
             for (String failure : failures) {
@@ -212,8 +220,8 @@ public final class LivePullFanoutProbeFixtures {
     private static int recorderLogsEveryDeliveryCallback(List<String> failures) {
         List<String> rows = new ArrayList<>();
         LivePullFanoutProbe.Recorder recorder = recorder(2, rows);
-        boolean first = recorder.recordDelivery(1_000L, 3, "p10f-q3", 0);
-        boolean second = recorder.recordDelivery(2_000L, 3, "p10f-q3", 1);
+        boolean first = recorder.recordDelivery(3, "p10f-q3", 0);
+        boolean second = recorder.recordDelivery(3, "p10f-q3", 1);
 
         int checks = 0;
         checks += expect(first, true, "recorder: first delivery counts", failures);
@@ -223,8 +231,223 @@ public final class LivePullFanoutProbeFixtures {
         return checks;
     }
 
+    /**
+     * A start that reaches recorder state later must carry its own transition timestamp, so the
+     * GATE can never precede a start it claims to cover.
+     */
+    private static int recorderStampsADelayedStartWithItsTransition(List<String> failures) {
+        List<String> rows = new ArrayList<>();
+        AtomicLong clockValue = new AtomicLong(100L);
+        LivePullFanoutProbe.Recorder recorder = recorderWithClock(2, rows, clockValue::get);
+
+        int checks = 0;
+        // Queue 1 records while the queue 0 admission is still delayed.
+        clockValue.set(200L);
+        recorder.pullStart("127.0.0.1:1", pullRequest(601, 1));
+        checks += expect(recorder.gateSnapshot(), null,
+            "recorder: one start is not an admission barrier", failures);
+
+        clockValue.set(300L);
+        recorder.pullStart("127.0.0.1:1", pullRequest(602, 0));
+
+        LivePullFanoutProbe.GateSnapshot gate = recorder.gateSnapshot();
+        checks += expect(gate == null, false,
+            "recorder: the delayed admission completes the barrier", failures);
+        if (gate == null) {
+            return checks;
+        }
+        checks += expect(gate.atNanos(), 300L, "recorder: gate carries its own sample", failures);
+        List<Long> starts = stamps(rows, "PULL_START");
+        checks += expect(starts.size(), 2, "recorder: both admissions are recorded", failures);
+        boolean covered = true;
+        for (Long stamp : starts) {
+            covered &= stamp <= gate.atNanos();
+        }
+        checks += expect(covered, true, "recorder: no covered start outlives the gate", failures);
+        checks += expect(count(rows, "GATE"), 1, "recorder: one gate row", failures);
+        return checks;
+    }
+
+    /**
+     * Racing admissions may take the recorder lock in any order, but the emitted evidence must
+     * never place the GATE before a start it covers.
+     */
+    private static int recorderOrdersConcurrentStartsAndTheGate(List<String> failures) {
+        final int queues = 16;
+        int checks = 0;
+        for (int round = 0; round < 24; round++) {
+            // Rows are emitted outside the recorder lock, so the sink itself must be thread-safe.
+            List<String> rows = Collections.synchronizedList(new ArrayList<>());
+            LivePullFanoutProbe.Recorder recorder = recorder(queues, rows);
+            CyclicBarrier startLine = new CyclicBarrier(queues);
+            List<Thread> threads = new ArrayList<>();
+            for (int queueId = 0; queueId < queues; queueId++) {
+                final int id = queueId;
+                Thread thread = new Thread(() -> {
+                    try {
+                        startLine.await();
+                    } catch (Exception interrupted) {
+                        throw new IllegalStateException(interrupted);
+                    }
+                    // Every thread enters pullStart together, then races for the recorder lock.
+                    recorder.pullStart("127.0.0.1:1", pullRequest(500 + id, id));
+                });
+                threads.add(thread);
+                thread.start();
+            }
+            for (Thread thread : threads) {
+                try {
+                    thread.join();
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    failures.add("recorder race: interrupted while joining a writer");
+                    return checks + 1;
+                }
+            }
+
+            LivePullFanoutProbe.GateSnapshot gate = recorder.gateSnapshot();
+            checks += expect(gate == null, false,
+                "recorder race: every assigned queue admitted one Pull", failures);
+            if (gate == null) {
+                return checks;
+            }
+            List<Long> starts;
+            synchronized (rows) {
+                starts = stamps(rows, "PULL_START");
+            }
+            long earliest = Long.MAX_VALUE;
+            long latest = Long.MIN_VALUE;
+            for (Long stamp : starts) {
+                earliest = Math.min(earliest, stamp);
+                latest = Math.max(latest, stamp);
+            }
+            checks += expect(count(rows, "GATE"), 1, "recorder race: one gate row", failures);
+            checks += expect(starts.size(), queues, "recorder race: every admission recorded",
+                failures);
+            checks += expect(latest <= gate.atNanos(), true,
+                "recorder race: no covered start outlives the gate (" + latest + " vs "
+                    + gate.atNanos() + ")", failures);
+            checks += expect(gate.spanMillis(), (latest - earliest) / 1_000_000L,
+                "recorder race: span matches the recorded starts", failures);
+        }
+        return checks;
+    }
+
+    /**
+     * A response that races the last initial start either invalidates the barrier or follows a
+     * valid latch; state and evidence agree in both interleavings.
+     */
+    private static int recorderKeepsARacingResponseConsistentWithTheGate(List<String> failures) {
+        int checks = 0;
+
+        // Interleaving 1: the response wins, so no barrier was ever reached.
+        List<String> rows = new ArrayList<>();
+        AtomicLong clockValue = new AtomicLong(1_000L);
+        LivePullFanoutProbe.Recorder recorder = recorderWithClock(2, rows, clockValue::get);
+        recorder.pullStart("127.0.0.1:1", pullRequest(701, 0));
+        clockValue.set(2_000L);
+        recorder.pullEnd("127.0.0.1:1", pullRequest(701, 0), successResponse());
+        clockValue.set(3_000L);
+        recorder.pullStart("127.0.0.1:1", pullRequest(702, 1));
+        checks += expect(recorder.gateSnapshot(), null,
+            "recorder race A: the barrier was never reached", failures);
+        checks += expect(violationMessage(recorder),
+            "a target Pull response completed before every assigned queue had an outstanding Pull",
+            "recorder race A: premature response recorded", failures);
+        checks += expect(count(rows, "GATE"), 0, "recorder race A: no gate row", failures);
+
+        // Interleaving 2: the admission wins, so the same response is legal and later than the gate.
+        rows = new ArrayList<>();
+        clockValue = new AtomicLong(1_000L);
+        recorder = recorderWithClock(2, rows, clockValue::get);
+        recorder.pullStart("127.0.0.1:1", pullRequest(801, 0));
+        clockValue.set(2_000L);
+        recorder.pullStart("127.0.0.1:1", pullRequest(802, 1));
+        clockValue.set(3_000L);
+        recorder.pullEnd("127.0.0.1:1", pullRequest(801, 0), successResponse());
+        LivePullFanoutProbe.GateSnapshot gate = recorder.gateSnapshot();
+        checks += expect(gate == null, false, "recorder race B: barrier reached", failures);
+        if (gate == null) {
+            return checks;
+        }
+        boolean afterGate = true;
+        for (Long stamp : stamps(rows, "PULL_END")) {
+            afterGate &= stamp >= gate.atNanos();
+        }
+        checks += expect(afterGate, true,
+            "recorder race B: a post-latch response is not stamped earlier", failures);
+        return checks;
+    }
+
+    /**
+     * The clock sample belongs after the state lock: an admission blocked on that lock must not
+     * carry a stale timestamp into either the start inventory or its evidence row.
+     */
+    private static int recorderStampsAStartOnlyAfterTheRecorderLockIsFree(List<String> failures) {
+        List<String> rows = Collections.synchronizedList(new ArrayList<>());
+        AtomicLong clockValue = new AtomicLong(100L);
+        LivePullFanoutProbe.Recorder recorder = recorderWithClock(2, rows, clockValue::get);
+
+        int checks = 0;
+        Thread delayed = new Thread(
+            () -> recorder.pullStart("127.0.0.1:1", pullRequest(901, 0)));
+        // Hold the recorder lock while another admission is already waiting on it.
+        synchronized (recorder.lock) {
+            delayed.start();
+            sleepQuietly(50L);
+            clockValue.set(500L);
+        }
+        try {
+            delayed.join();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            failures.add("recorder: interrupted while joining the blocked admission");
+            return checks + 1;
+        }
+
+        List<Long> starts;
+        synchronized (rows) {
+            starts = stamps(rows, "PULL_START");
+        }
+        checks += expect(starts, Arrays.asList(500L),
+            "recorder: a start blocked on the state lock is stamped when it takes the lock",
+            failures);
+        return checks;
+    }
+
+    private static void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /** Timestamp field of every emitted row of one kind, in emission order. */
+    private static List<Long> stamps(List<String> rows, String kind) {
+        List<Long> values = new ArrayList<>();
+        for (String row : rows) {
+            if (!row.startsWith("P10F\t" + kind + "\t")) {
+                continue;
+            }
+            String[] fields = row.split("\t");
+            if (fields.length < 4) {
+                throw new IllegalStateException(kind + " row has no timestamp: " + row);
+            }
+            values.add(Long.parseLong(fields[3]));
+        }
+        return values;
+    }
+
     private static LivePullFanoutProbe.Recorder recorder(int queues, List<String> rows) {
         return new LivePullFanoutProbe.Recorder(TOPIC, GROUP, queues, 5_000_000_000L, rows::add);
+    }
+
+    /** A recorder whose clock the fixture advances explicitly. */
+    private static LivePullFanoutProbe.Recorder recorderWithClock(
+        int queues, List<String> rows, LivePullFanoutProbe.ProbeClock clock) {
+        return new LivePullFanoutProbe.Recorder(TOPIC, GROUP, queues, 5_000_000_000L, rows::add,
+            clock);
     }
 
     private static RemotingCommand pullRequest(int opaque, int queueId) {

@@ -703,6 +703,10 @@ macro_rules! p10_fanout_row {
 /// Where evidence rows go; the unit tests capture them instead of printing.
 type FanoutRowSink = Arc<dyn Fn(String) + Send + Sync>;
 
+/// Monotonic probe clock. Tests inject a deterministic one so a state transition and its
+/// timestamp can be driven as one event.
+type FanoutClock = Arc<dyn Fn() -> i64 + Send + Sync>;
+
 /// Immutable admission-barrier snapshot, so callers never observe a half-updated gate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct GateSnapshot {
@@ -713,7 +717,7 @@ struct GateSnapshot {
 
 /// Evidence state shared by the RPC hook, the listener, and the probe body.
 struct FanoutProbeState {
-    base: StdInstant,
+    clock: FanoutClock,
     sink: FanoutRowSink,
     expected_queues: usize,
     admission_window_nanos: i64,
@@ -726,7 +730,6 @@ struct FanoutProbeInner {
     active_pulls: BTreeMap<i32, i32>,
     /// Queue id to the first time a target Pull was issued for it.
     first_start: BTreeMap<i32, i64>,
-    earliest_start: Option<i64>,
     completed_responses: usize,
     gate: Option<GateSnapshot>,
     violation: Option<String>,
@@ -747,8 +750,9 @@ impl FanoutProbeInner {
         if self.gate.is_some() || self.violation.is_some() || self.completed_responses > 0 {
             return None;
         }
-        // Nothing to measure until the first target Pull has been issued.
-        let earliest = self.earliest_start?;
+        // The admission-window origin is the earliest recorded start, not whichever call
+        // happened to reach the lock first. Nothing can be measured before the first start.
+        let earliest = *self.first_start.values().min()?;
         if now - earliest > admission_window_nanos {
             self.violation = Some(format!(
                 "only {} of {expected_queues} assigned queues had an outstanding Pull within the \
@@ -761,11 +765,13 @@ impl FanoutProbeInner {
         if self.active_pulls.len() != expected_queues {
             return None;
         }
-        let earliest_start = *self.first_start.values().min()?;
         let latest_start = *self.first_start.values().max()?;
+        // Every timestamp comes from the same lock-held clock sample as this latch, so a covered
+        // start can never carry a later stamp than the gate that claims it.
+        debug_assert!(now >= latest_start);
         let gate = GateSnapshot {
             at_nanos: now,
-            span_millis: (latest_start - earliest_start) / 1_000_000,
+            span_millis: (latest_start - earliest) / 1_000_000,
             distinct_queues: self.first_start.len(),
         };
         self.gate = Some(gate);
@@ -787,9 +793,35 @@ impl FanoutProbeState {
         Self::with(sink, queues, window)
     }
 
+    /// A recorder whose clock the test advances explicitly.
+    #[cfg(test)]
+    fn for_tests_with_clock(
+        queues: usize,
+        window: Duration,
+        sink: FanoutRowSink,
+        clock: FanoutClock,
+    ) -> Self {
+        Self::build(sink, queues, window, clock)
+    }
+
     fn with(sink: FanoutRowSink, expected_queues: usize, window: Duration) -> Self {
+        let base = StdInstant::now();
+        Self::build(
+            sink,
+            expected_queues,
+            window,
+            Arc::new(move || i64::try_from(base.elapsed().as_nanos()).unwrap_or(i64::MAX)),
+        )
+    }
+
+    fn build(
+        sink: FanoutRowSink,
+        expected_queues: usize,
+        window: Duration,
+        clock: FanoutClock,
+    ) -> Self {
         Self {
-            base: StdInstant::now(),
+            clock,
             sink,
             expected_queues,
             admission_window_nanos: i64::try_from(window.as_nanos()).unwrap_or(i64::MAX),
@@ -799,7 +831,7 @@ impl FanoutProbeState {
 
     /// Monotonic nanoseconds since the probe started; never a wall-clock value.
     fn nanos(&self) -> i64 {
-        i64::try_from(self.base.elapsed().as_nanos()).unwrap_or(i64::MAX)
+        (self.clock)()
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, FanoutProbeInner> {
@@ -836,13 +868,12 @@ impl FanoutProbeState {
         else {
             return;
         };
-        let now = self.nanos();
-        let latched = {
+        // The clock is sampled inside the state lock, so two concurrent admissions cannot record
+        // their transitions in one order and their timestamps in another.
+        let (at_nanos, latched) = {
             let mut inner = self.lock();
-            if inner.earliest_start.is_none() {
-                inner.earliest_start = Some(now);
-            }
-            inner.first_start.entry(queue_id).or_insert(now);
+            let at_nanos = (self.clock)();
+            inner.first_start.entry(queue_id).or_insert(at_nanos);
             match inner.active_pulls.get(&queue_id).copied() {
                 Some(outstanding) => {
                     if inner.violation.is_none() {
@@ -858,12 +889,15 @@ impl FanoutProbeState {
             }
             // Latching inside the same critical section as the start means a response can never
             // slip between "the last queue became active" and "the barrier is recorded".
-            inner.attempt_latch(now, self.expected_queues, self.admission_window_nanos)
+            let latched =
+                inner.attempt_latch(at_nanos, self.expected_queues, self.admission_window_nanos);
+            (at_nanos, latched)
         };
+        // Rows are emitted after the lock is released, but always carry the locked sample.
         p10_fanout_row!(
             self,
             "PULL_START",
-            now,
+            at_nanos,
             queue_id,
             command.opaque,
             suspend_timeout_millis,
@@ -885,9 +919,9 @@ impl FanoutProbeState {
         let Some((queue_id, _)) = target_pull_header(topic, group, command) else {
             return;
         };
-        let now = self.nanos();
-        {
+        let at_nanos = {
             let mut inner = self.lock();
+            let at_nanos = (self.clock)();
             match inner.active_pulls.get(&queue_id).copied() {
                 Some(outstanding) if outstanding == command.opaque => {
                     inner.active_pulls.remove(&queue_id);
@@ -911,11 +945,12 @@ impl FanoutProbeState {
                         .to_owned(),
                 );
             }
-        }
+            at_nanos
+        };
         p10_fanout_row!(
             self,
             "PULL_END",
-            now,
+            at_nanos,
             queue_id,
             command.opaque,
             response.code
@@ -923,13 +958,15 @@ impl FanoutProbeState {
     }
 
     /// Return the recorded snapshot once latched, otherwise `None`; the GATE row is emitted once.
-    fn try_latch_gate(&self, now: i64) -> Option<GateSnapshot> {
+    /// The clock sample belongs to the same critical section as the latch itself.
+    fn try_latch_gate(&self) -> Option<GateSnapshot> {
         let latched = {
             let mut inner = self.lock();
             if let Some(gate) = inner.gate {
                 return Some(gate);
             }
-            inner.attempt_latch(now, self.expected_queues, self.admission_window_nanos)
+            let at_nanos = (self.clock)();
+            inner.attempt_latch(at_nanos, self.expected_queues, self.admission_window_nanos)
         };
         if let Some(gate) = latched {
             self.emit_gate(gate);
@@ -939,13 +976,18 @@ impl FanoutProbeState {
 
     /// Emit every delivery row first; de-duplication only tracks progress.
     fn record_delivery(&self, key: &str, queue_id: i32, reconsume_times: i32) -> bool {
-        let now = self.nanos();
-        p10_fanout_row!(self, "DELIVERY", now, queue_id, key, reconsume_times);
-        self.lock().delivered.insert(key.to_owned())
+        let (at_nanos, fresh) = {
+            let mut inner = self.lock();
+            let at_nanos = (self.clock)();
+            let fresh = inner.delivered.insert(key.to_owned());
+            (at_nanos, fresh)
+        };
+        p10_fanout_row!(self, "DELIVERY", at_nanos, queue_id, key, reconsume_times);
+        fresh
     }
 
     fn first_pull_start_nanos(&self) -> Option<i64> {
-        self.lock().earliest_start
+        self.lock().first_start.values().min().copied()
     }
 
     fn delivered_count(&self) -> usize {
@@ -964,7 +1006,11 @@ impl FanoutProbeState {
 
     fn describe_state(&self) -> String {
         let inner = self.lock();
-        let elapsed = inner.earliest_start.map_or(0, |first| self.nanos() - first);
+        let elapsed = inner
+            .first_start
+            .values()
+            .min()
+            .map_or(0, |first| self.nanos() - first);
         format!(
             "active={}/{} distinctStarted={} responses={} sinceFirstPullMs={}",
             inner.active_pulls.len(),
@@ -1147,7 +1193,7 @@ async fn p10_fanout_probe(
             if let Some(violation) = state.violation() {
                 return Err(violation.into());
             }
-            if state.try_latch_gate(state.nanos()).is_some() {
+            if state.try_latch_gate().is_some() {
                 break;
             }
             if let Some(violation) = state.violation() {
@@ -5071,10 +5117,11 @@ fn encode_hex(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{FanoutProbeState, decode_batch_offsets};
+    use super::{FanoutClock, FanoutProbeState, decode_batch_offsets};
     use rocketmq_classic_protocol::codes::{request, response};
     use rocketmq_classic_remoting::ExtFields;
     use rocketmq_classic_remoting::command::RemotingCommand;
+    use std::sync::atomic::{AtomicI64, Ordering};
     use std::{sync::Arc, time::Duration};
 
     const FANOUT_TOPIC: &str = "compat_p10_fanout_rust";
@@ -5126,6 +5173,58 @@ mod tests {
     fn row_count(rows: &[String], kind: &str) -> usize {
         let prefix = format!("P10F\t{kind}\trust");
         rows.iter().filter(|row| row.starts_with(&prefix)).count()
+    }
+
+    /// Timestamp field of every emitted row of one kind, in emission order.
+    fn row_stamps(rows: &[String], kind: &str) -> Vec<i64> {
+        let prefix = format!("P10F\t{kind}\trust");
+        rows.iter()
+            .filter(|row| row.starts_with(&prefix))
+            .map(|row| {
+                row.split('\t')
+                    .nth(3)
+                    .unwrap_or_else(|| panic!("{kind} row has no timestamp: {row}"))
+                    .parse::<i64>()
+                    .unwrap_or_else(|_| panic!("{kind} row timestamp is not a number: {row}"))
+            })
+            .collect()
+    }
+
+    /// A recorder clock the test advances explicitly.
+    #[derive(Clone, Default)]
+    struct SteadyClock(Arc<AtomicI64>);
+
+    impl SteadyClock {
+        fn at(&self, value: i64) {
+            self.0.store(value, Ordering::SeqCst);
+        }
+
+        fn handle(&self) -> FanoutClock {
+            let counter = Arc::clone(&self.0);
+            Arc::new(move || counter.load(Ordering::SeqCst))
+        }
+    }
+
+    /// A recorder whose rows and clock are both controlled by the test.
+    fn capturing_state_with_clock(
+        queues: usize,
+        window: Duration,
+        clock: &SteadyClock,
+    ) -> (FanoutProbeState, Arc<std::sync::Mutex<Vec<String>>>) {
+        let rows = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let captured = Arc::clone(&rows);
+        let state = FanoutProbeState::for_tests_with_clock(
+            queues,
+            window,
+            Arc::new(move |line| {
+                captured
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .push(line);
+            }),
+            clock.handle(),
+        );
+        (state, rows)
     }
 
     #[test]
@@ -5280,21 +5379,258 @@ mod tests {
     /// The admission window is measured from the first target Pull start.
     #[test]
     fn fanout_recorder_reports_a_barrier_the_window_cannot_reach() {
-        let (state, _rows) = capturing_state(2, Duration::from_secs(5));
+        let clock = SteadyClock::default();
+        clock.at(1_000_000_000);
+        let (state, _rows) = capturing_state_with_clock(2, Duration::from_secs(5), &clock);
         state.pull_start(
             FANOUT_TOPIC,
             FANOUT_GROUP,
             "127.0.0.1:1",
             &fanout_pull_command(401, 0),
         );
-        let first = state.first_pull_start_nanos().expect("a start is recorded");
+        // The window origin is the earliest recorded start; advance the injected clock past it.
+        clock.at(7_000_000_000);
 
-        assert!(state.try_latch_gate(first + 6_000_000_000).is_none());
+        assert!(state.try_latch_gate().is_none());
         assert_eq!(
             state.violation().as_deref(),
             Some(
                 "only 1 of 2 assigned queues had an outstanding Pull within the 5000 ms admission window"
             )
+        );
+    }
+
+    /// The clock sample belongs after the state lock: an admission blocked on the lock must not
+    /// carry a stale timestamp into either the start inventory or its evidence row.
+    #[test]
+    fn fanout_recorder_stamps_a_start_only_after_the_state_lock_is_free() {
+        let clock = SteadyClock::default();
+        clock.at(100);
+        let (state, rows) = capturing_state_with_clock(2, Duration::from_secs(5), &clock);
+
+        // Hold the state lock while another admission is already waiting on it.
+        let state = Arc::new(state);
+        let held = state.lock();
+        let delayed = Arc::clone(&state);
+        let blocked = std::thread::spawn(move || {
+            delayed.pull_start(
+                FANOUT_TOPIC,
+                FANOUT_GROUP,
+                "127.0.0.1:1",
+                &fanout_pull_command(901, 0),
+            );
+        });
+        std::thread::sleep(Duration::from_millis(50));
+        clock.at(500);
+        drop(held);
+        blocked.join().expect("the delayed admission panicked");
+
+        let rows = rows
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(
+            row_stamps(&rows, "PULL_START"),
+            vec![500],
+            "a start blocked on the state lock must be stamped when it takes the lock"
+        );
+    }
+
+    /// A call that reaches recorder state later must carry its own transition timestamp, so a
+    /// GATE can never precede a start it claims to cover.
+    #[test]
+    fn fanout_recorder_stamps_a_delayed_start_with_its_state_transition() {
+        let clock = SteadyClock::default();
+        clock.at(100);
+        let (state, rows) = capturing_state_with_clock(2, Duration::from_secs(5), &clock);
+
+        // Queue 1 records while the queue 0 admission is still delayed.
+        clock.at(200);
+        state.pull_start(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(601, 1),
+        );
+        assert!(
+            state.gate_snapshot().is_none(),
+            "one start is not an admission barrier"
+        );
+
+        clock.at(300);
+        state.pull_start(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(602, 0),
+        );
+
+        let gate = state
+            .gate_snapshot()
+            .expect("the delayed admission completes the barrier");
+        assert_eq!(gate.at_nanos, 300, "the gate carries its own sample");
+        let rows = rows
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let starts = row_stamps(&rows, "PULL_START");
+        assert_eq!(starts.len(), 2);
+        assert!(
+            starts.iter().all(|stamp| *stamp <= gate.at_nanos),
+            "a covered start outlives the gate: {starts:?} vs {}",
+            gate.at_nanos
+        );
+        assert!(
+            starts.contains(&gate.at_nanos),
+            "the gate stamp is one of the recorded admissions"
+        );
+        assert_eq!(row_count(&rows, "GATE"), 1);
+    }
+
+    /// Racing admissions may take the state lock in any order, but the emitted evidence must
+    /// never place the GATE before a start it covers.
+    #[test]
+    fn fanout_recorder_orders_concurrent_starts_and_the_gate() {
+        const QUEUES: usize = 16;
+        for _round in 0..24 {
+            let (state, rows) = capturing_state(QUEUES, Duration::from_secs(5));
+            let state = Arc::new(state);
+            let start_line = Arc::new(std::sync::Barrier::new(QUEUES));
+            let handles: Vec<_> = (0..i32::try_from(QUEUES).unwrap())
+                .map(|queue_id| {
+                    let state = Arc::clone(&state);
+                    let start_line = Arc::clone(&start_line);
+                    std::thread::spawn(move || {
+                        // Every thread enters pull_start together, then races for the state lock.
+                        start_line.wait();
+                        state.pull_start(
+                            FANOUT_TOPIC,
+                            FANOUT_GROUP,
+                            "127.0.0.1:1",
+                            &fanout_pull_command(500 + queue_id, queue_id),
+                        );
+                    })
+                })
+                .collect();
+            for handle in handles {
+                handle.join().expect("a recorder thread panicked");
+            }
+
+            let gate = state
+                .gate_snapshot()
+                .expect("every assigned queue admitted one Pull");
+            assert_eq!(
+                state.violation(),
+                None,
+                "a legal barrier is not a violation"
+            );
+            let rows = rows
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let starts = row_stamps(&rows, "PULL_START");
+            assert_eq!(row_count(&rows, "GATE"), 1, "the GATE row is emitted once");
+            assert_eq!(starts.len(), QUEUES);
+            assert!(
+                starts.iter().all(|stamp| *stamp <= gate.at_nanos),
+                "GATE at {} precedes a covered start: {starts:?}",
+                gate.at_nanos
+            );
+            let earliest = *starts.iter().min().expect("starts were recorded");
+            let latest = *starts.iter().max().expect("starts were recorded");
+            assert_eq!(gate.span_millis, (latest - earliest) / 1_000_000);
+            // Same rule the evidence checker applies: the barrier is reached inside the admission
+            // window measured from the earliest recorded start.
+            assert!(
+                gate.at_nanos - earliest
+                    <= i64::try_from(Duration::from_secs(5).as_nanos()).unwrap(),
+                "the barrier was reached outside the admission window"
+            );
+            assert_eq!(gate.distinct_queues, QUEUES);
+        }
+    }
+
+    /// A response that races the last initial start either invalidates the barrier or follows a
+    /// valid latch; state and evidence agree in both interleavings.
+    #[test]
+    fn fanout_recorder_keeps_a_racing_response_consistent_with_the_gate() {
+        // Interleaving 1: the response wins, so no barrier was ever reached.
+        let clock = SteadyClock::default();
+        clock.at(1_000);
+        let (state, rows) = capturing_state_with_clock(2, Duration::from_secs(5), &clock);
+        state.pull_start(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(701, 0),
+        );
+        clock.at(2_000);
+        state.pull_end(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(701, 0),
+            &fanout_pull_response(701),
+        );
+        clock.at(3_000);
+        state.pull_start(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(702, 1),
+        );
+        assert!(
+            state.gate_snapshot().is_none(),
+            "the barrier was never reached"
+        );
+        assert_eq!(
+            state.violation().as_deref(),
+            Some(
+                "a target Pull response completed before every assigned queue had an outstanding Pull"
+            )
+        );
+        let rows = rows
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(
+            row_count(&rows, "GATE"),
+            0,
+            "no gate row is emitted for a broken barrier"
+        );
+
+        // Interleaving 2: the admission wins, so the same response is legal and later than the gate.
+        let clock = SteadyClock::default();
+        clock.at(1_000);
+        let (state, rows) = capturing_state_with_clock(2, Duration::from_secs(5), &clock);
+        state.pull_start(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(801, 0),
+        );
+        clock.at(2_000);
+        state.pull_start(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(802, 1),
+        );
+        clock.at(3_000);
+        state.pull_end(
+            FANOUT_TOPIC,
+            FANOUT_GROUP,
+            "127.0.0.1:1",
+            &fanout_pull_command(801, 0),
+            &fanout_pull_response(801),
+        );
+        let gate = state.gate_snapshot().expect("the barrier was reached");
+        assert_eq!(state.violation(), None, "a post-barrier response is normal");
+        let rows = rows
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(row_count(&rows, "GATE"), 1);
+        assert!(
+            row_stamps(&rows, "PULL_END")
+                .into_iter()
+                .all(|stamp| stamp >= gate.at_nanos),
+            "a response recorded after the latch must not carry an earlier timestamp"
         );
     }
 

@@ -70,7 +70,7 @@ public final class LivePullFanoutProbe {
         consumer.registerMessageListener((MessageListenerConcurrently) (messages, context) -> {
             for (MessageExt message : messages) {
                 String key = new String(message.getBody(), StandardCharsets.UTF_8);
-                recorder.recordDelivery(System.nanoTime(), message.getQueueId(), key,
+                recorder.recordDelivery(message.getQueueId(), key,
                     message.getReconsumeTimes());
             }
             return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
@@ -115,7 +115,7 @@ public final class LivePullFanoutProbe {
         long waitDeadline = firstPull + ADMISSION_WINDOW_NANOS + ADMISSION_POLL_SLACK_NANOS;
         while (true) {
             recorder.checkViolations();
-            if (recorder.tryLatchGate(System.nanoTime()) != null) {
+            if (recorder.tryLatchGate() != null) {
                 break;
             }
             recorder.checkViolations();
@@ -286,13 +286,21 @@ public final class LivePullFanoutProbe {
     }
 
     /** Shared evidence state; every timestamp is a process-local monotonic nanosecond value. */
+    /** Monotonic probe clock. Fixtures inject a deterministic one to drive event order. */
+    interface ProbeClock {
+        long nanoTime();
+    }
+
     static final class Recorder {
         private final String topic;
         private final String group;
         private final int expectedQueues;
         private final long admissionWindowNanos;
         private final RowSink sink;
-        private final Object lock = new Object();
+        private final ProbeClock clock;
+
+        /** Guard for recorder state; package-private so a fixture can hold it deterministically. */
+        final Object lock = new Object();
 
         /** queueId to the opaque of that queue's currently outstanding Pull, if any. */
         private final Map<Integer, Integer> activePulls = new TreeMap<>();
@@ -303,7 +311,6 @@ public final class LivePullFanoutProbe {
         /** Distinct seeded keys seen so far; only used to decide when delivery waiting ends. */
         private final Set<String> deliveredKeys = new HashSet<>();
 
-        private Long earliestStartNanos;
         private int completedResponses;
         private boolean gateLatched;
         private GateSnapshot gate;
@@ -311,11 +318,17 @@ public final class LivePullFanoutProbe {
 
         Recorder(String topic, String group, int expectedQueues, long admissionWindowNanos,
             RowSink sink) {
+            this(topic, group, expectedQueues, admissionWindowNanos, sink, System::nanoTime);
+        }
+
+        Recorder(String topic, String group, int expectedQueues, long admissionWindowNanos,
+            RowSink sink, ProbeClock clock) {
             this.topic = topic;
             this.group = group;
             this.expectedQueues = expectedQueues;
             this.admissionWindowNanos = admissionWindowNanos;
             this.sink = sink;
+            this.clock = clock;
         }
 
         void pullStart(String remoteAddr, RemotingCommand request) {
@@ -323,14 +336,14 @@ public final class LivePullFanoutProbe {
             if (header == null) {
                 return;
             }
-            long now = System.nanoTime();
             int queueId = header.getQueueId();
+            // The clock is sampled inside the state lock, so two concurrent admissions cannot
+            // record their transitions in one order and their timestamps in another.
+            long at;
             GateSnapshot latched;
             synchronized (lock) {
-                if (earliestStartNanos == null) {
-                    earliestStartNanos = now;
-                }
-                firstStart.putIfAbsent(queueId, now);
+                at = clock.nanoTime();
+                firstStart.putIfAbsent(queueId, at);
                 Integer outstanding = activePulls.putIfAbsent(queueId, request.getOpaque());
                 if (outstanding != null && violation == null) {
                     violation = "queue " + queueId + " admitted a second Pull while opaque "
@@ -338,9 +351,10 @@ public final class LivePullFanoutProbe {
                 }
                 // Latching inside the same critical section as the start means a response can never
                 // slip between "the last queue became active" and "the barrier is recorded".
-                latched = attemptLatchLocked(now);
+                latched = attemptLatchLocked(at);
             }
-            row(now, "PULL_START", queueId, request.getOpaque(), header.getSuspendTimeoutMillis(),
+            // Rows are emitted after the lock is released but always carry the locked sample.
+            row(at, "PULL_START", queueId, request.getOpaque(), header.getSuspendTimeoutMillis(),
                 remoteAddr);
             if (latched != null) {
                 row(latched.atNanos, "GATE", latched.spanMillis, latched.distinctQueues);
@@ -352,9 +366,10 @@ public final class LivePullFanoutProbe {
             if (header == null) {
                 return;
             }
-            long now = System.nanoTime();
             int code = response == null ? -1 : response.getCode();
+            long at;
             synchronized (lock) {
+                at = clock.nanoTime();
                 Integer outstanding = activePulls.get(header.getQueueId());
                 if (outstanding == null || outstanding != request.getOpaque()) {
                     if (violation == null) {
@@ -372,7 +387,7 @@ public final class LivePullFanoutProbe {
                         + "an outstanding Pull";
                 }
             }
-            row(now, "PULL_END", header.getQueueId(), request.getOpaque(), code);
+            row(at, "PULL_END", header.getQueueId(), request.getOpaque(), code);
         }
 
         /**
@@ -381,13 +396,14 @@ public final class LivePullFanoutProbe {
          * the first target Pull within the window. Returns the snapshot once latched, otherwise
          * null; the GATE row is emitted exactly once.
          */
-        GateSnapshot tryLatchGate(long now) {
+        GateSnapshot tryLatchGate() {
             GateSnapshot latched;
             synchronized (lock) {
                 if (gateLatched) {
                     return gate;
                 }
-                latched = attemptLatchLocked(now);
+                // The clock sample belongs to the same critical section as the latch itself.
+                latched = attemptLatchLocked(clock.nanoTime());
             }
             if (latched != null) {
                 row(latched.atNanos, "GATE", latched.spanMillis, latched.distinctQueues);
@@ -398,10 +414,12 @@ public final class LivePullFanoutProbe {
         /** Latch the barrier; call only while holding {@code lock}. Returns null when unchanged. */
         private GateSnapshot attemptLatchLocked(long now) {
             if (gateLatched || violation != null || completedResponses > 0
-                || earliestStartNanos == null) {
+                || firstStart.isEmpty()) {
                 return null;
             }
-            long elapsed = now - earliestStartNanos;
+            // The admission-window origin is the earliest recorded start, not whichever call
+            // happened to take the lock first.
+            long elapsed = now - earliestStartLocked();
             if (elapsed > admissionWindowNanos) {
                 violation = "only " + activePulls.size() + " of " + expectedQueues
                     + " assigned queues had an outstanding Pull within the "
@@ -417,17 +435,26 @@ public final class LivePullFanoutProbe {
                 earliest = Math.min(earliest, value);
                 latest = Math.max(latest, value);
             }
+            // Every timestamp comes from the same lock-held clock sample as this latch, so a
+            // covered start can never carry a later stamp than the gate that claims it.
+            if (now < latest) {
+                throw new IllegalStateException("probe clock moved backwards inside the recorder");
+            }
             gate = new GateSnapshot(now, (latest - earliest) / 1_000_000L, firstStart.size());
             gateLatched = true;
             return gate;
         }
 
         /** Emit every delivery row first; de-duplication only tracks progress. */
-        boolean recordDelivery(long now, int queueId, String key, int reconsumeTimes) {
-            row(now, "DELIVERY", queueId, key, reconsumeTimes);
+        boolean recordDelivery(int queueId, String key, int reconsumeTimes) {
+            long at;
+            boolean fresh;
             synchronized (lock) {
-                return deliveredKeys.add(key);
+                at = clock.nanoTime();
+                fresh = deliveredKeys.add(key);
             }
+            row(at, "DELIVERY", queueId, key, reconsumeTimes);
+            return fresh;
         }
 
         /** Return the target-topic Pull header, or null when the command is not one of ours. */
@@ -459,8 +486,19 @@ public final class LivePullFanoutProbe {
 
         Long firstPullStartNanos() {
             synchronized (lock) {
-                return earliestStartNanos;
+                return earliestStartLocked();
             }
+        }
+
+        /** Earliest recorded target Pull start; call only while holding {@code lock}. */
+        private Long earliestStartLocked() {
+            Long earliest = null;
+            for (Long value : firstStart.values()) {
+                if (earliest == null || value < earliest) {
+                    earliest = value;
+                }
+            }
+            return earliest;
         }
 
         int activePullCount() {
@@ -489,7 +527,8 @@ public final class LivePullFanoutProbe {
 
         String describeState() {
             synchronized (lock) {
-                long elapsed = earliestStartNanos == null ? 0 : System.nanoTime() - earliestStartNanos;
+                Long first = earliestStartLocked();
+                long elapsed = first == null ? 0 : clock.nanoTime() - first;
                 return "active=" + activePulls.size() + "/" + expectedQueues
                     + " distinctStarted=" + firstStart.size()
                     + " responses=" + completedResponses
