@@ -6739,6 +6739,14 @@ async fn push_pull_route_refresh_does_not_spend_the_rpc_timeout() {
 }
 
 async fn assert_push_pull_future_deadline(cold_route: bool) {
+    // Keep the paused clock from auto-jumping past the grace deadline while an OS socket
+    // response is becoming readable. Peers advance virtual time explicitly at the RPC boundaries.
+    let mut clock_keeper = tokio::task::JoinSet::new();
+    clock_keeper.spawn(async {
+        loop {
+            tokio::task::yield_now().await;
+        }
+    });
     let nameserver = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let nameserver_address = nameserver.local_addr().unwrap().to_string();
     let broker_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -6750,7 +6758,7 @@ async fn assert_push_pull_future_deadline(cold_route: bool) {
         let incoming = read_remoting_command(&mut stream).await;
         assert_eq!(incoming.code, request::GET_ROUTEINFO_BY_TOPIC);
         if cold_route {
-            tokio::time::sleep(Duration::from_secs(2)).await;
+            tokio::time::advance(Duration::from_secs(2)).await;
         }
         write_remoting_reply_with_body(
             &mut stream,
@@ -6777,7 +6785,7 @@ async fn assert_push_pull_future_deadline(cold_route: bool) {
                 .get("suspendTimeoutMillis"),
             Some(&"15000".to_owned())
         );
-        tokio::time::sleep(Duration::from_millis(
+        tokio::time::advance(Duration::from_millis(
             java_push_pull_dispatch_fixture()["rpcTimeoutMillisAfterRouteRefresh"]
                 .as_u64()
                 .unwrap()
@@ -6853,6 +6861,8 @@ async fn assert_push_pull_future_deadline(cold_route: bool) {
     nameserver_peer.await.unwrap();
     broker_peer.await.unwrap();
     runtime.shutdown().await.unwrap();
+    clock_keeper.abort_all();
+    while clock_keeper.join_next().await.is_some() {}
 }
 
 #[tokio::test]
