@@ -1,6 +1,6 @@
 # ADR-0085: Own one Push Pull task per admitted queue-generation
 
-Status: implemented locally; the live Broker confirmation `P10-V05` is pending Phase 19.
+Status: implemented; focused live Broker case `P10-V05` passed at clean revision `6d6db7ed` on 2026-11-14. Broader Phase 19 and release approval remain separate.
 
 ## Source contract
 
@@ -117,9 +117,10 @@ Pull/simple-consumer value.
   missing/duplicate/mismatched send completions, duplicate deliveries, any target response that
   lands before the barrier, and a gate reached outside the admission window measured from the
   earliest recorded Pull start.
-- These are local scripted-peer results. Live Broker/client evidence is registered as
-  `P10-V05` and stays `PENDING_PHASE_19`; it does not retroactively validate the earlier
-  Phase 19 live run.
+- The initial evidence was local scripted-peer coverage. The later focused `P10-V05`
+  live run passed on clean revision `6d6db7ed`, including comparison and cleanup;
+  see the [re-review log](../../rlogs/2026/11/02b-push-pull-fanout-ordering-cleanup__20261114T004734Z.rlog). It does not extend the earlier
+  37-case aggregate to an unexecuted 38-case aggregate.
 
 ## Pinned Java re-review — 2026-11-14
 
@@ -130,7 +131,7 @@ RPC timeout after a route refresh, and persists the oracle in
 `fixtures/consumer/push-pull-dispatch.json`. The Rust consumer regressions read this fixture.
 
 The re-review corrected three adjacent Pull discrepancies: selecting a slave clears only the
-commit bit while preserving the header's commit offset; the live `consumeOrderly` flag excludes
+commit bit while preserving the header's commit offset (including -1 for absent memory offsets); the live `consumeOrderly` flag excludes
 concurrent max-span flow control while count/size limits still run before lock/offset work; route
 lookup uses the runtime's configured lookup timeout and the Pull RPC starts its own 30 s deadline
 after lookup completes. Tests cover master/slave wire headers, delayed cold-route lookup followed

@@ -1,5 +1,29 @@
 # Current compatibility status
 
+## Pinned Java Pull re-review and live confirmation — 2026-11-14
+
+The focused P10-V05 case now has real Broker evidence at clean revision `6d6db7ed`:
+Java 5.5.1 and Rust each admitted all 16 empty-queue Pulls before any target response,
+kept one active Pull per queue, and delivered every seeded queue inside the 5 s bound
+against the disposable 5.3.4 host-routed Broker. Comparison and cleanup both passed.
+The checked-in scenario summary is `PASS_RECORDED`; this supersedes the pending
+P10-V05 statements in the earlier entries below. The previous 37-case aggregate is
+historical; the full 38-case aggregate and owner/release approval were not rerun here.
+
+The source audit also corrected slave/disabled commit-offset header values, excluded
+orderly Pull from concurrent-only max-span flow control while preserving cache limits,
+and gave the Pull RPC a fresh 30 s timeout after separately bounded route lookup.
+The new invoked Java oracle holds callbacks for 80 dispatched queues and drift-checks
+`fixtures/consumer/push-pull-dispatch.json`; Rust regressions consume that evidence.
+A real `mqadmin topicStatus` footer also exposed and corrected a runner parsing defect.
+
+Final local checks: 314 consumer tests, 8 peer tests, 11 probe tests, checker/runner
+self-tests, strict workspace Clippy, formatting and serial portable Maven verification
+pass. The standard exact-JDK address fixture gate still reports environment drift;
+its fixture was not rewritten. Evidence locations, source revision, failed attempts,
+and cleanup results are recorded in the [re-review log](../../rlogs/2026/11/02b-push-pull-fanout-ordering-cleanup__20261114T004734Z.rlog).
+This verifies the listed Pull contracts, not the complete Java API or whole phase.
+
 ## Fan-out recorder ordering and failure cleanup — 2026-11-14
 
 The owned-dispatch architecture is unchanged; this pass corrected evidence ordering and failure
