@@ -191,6 +191,15 @@ def check_language(language, rows, topic_base, queues, admission_window_ms, deli
                  f"recorded first Pull starts")
         if ends and gate_at > min(end[0] for end in ends):
             fail("a target Pull response completed before the recorded admission gate")
+        # The barrier itself must be reached inside the admission window, measured from the
+        # earliest recorded start rather than from a span the probe chose to report.
+        gate_elapsed_ns = gate_at - min(first_starts.values())
+        if gate_elapsed_ns < 0:
+            fail(f"GATE timestamp {gate_at} precedes the first Pull start "
+                 f"{min(first_starts.values())}, so the recorded clock ordering is impossible")
+        elif gate_elapsed_ns > admission_window_ms * 1_000_000:
+            fail(f"GATE was reached {gate_elapsed_ns // 1_000_000} ms after the first Pull start, "
+                 f"outside the {admission_window_ms} ms admission window")
 
     # 5. One active Pull per queue-generation, and follow-ups wait for slot release.
     events = [(stamp, 1, queue_id, opaque) for stamp, queue_id, opaque in starts]
@@ -480,6 +489,26 @@ def self_test():
     late_ends = [(base + 12_000_000_000 + queue_id, queue_id, 100 + queue_id)
                  for queue_id in range(DEFAULT_QUEUES)]
 
+    # A gate that is latched long after a compact set of starts: the start span stays inside the
+    # window, so only an elapsed-gate check can reject it. Responses and sends stay after the gate
+    # so this exercises the elapsed limit rather than another ordering rule.
+    slow_starts = [(base + 1_000_000_000 + queue_id * 1_000, queue_id, 100 + queue_id)
+                   for queue_id in range(DEFAULT_QUEUES)]
+    slow_ends = [(base + 12_000_000_000 + queue_id, queue_id, 100 + queue_id)
+                 for queue_id in range(DEFAULT_QUEUES)]
+    slow_sends = [(base + 13_000_000_000 + queue_id * 1_000, queue_id, f"p10f-q{queue_id}")
+                  for queue_id in range(DEFAULT_QUEUES)]
+    slow_deliveries = [(base + 14_000_000_000 + queue_id * 1_000, queue_id, f"p10f-q{queue_id}")
+                       for queue_id in range(DEFAULT_QUEUES)]
+    at_limit_gate = base + 5_000_000_000
+    over_gate = base + 5_000_000_001
+    at_limit_ends = [(base + 6_000_000_000 + queue_id, queue_id, 100 + queue_id)
+                     for queue_id in range(DEFAULT_QUEUES)]
+    at_limit_sends = [(base + 7_000_000_000 + queue_id * 1_000, queue_id, f"p10f-q{queue_id}")
+                      for queue_id in range(DEFAULT_QUEUES)]
+    at_limit_deliveries = [(base + 8_000_000_000 + queue_id * 1_000, queue_id,
+                            f"p10f-q{queue_id}") for queue_id in range(DEFAULT_QUEUES)]
+
     cases = [
         ("valid", False, None, {}),
         ("four-pulls-before-deadline", True, "exceeding the 5000 ms admission window",
@@ -510,6 +539,15 @@ def self_test():
                          for queue_id in range(DEFAULT_QUEUES)]}),
         ("gate-before-final-initial-start", True, "GATE timestamp precedes the initial Pull start",
          {"gate_at": base}),
+        ("gate-latched-after-window", True, "outside the 5000 ms admission window",
+         {"starts": slow_starts, "ends": slow_ends, "sends": slow_sends,
+          "deliveries": slow_deliveries, "gate_at": base + 11_000_000_000}),
+        ("gate-exactly-at-window-limit", False, None,
+         {"gate_at": at_limit_gate, "ends": at_limit_ends, "sends": at_limit_sends,
+          "deliveries": at_limit_deliveries}),
+        ("gate-one-nanosecond-past-limit", True, "outside the 5000 ms admission window",
+         {"gate_at": over_gate, "ends": at_limit_ends, "sends": at_limit_sends,
+          "deliveries": at_limit_deliveries}),
         ("response-between-final-start-and-gate", True,
          "completed before the recorded admission gate",
          {"gate_at": base + 3_000_000_000}),
