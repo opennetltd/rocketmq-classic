@@ -120,3 +120,19 @@ Pull/simple-consumer value.
 - These are local scripted-peer results. Live Broker/client evidence is registered as
   `P10-V05` and stays `PENDING_PHASE_19`; it does not retroactively validate the earlier
   Phase 19 live run.
+
+## Pinned Java re-review — 2026-11-14
+
+`PushPullDispatchFixtures` invokes the actual pinned `DefaultMQPushConsumerImpl.pullMessage`
+and `PullAPIWrapper.pullKernelImpl` with an offline recording client, without invoking callbacks.
+It verifies 80 queues dispatch in ASYNC mode before any response, the 15 s suspend and fresh 30 s
+RPC timeout after a route refresh, and persists the oracle in
+`fixtures/consumer/push-pull-dispatch.json`. The Rust consumer regressions read this fixture.
+
+The re-review corrected three adjacent Pull discrepancies: selecting a slave clears only the
+commit bit while preserving the header's commit offset; the live `consumeOrderly` flag excludes
+concurrent max-span flow control while count/size limits still run before lock/offset work; route
+lookup uses the runtime's configured lookup timeout and the Pull RPC starts its own 30 s deadline
+after lookup completes. Tests cover master/slave wire headers, delayed cold-route lookup followed
+by a full-duration async poll, orderly/concurrent flag changes, and retained count flow control.
+These focused contracts do not claim complete client or phase compatibility.
