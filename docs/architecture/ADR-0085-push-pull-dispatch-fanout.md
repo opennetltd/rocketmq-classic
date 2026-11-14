@@ -94,19 +94,29 @@ Pull/simple-consumer value.
   suspend header) before any response, then again after one release round, then shuts down
   while polls are outstanding. With the pre-change pool restored the same test fails with
   `only 4 of 16 queues started a Pull within 5s`.
-- The scripted peer owns every accepted connection task (reader, writer, handler). Teardown
-  closes acceptance, cancels each connection cooperatively and joins every recorded task under
-  one cleanup bound; a surviving task fails the test. `peer_teardown_finishes_every_task_after_an_abandoned_connection`
-  covers the case where the client never closes its socket.
+- The scripted peer owns every accepted connection task (reader, writer, handler), and that
+  ownership lives outside the fallible scenario body: the scenario runs in its own task so neither
+  an assertion failure nor a panic can bypass cleanup. Teardown closes acceptance, cancels each
+  connection cooperatively, then drains every recorded task under one cleanup bound — a timed-out
+  handle is aborted and still awaited — and only afterwards are the scenario failure (with its
+  original message) and any cleanup failures reported together. The live-task witness must reach
+  zero in every case. `peer_teardown_finishes_every_task_after_an_abandoned_connection` covers a
+  client that never closes its socket, `peer_cleanup_drains_every_task_after_an_injected_scenario_failure`
+  an injected assertion failure while a connection stays open,
+  `peer_cleanup_reports_forced_timeouts_after_draining_every_child` uncooperative children under a
+  forced timeout, and `an_aborted_peer_task_releases_its_witness_before_the_first_poll` the
+  witness built before its task starts.
 - The permanent live case keeps its own contract: both probes start their producer before route
   lookup (the pinned 5.5.1 client rejects `fetchPublishMessageQueues` for a non-RUNNING
-  producer), track active Pulls per queue-generation and request identity under one lock, latch
-  the admission gate atomically with the last admission, and write their ready file only after
-  that latch. `run.sh` requires both fan-out topics to report zero max offsets before publishing,
+  producer), track active Pulls per queue-generation and request identity under one lock, sample
+  the monotonic clock inside that same lock so each row carries the timestamp of its own state
+  transition, latch the admission gate atomically with the last admission, and write their ready
+  file only after that latch. `run.sh` requires both fan-out topics to report zero max offsets before publishing,
   records only the subgroups it actually created, and refuses a PASS line on a probe exit, a
   missing ready file or a checker failure. `check_p10_fanout.py` rejects pre-gate publishing,
-  missing/duplicate/mismatched send completions, duplicate deliveries, and any target response
-  that lands before the barrier.
+  missing/duplicate/mismatched send completions, duplicate deliveries, any target response that
+  lands before the barrier, and a gate reached outside the admission window measured from the
+  earliest recorded Pull start.
 - These are local scripted-peer results. Live Broker/client evidence is registered as
   `P10-V05` and stays `PENDING_PHASE_19`; it does not retroactively validate the earlier
   Phase 19 live run.

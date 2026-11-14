@@ -1,5 +1,37 @@
 # Current compatibility status
 
+## Fan-out recorder ordering and failure cleanup — 2026-11-14
+
+The owned-dispatch architecture is unchanged; this pass corrected evidence ordering and failure
+cleanup only.
+
+- Both live probes now treat a Pull event time as a recorder state-transition time: the monotonic
+  clock is sampled inside the recorder lock, and the start inventory, active-Pull set, response
+  counter and admission gate are all updated in that same critical section. Rows are emitted after
+  the lock is released but carry the locked sample, so a `GATE` row can never precede a Pull start
+  it claims to cover, and the admission-window origin is the earliest recorded start rather than
+  whichever call happened to win the lock first.
+- The Rust probe exposes its clock only to tests; the new recorder tests drive a delayed admission
+  that blocks on the state lock, race 16 admissions per round over 24 rounds, and check both racing
+  interleavings of a response against the last initial start. The Java fixtures mirror the same
+  cases through an injected `ProbeClock` and a package-private recorder lock seam.
+- `check_p10_fanout.py` now enforces the admission window on the evidence itself: the gate must be
+  reached no earlier than the first Pull start and no later than the configured window measured
+  from it, in addition to the existing span, response-order and send-order rules. The self-test
+  grew to 23 synthetic cases including a reproduced 10 s delayed-gate fixture plus exactly-at-limit
+  and one-nanosecond-past-limit boundaries.
+- The scripted consumer test keeps peer ownership outside the fallible scenario body: the scenario
+  runs in its own task, an injected assertion failure is captured with its original message, then
+  acceptance closes, every recorded connection task is drained (a timed-out handle is aborted and
+  awaited), and only afterwards are the scenario and cleanup failures reported. New tests cover a
+  forced cleanup timeout across several children, scenario timeout/cancellation, a child panic,
+  an abort before a task's first poll, and an injected failure while a socket stays open; the witness must reach zero in every case.
+
+Local evidence only: checker self-test (23 synthetic cases), runner self-tests, Rust probe-state
+tests (11), scripted-peer tests (8) and Java fan-out fixtures (151 checks). `P10-V05` remains
+`PENDING_PHASE_19`: no Broker evidence exists for it yet, and the earlier 37/37 live aggregate does
+not cover it.
+
 ## Push Pull fan-out validation harness — 2026-11-13
 
 The `P10-V05` architecture is unchanged; only the validation around it was corrected.
