@@ -88,6 +88,38 @@ fn java_body(stem: &str) -> Vec<u8> {
     frame[header_end..].to_vec()
 }
 
+fn encode_decoded_header<T: CommandHeader>(
+    fields: &HeaderMap,
+    use_fast_encode: bool,
+) -> Result<HeaderMap, rocketmq_classic_protocol::header::ProtocolError> {
+    let decoded = T::decode_fields_with_mode(fields, use_fast_encode)?;
+    let mut encoded = HeaderMap::new();
+    decoded.encode_fields(&mut encoded);
+    Ok(encoded)
+}
+
+fn sort_java_hash_set_fields(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(fields) => {
+            for (name, value) in fields {
+                if matches!(name.as_str(), "tagsSet" | "codeSet") {
+                    if let serde_json::Value::Array(values) = value {
+                        values.sort_by_key(serde_json::Value::to_string);
+                    }
+                } else {
+                    sort_java_hash_set_fields(value);
+                }
+            }
+        }
+        serde_json::Value::Array(values) => {
+            for value in values {
+                sort_java_hash_set_fields(value);
+            }
+        }
+        _ => {}
+    }
+}
+
 #[test]
 fn java_request_and_response_header_fixtures_decode() {
     let route =
@@ -1432,16 +1464,6 @@ fn change_invisible_time_header_decode_modes_match_java_551() {
     }
 }
 
-fn encode_decoded_header<T: CommandHeader>(
-    fields: &HeaderMap,
-    use_fast_encode: bool,
-) -> Result<HeaderMap, rocketmq_classic_protocol::header::ProtocolError> {
-    let decoded = T::decode_fields_with_mode(fields, use_fast_encode)?;
-    let mut encoded = HeaderMap::new();
-    decoded.encode_fields(&mut encoded);
-    Ok(encoded)
-}
-
 #[test]
 fn transaction_and_reply_headers_round_trip_typed_fields() {
     let mut end = EndTransactionRequestHeader::default();
@@ -1891,28 +1913,6 @@ fn consumer_running_info_body_matches_pinned_java_5_5_1_json() {
         Some("value")
     );
     assert_eq!(running_info.get_jstack(), Some("jstack-fixture"));
-}
-
-fn sort_java_hash_set_fields(value: &mut serde_json::Value) {
-    match value {
-        serde_json::Value::Object(fields) => {
-            for (name, value) in fields {
-                if matches!(name.as_str(), "tagsSet" | "codeSet") {
-                    if let serde_json::Value::Array(values) = value {
-                        values.sort_by_key(serde_json::Value::to_string);
-                    }
-                } else {
-                    sort_java_hash_set_fields(value);
-                }
-            }
-        }
-        serde_json::Value::Array(values) => {
-            for value in values {
-                sort_java_hash_set_fields(value);
-            }
-        }
-        _ => {}
-    }
 }
 
 #[test]

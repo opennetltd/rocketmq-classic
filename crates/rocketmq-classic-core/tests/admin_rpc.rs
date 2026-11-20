@@ -183,6 +183,146 @@ async fn api() -> (MQClientApi, RemotingClient) {
     (MQClientApi::new(client.clone()), client)
 }
 
+async fn compare_batch_delete_fixture(
+    api: &MQClientApi,
+    fixture: &Value,
+    operations_key: &str,
+    request_code: i32,
+    group_list: bool,
+) {
+    let cases = fixture[operations_key]["cases"].as_array().unwrap();
+    for case in cases {
+        let values = if case["values"].is_null() {
+            None
+        } else {
+            Some(serde_json::from_value::<Vec<Option<String>>>(case["values"].clone()).unwrap())
+        };
+        let expected_request = &case["requests"][0];
+        assert_eq!(expected_request["address"], "broker-a:10911");
+        assert_eq!(expected_request["requestCode"], request_code);
+        assert_eq!(expected_request["timeoutMillis"], 2345);
+        assert_eq!(expected_request["extFieldsPresent"], false);
+        let expected_body = base64::engine::general_purpose::STANDARD
+            .decode(expected_request["requestBodyBase64"].as_str().unwrap())
+            .unwrap();
+        let response_code = case["responseCode"].as_i64().unwrap() as i32;
+        let (addr, peer) = scripted_peer_with_remark(
+            response_code,
+            case["responseRemark"].as_str().map(str::to_owned),
+            None,
+            None,
+        )
+        .await;
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let result = if group_list {
+            api.delete_subscription_group_list_nullable(
+                &addr,
+                values.as_deref(),
+                case["cleanOffset"].as_bool().unwrap(),
+                deadline,
+            )
+            .await
+        } else {
+            api.delete_topic_in_broker_list_nullable(&addr, values.as_deref(), deadline)
+                .await
+        };
+        if case["outcome"] == "returned" {
+            result.unwrap();
+        } else {
+            assert!(matches!(
+                result,
+                Err(RpcError::Response {
+                    request_code: actual_code,
+                    peer: error_peer,
+                    code,
+                    remark: Some(remark),
+                }) if actual_code == request_code
+                    && error_peer == addr
+                    && code == response_code
+                    && case["responseRemark"].as_str() == Some(remark.as_str())
+            ));
+        }
+        let request = peer.await.unwrap();
+        assert_eq!(request.code, request_code);
+        assert_eq!(request.body.as_deref(), Some(expected_body.as_slice()));
+        assert!(
+            request
+                .ext_fields
+                .as_ref()
+                .is_none_or(|fields| fields.is_empty())
+        );
+        assert_eq!(
+            request.language,
+            Some(rocketmq_classic_protocol::codes::LanguageCode::Java)
+        );
+    }
+}
+
+fn java_query_message_response_header(
+    timestamp: i64,
+    phyoffset: i64,
+) -> QueryMessageResponseHeader {
+    let mut header = QueryMessageResponseHeader::default();
+    header.set_index_last_update_timestamp(Some(timestamp));
+    header.set_index_last_update_phyoffset(Some(phyoffset));
+    header
+}
+
+fn java_reset_offset_header() -> ResetOffsetRequestHeader {
+    {
+        let mut header = ResetOffsetRequestHeader::default();
+        header.set_group("workers".into());
+        header.set_topic("orders".into());
+        header.set_queue_id(1);
+        header.set_offset(Some(9));
+        header.set_timestamp(1_712_345_678_901);
+        header.set_force(true);
+        header.set_namespace(Some("tenant".into()));
+        header.set_namespaced(Some(true));
+        header.set_broker_name(Some("broker-a".into()));
+        header.set_oneway(Some(false));
+        header
+    }
+}
+
+async fn invoke_offset_operation(
+    api: &MQClientApi,
+    addr: &str,
+    code: i32,
+) -> Result<i64, RpcError> {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    match code {
+        request::SEARCH_OFFSET_BY_TIMESTAMP => {
+            let mut header = SearchOffsetRequestHeader::default();
+            header.set_topic(Some("orders".into()));
+            header.set_queue_id(Some(0));
+            header.set_timestamp(Some(1_700_000_000_000));
+            header.set_boundary_type(Some(BoundaryType::value_of_name(Some("LOWER")).unwrap()));
+            api.search_offset(addr, &header, deadline).await
+        }
+        request::GET_MAX_OFFSET => {
+            let mut header = GetMaxOffsetRequestHeader::default();
+            header.set_topic(Some("orders".into()));
+            header.set_queue_id(Some(0));
+            api.get_max_offset(addr, &header, deadline).await
+        }
+        request::GET_MIN_OFFSET => {
+            let mut header = GetMinOffsetRequestHeader::default();
+            header.set_topic(Some("orders".into()));
+            header.set_queue_id(Some(0));
+            api.get_min_offset(addr, &header, deadline).await
+        }
+        request::GET_EARLIEST_MSG_STORETIME => {
+            let mut header = GetEarliestMsgStoretimeRequestHeader::default();
+            header.set_topic(Some("orders".into()));
+            header.set_queue_id(Some(0));
+            api.get_earliest_msg_storetime(addr, &header, deadline)
+                .await
+        }
+        _ => panic!("unexpected admin offset request code {code}"),
+    }
+}
+
 #[tokio::test]
 async fn producer_diagnostic_rpcs_match_invoked_java_fixture() {
     let fixture: Value =
@@ -295,146 +435,6 @@ async fn producer_diagnostic_rpcs_match_invoked_java_fixture() {
     }
 }
 
-async fn compare_batch_delete_fixture(
-    api: &MQClientApi,
-    fixture: &Value,
-    operations_key: &str,
-    request_code: i32,
-    group_list: bool,
-) {
-    let cases = fixture[operations_key]["cases"].as_array().unwrap();
-    for case in cases {
-        let values = if case["values"].is_null() {
-            None
-        } else {
-            Some(serde_json::from_value::<Vec<Option<String>>>(case["values"].clone()).unwrap())
-        };
-        let expected_request = &case["requests"][0];
-        assert_eq!(expected_request["address"], "broker-a:10911");
-        assert_eq!(expected_request["requestCode"], request_code);
-        assert_eq!(expected_request["timeoutMillis"], 2345);
-        assert_eq!(expected_request["extFieldsPresent"], false);
-        let expected_body = base64::engine::general_purpose::STANDARD
-            .decode(expected_request["requestBodyBase64"].as_str().unwrap())
-            .unwrap();
-        let response_code = case["responseCode"].as_i64().unwrap() as i32;
-        let (addr, peer) = scripted_peer_with_remark(
-            response_code,
-            case["responseRemark"].as_str().map(str::to_owned),
-            None,
-            None,
-        )
-        .await;
-        let deadline = Instant::now() + Duration::from_secs(2);
-        let result = if group_list {
-            api.delete_subscription_group_list_nullable(
-                &addr,
-                values.as_deref(),
-                case["cleanOffset"].as_bool().unwrap(),
-                deadline,
-            )
-            .await
-        } else {
-            api.delete_topic_in_broker_list_nullable(&addr, values.as_deref(), deadline)
-                .await
-        };
-        if case["outcome"] == "returned" {
-            result.unwrap();
-        } else {
-            assert!(matches!(
-                result,
-                Err(RpcError::Response {
-                    request_code: actual_code,
-                    peer: error_peer,
-                    code,
-                    remark: Some(remark),
-                }) if actual_code == request_code
-                    && error_peer == addr
-                    && code == response_code
-                    && case["responseRemark"].as_str() == Some(remark.as_str())
-            ));
-        }
-        let request = peer.await.unwrap();
-        assert_eq!(request.code, request_code);
-        assert_eq!(request.body.as_deref(), Some(expected_body.as_slice()));
-        assert!(
-            request
-                .ext_fields
-                .as_ref()
-                .is_none_or(|fields| fields.is_empty())
-        );
-        assert_eq!(
-            request.language,
-            Some(rocketmq_classic_protocol::codes::LanguageCode::Java)
-        );
-    }
-}
-
-fn java_query_message_response_header(
-    timestamp: i64,
-    phyoffset: i64,
-) -> QueryMessageResponseHeader {
-    let mut header = QueryMessageResponseHeader::default();
-    header.set_index_last_update_timestamp(Some(timestamp));
-    header.set_index_last_update_phyoffset(Some(phyoffset));
-    header
-}
-
-fn java_reset_offset_header() -> ResetOffsetRequestHeader {
-    {
-        let mut __phase18_header_0 = ResetOffsetRequestHeader::default();
-        __phase18_header_0.set_group("workers".into());
-        __phase18_header_0.set_topic("orders".into());
-        __phase18_header_0.set_queue_id(1);
-        __phase18_header_0.set_offset(Some(9));
-        __phase18_header_0.set_timestamp(1_712_345_678_901);
-        __phase18_header_0.set_force(true);
-        __phase18_header_0.set_namespace(Some("tenant".into()));
-        __phase18_header_0.set_namespaced(Some(true));
-        __phase18_header_0.set_broker_name(Some("broker-a".into()));
-        __phase18_header_0.set_oneway(Some(false));
-        __phase18_header_0
-    }
-}
-
-async fn invoke_offset_operation(
-    api: &MQClientApi,
-    addr: &str,
-    code: i32,
-) -> Result<i64, RpcError> {
-    let deadline = Instant::now() + Duration::from_secs(2);
-    match code {
-        request::SEARCH_OFFSET_BY_TIMESTAMP => {
-            let mut header = SearchOffsetRequestHeader::default();
-            header.set_topic(Some("orders".into()));
-            header.set_queue_id(Some(0));
-            header.set_timestamp(Some(1_700_000_000_000));
-            header.set_boundary_type(Some(BoundaryType::value_of_name(Some("LOWER")).unwrap()));
-            api.search_offset(addr, &header, deadline).await
-        }
-        request::GET_MAX_OFFSET => {
-            let mut header = GetMaxOffsetRequestHeader::default();
-            header.set_topic(Some("orders".into()));
-            header.set_queue_id(Some(0));
-            api.get_max_offset(addr, &header, deadline).await
-        }
-        request::GET_MIN_OFFSET => {
-            let mut header = GetMinOffsetRequestHeader::default();
-            header.set_topic(Some("orders".into()));
-            header.set_queue_id(Some(0));
-            api.get_min_offset(addr, &header, deadline).await
-        }
-        request::GET_EARLIEST_MSG_STORETIME => {
-            let mut header = GetEarliestMsgStoretimeRequestHeader::default();
-            header.set_topic(Some("orders".into()));
-            header.set_queue_id(Some(0));
-            api.get_earliest_msg_storetime(addr, &header, deadline)
-                .await
-        }
-        _ => panic!("unexpected admin offset request code {code}"),
-    }
-}
-
 #[tokio::test]
 async fn create_topic_sends_java_request_code_and_header_fields() {
     let fixture: Value = serde_json::from_str(include_str!(
@@ -445,22 +445,22 @@ async fn create_topic_sends_java_request_code_and_header_fields() {
     let (addr, peer) = scripted_peer(response::SUCCESS, None, None).await;
     let (api, client) = api().await;
     let header = {
-        let mut __phase18_header_1 = CreateTopicRequestHeader::default();
-        __phase18_header_1.set_topic(Some("orders".into()));
-        __phase18_header_1.set_default_topic(Some("TBW102".into()));
-        __phase18_header_1.set_read_queue_nums(Some(4));
-        __phase18_header_1.set_write_queue_nums(Some(4));
-        __phase18_header_1.set_perm(Some(6));
-        __phase18_header_1.set_topic_filter_type(Some("SINGLE_TAG".into()));
-        __phase18_header_1.set_topic_sys_flag(Some(3));
-        __phase18_header_1.set_order(Some(false));
-        __phase18_header_1.set_attributes(Some("+unit=true".into()));
-        __phase18_header_1.set_force(Some(false));
-        __phase18_header_1.set_namespace(Some("tenant".into()));
-        __phase18_header_1.set_namespaced(Some(true));
-        __phase18_header_1.set_broker_name(Some("broker-a".into()));
-        __phase18_header_1.set_oneway(Some(false));
-        __phase18_header_1
+        let mut header = CreateTopicRequestHeader::default();
+        header.set_topic(Some("orders".into()));
+        header.set_default_topic(Some("TBW102".into()));
+        header.set_read_queue_nums(Some(4));
+        header.set_write_queue_nums(Some(4));
+        header.set_perm(Some(6));
+        header.set_topic_filter_type(Some("SINGLE_TAG".into()));
+        header.set_topic_sys_flag(Some(3));
+        header.set_order(Some(false));
+        header.set_attributes(Some("+unit=true".into()));
+        header.set_force(Some(false));
+        header.set_namespace(Some("tenant".into()));
+        header.set_namespaced(Some(true));
+        header.set_broker_name(Some("broker-a".into()));
+        header.set_oneway(Some(false));
+        header
     };
 
     api.create_topic(&addr, &header, Instant::now() + Duration::from_secs(2))
@@ -6034,10 +6034,10 @@ async fn create_topic_preserves_broker_permission_error() {
         .create_topic(
             &addr,
             &{
-                let mut __phase18_header_2 = CreateTopicRequestHeader::default();
-                __phase18_header_2.set_topic(Some("orders".into()));
-                __phase18_header_2.set_default_topic(Some("TBW102".into()));
-                __phase18_header_2
+                let mut header = CreateTopicRequestHeader::default();
+                header.set_topic(Some("orders".into()));
+                header.set_default_topic(Some("TBW102".into()));
+                header
             },
             Instant::now() + Duration::from_secs(2),
         )
@@ -6074,22 +6074,22 @@ async fn create_topic_matches_mq_client_admin_error_fixture() {
         .create_topic(
             &addr,
             &{
-                let mut __phase18_header_3 = CreateTopicRequestHeader::default();
-                __phase18_header_3.set_topic(Some("orders".into()));
-                __phase18_header_3.set_default_topic(Some("TBW102".into()));
-                __phase18_header_3.set_read_queue_nums(Some(4));
-                __phase18_header_3.set_write_queue_nums(Some(4));
-                __phase18_header_3.set_perm(Some(6));
-                __phase18_header_3.set_topic_filter_type(Some("SINGLE_TAG".into()));
-                __phase18_header_3.set_topic_sys_flag(Some(3));
-                __phase18_header_3.set_order(Some(false));
-                __phase18_header_3.set_attributes(Some("+unit=true".into()));
-                __phase18_header_3.set_force(Some(false));
-                __phase18_header_3.set_namespace(Some("tenant".into()));
-                __phase18_header_3.set_namespaced(Some(true));
-                __phase18_header_3.set_broker_name(Some("broker-a".into()));
-                __phase18_header_3.set_oneway(Some(false));
-                __phase18_header_3
+                let mut header = CreateTopicRequestHeader::default();
+                header.set_topic(Some("orders".into()));
+                header.set_default_topic(Some("TBW102".into()));
+                header.set_read_queue_nums(Some(4));
+                header.set_write_queue_nums(Some(4));
+                header.set_perm(Some(6));
+                header.set_topic_filter_type(Some("SINGLE_TAG".into()));
+                header.set_topic_sys_flag(Some(3));
+                header.set_order(Some(false));
+                header.set_attributes(Some("+unit=true".into()));
+                header.set_force(Some(false));
+                header.set_namespace(Some("tenant".into()));
+                header.set_namespaced(Some(true));
+                header.set_broker_name(Some("broker-a".into()));
+                header.set_oneway(Some(false));
+                header
             },
             Instant::now() + Duration::from_secs(2),
         )
@@ -7023,14 +7023,14 @@ async fn query_message_sets_unique_flag_and_decodes_java_message_records() {
     .await;
     let (api, client) = api().await;
     let header = {
-        let mut __phase18_header_4 = QueryMessageRequestHeader::default();
-        __phase18_header_4.set_topic(Some("orders".into()));
-        __phase18_header_4.set_key(Some("producer-unique-1".into()));
-        __phase18_header_4.set_max_num(Some(32));
-        __phase18_header_4.set_begin_timestamp(Some(1_700_000_000_000));
-        __phase18_header_4.set_end_timestamp(Some(1_700_000_300_000));
-        __phase18_header_4.set_index_type(Some("UNIQUE_KEY".into()));
-        __phase18_header_4
+        let mut header = QueryMessageRequestHeader::default();
+        header.set_topic(Some("orders".into()));
+        header.set_key(Some("producer-unique-1".into()));
+        header.set_max_num(Some(32));
+        header.set_begin_timestamp(Some(1_700_000_000_000));
+        header.set_end_timestamp(Some(1_700_000_300_000));
+        header.set_index_type(Some("UNIQUE_KEY".into()));
+        header
     };
 
     let result = api
@@ -7167,14 +7167,14 @@ async fn mq_client_admin_query_message_matches_invoked_java_fixture() {
         let decompress_body = case["decompressBody"].as_bool().unwrap();
         let query_key = case["requestExtFields"]["key"].as_str().unwrap();
         let header = {
-            let mut __phase18_header_5 = QueryMessageRequestHeader::default();
-            __phase18_header_5.set_topic(Some("orders".into()));
-            __phase18_header_5.set_key(Some(query_key.to_owned()));
-            __phase18_header_5.set_max_num(Some(3));
-            __phase18_header_5.set_begin_timestamp(Some(1_700_000_000_000));
-            __phase18_header_5.set_end_timestamp(Some(1_700_000_300_000));
-            __phase18_header_5.set_index_type(Some("KEY".into()));
-            __phase18_header_5
+            let mut header = QueryMessageRequestHeader::default();
+            header.set_topic(Some("orders".into()));
+            header.set_key(Some(query_key.to_owned()));
+            header.set_max_num(Some(3));
+            header.set_begin_timestamp(Some(1_700_000_000_000));
+            header.set_end_timestamp(Some(1_700_000_300_000));
+            header.set_index_type(Some("KEY".into()));
+            header
         };
         let (addr, peer) =
             scripted_peer(response::SUCCESS, None, Some(response_body.clone())).await;
@@ -7216,14 +7216,14 @@ async fn mq_client_admin_query_message_matches_invoked_java_fixture() {
     }
 
     let header = {
-        let mut __phase18_header_6 = QueryMessageRequestHeader::default();
-        __phase18_header_6.set_topic(Some("orders".into()));
-        __phase18_header_6.set_key(Some("green".into()));
-        __phase18_header_6.set_max_num(Some(3));
-        __phase18_header_6.set_begin_timestamp(Some(1_700_000_000_000));
-        __phase18_header_6.set_end_timestamp(Some(1_700_000_300_000));
-        __phase18_header_6.set_index_type(Some("KEY".into()));
-        __phase18_header_6
+        let mut header = QueryMessageRequestHeader::default();
+        header.set_topic(Some("orders".into()));
+        header.set_key(Some("green".into()));
+        header.set_max_num(Some(3));
+        header.set_begin_timestamp(Some(1_700_000_000_000));
+        header.set_end_timestamp(Some(1_700_000_300_000));
+        header.set_index_type(Some("KEY".into()));
+        header
     };
     let (not_found_address, not_found_peer) = scripted_peer_with_remark(
         response::QUERY_NOT_FOUND,
@@ -7288,10 +7288,10 @@ async fn mq_client_admin_view_message_matches_invoked_java_fixture() {
         .decode(success["responseBodyBase64"].as_str().unwrap())
         .unwrap();
     let header = {
-        let mut __phase18_header_7 = ViewMessageRequestHeader::default();
-        __phase18_header_7.set_topic(Some("orders".into()));
-        __phase18_header_7.set_offset(Some(4));
-        __phase18_header_7
+        let mut header = ViewMessageRequestHeader::default();
+        header.set_topic(Some("orders".into()));
+        header.set_offset(Some(4));
+        header
     };
     let (addr, peer) = scripted_peer(response::SUCCESS, None, Some(response_body)).await;
     let (view_api, client) = api().await;
@@ -7354,19 +7354,19 @@ async fn mq_client_admin_consume_message_directly_matches_invoked_java_fixture()
     let consume = &fixture["consumeMessageDirectly"];
     let success = &consume["success"];
     let header = {
-        let mut __phase18_header_8 = ConsumeMessageDirectlyResultRequestHeader::default();
-        __phase18_header_8.set_consumer_group("workers".into());
-        __phase18_header_8.set_client_id(Some("client-a".into()));
-        __phase18_header_8.set_msg_id(Some("message-1".into()));
-        __phase18_header_8.set_broker_name(Some("broker-a".into()));
-        __phase18_header_8.set_topic(Some("orders".into()));
-        __phase18_header_8.set_topic_sys_flag(Some(3));
-        __phase18_header_8.set_group_sys_flag(Some(5));
-        __phase18_header_8.set_namespace(Some("tenant".into()));
-        __phase18_header_8.set_namespaced(Some(true));
-        __phase18_header_8.set_bname(Some("rpc-broker-a".into()));
-        __phase18_header_8.set_oneway(Some(false));
-        __phase18_header_8
+        let mut header = ConsumeMessageDirectlyResultRequestHeader::default();
+        header.set_consumer_group("workers".into());
+        header.set_client_id(Some("client-a".into()));
+        header.set_msg_id(Some("message-1".into()));
+        header.set_broker_name(Some("broker-a".into()));
+        header.set_topic(Some("orders".into()));
+        header.set_topic_sys_flag(Some(3));
+        header.set_group_sys_flag(Some(5));
+        header.set_namespace(Some("tenant".into()));
+        header.set_namespaced(Some(true));
+        header.set_bname(Some("rpc-broker-a".into()));
+        header.set_oneway(Some(false));
+        header
     };
     let body = success["responseBody"]
         .as_str()
@@ -7417,9 +7417,9 @@ async fn mq_client_admin_consume_message_directly_matches_invoked_java_fixture()
 #[tokio::test]
 async fn consume_message_directly_rejects_malformed_success_body() {
     let header = {
-        let mut __phase18_header_9 = ConsumeMessageDirectlyResultRequestHeader::default();
-        __phase18_header_9.set_consumer_group("workers".into());
-        __phase18_header_9
+        let mut header = ConsumeMessageDirectlyResultRequestHeader::default();
+        header.set_consumer_group("workers".into());
+        header
     };
     let (addr, peer) = scripted_peer(response::SUCCESS, None, Some(b"{".to_vec())).await;
     let (api, client) = api().await;
@@ -7516,13 +7516,13 @@ async fn mq_client_admin_get_consumer_connection_list_matches_invoked_java_fixtu
     let connection_list = &fixture["getConsumerConnectionList"];
     let success = &connection_list["success"];
     let header = {
-        let mut __phase18_header_10 = GetConsumerConnectionListRequestHeader::default();
-        __phase18_header_10.set_consumer_group(Some("workers".into()));
-        __phase18_header_10.set_namespace(Some("tenant".into()));
-        __phase18_header_10.set_namespaced(Some(true));
-        __phase18_header_10.set_broker_name(Some("broker-a".into()));
-        __phase18_header_10.set_oneway(Some(false));
-        __phase18_header_10
+        let mut header = GetConsumerConnectionListRequestHeader::default();
+        header.set_consumer_group(Some("workers".into()));
+        header.set_namespace(Some("tenant".into()));
+        header.set_namespaced(Some(true));
+        header.set_broker_name(Some("broker-a".into()));
+        header.set_oneway(Some(false));
+        header
     };
     let body = success["responseBody"]
         .as_str()
@@ -7669,15 +7669,15 @@ async fn mq_client_admin_get_consume_stats_matches_invoked_java_fixture() {
     );
     let success = &consume_stats["success"];
     let header = {
-        let mut __phase18_header_11 = GetConsumeStatsRequestHeader::default();
-        __phase18_header_11.set_consumer_group(Some("workers".into()));
-        __phase18_header_11.set_topic(Some("ignored-topic".into()));
-        __phase18_header_11.set_topic_list(Some("orders;payments;".into()));
-        __phase18_header_11.set_namespace(Some("tenant".into()));
-        __phase18_header_11.set_namespaced(Some(true));
-        __phase18_header_11.set_broker_name(Some("broker-a".into()));
-        __phase18_header_11.set_oneway(Some(false));
-        __phase18_header_11
+        let mut header = GetConsumeStatsRequestHeader::default();
+        header.set_consumer_group(Some("workers".into()));
+        header.set_topic(Some("ignored-topic".into()));
+        header.set_topic_list(Some("orders;payments;".into()));
+        header.set_namespace(Some("tenant".into()));
+        header.set_namespaced(Some(true));
+        header.set_broker_name(Some("broker-a".into()));
+        header.set_oneway(Some(false));
+        header
     };
     let body = success["responseBody"]
         .as_str()
@@ -7783,15 +7783,15 @@ async fn mq_client_admin_get_consumer_running_info_matches_invoked_java_fixture(
         "public abstract java.util.concurrent.CompletableFuture<org.apache.rocketmq.remoting.protocol.body.ConsumerRunningInfo> org.apache.rocketmq.client.MqClientAdmin.getConsumerRunningInfo(java.lang.String,org.apache.rocketmq.remoting.protocol.header.GetConsumerRunningInfoRequestHeader,long)"
     );
     let header = {
-        let mut __phase18_header_12 = GetConsumerRunningInfoRequestHeader::default();
-        __phase18_header_12.set_consumer_group("workers".into());
-        __phase18_header_12.set_client_id("client-a".into());
-        __phase18_header_12.set_jstack_enable(true);
-        __phase18_header_12.set_namespace(Some("tenant".into()));
-        __phase18_header_12.set_namespaced(Some(true));
-        __phase18_header_12.set_broker_name(Some("broker-a".into()));
-        __phase18_header_12.set_oneway(Some(false));
-        __phase18_header_12
+        let mut header = GetConsumerRunningInfoRequestHeader::default();
+        header.set_consumer_group("workers".into());
+        header.set_client_id("client-a".into());
+        header.set_jstack_enable(true);
+        header.set_namespace(Some("tenant".into()));
+        header.set_namespaced(Some(true));
+        header.set_broker_name(Some("broker-a".into()));
+        header.set_oneway(Some(false));
+        header
     };
     let success = &operation["success"];
     let body = success["responseBody"]
@@ -8497,10 +8497,10 @@ async fn view_message_sends_physical_offset_and_decodes_one_java_message() {
     let (addr, peer) = scripted_peer(response::SUCCESS, None, Some(message_record)).await;
     let (api, client) = api().await;
     let header = {
-        let mut __phase18_header_13 = ViewMessageRequestHeader::default();
-        __phase18_header_13.set_topic(Some("orders".into()));
-        __phase18_header_13.set_offset(Some(1_700_000_000_041));
-        __phase18_header_13
+        let mut header = ViewMessageRequestHeader::default();
+        header.set_topic(Some("orders".into()));
+        header.set_offset(Some(1_700_000_000_041));
+        header
     };
 
     let message = api

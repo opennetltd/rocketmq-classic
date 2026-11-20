@@ -12,6 +12,9 @@ fn fixture() -> Value {
     serde_json::from_str(include_str!("../../../fixtures/runtime/client-config.json")).unwrap()
 }
 
+const PROBE_ENABLED: &str = "ROCKETMQ_CLASSIC_NAME_SERVER_ADDRESS_PROBE";
+const PROBE_EXPECTED: &str = "ROCKETMQ_CLASSIC_NAME_SERVER_ADDRESS_EXPECTED";
+
 #[test]
 fn name_server_address_public_surface_and_inputs_match_invoked_java() {
     let fixture = fixture();
@@ -112,9 +115,6 @@ fn name_server_address_public_surface_and_inputs_match_invoked_java() {
         ""
     );
 }
-
-const PROBE_ENABLED: &str = "ROCKETMQ_CLASSIC_NAME_SERVER_ADDRESS_PROBE";
-const PROBE_EXPECTED: &str = "ROCKETMQ_CLASSIC_NAME_SERVER_ADDRESS_EXPECTED";
 
 #[test]
 fn get_name_server_addresses_reads_java_property_then_environment_fallback() {

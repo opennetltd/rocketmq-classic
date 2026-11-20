@@ -1,5 +1,3 @@
-#[cfg(test)]
-use std::collections::BTreeSet;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicI32, Ordering},
@@ -578,6 +576,9 @@ impl ProducerConfig {
         self.topics = value;
     }
 }
+
+#[cfg(test)]
+use std::collections::BTreeSet;
 
 #[cfg(test)]
 mod tests {

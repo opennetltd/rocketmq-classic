@@ -14,9 +14,6 @@ use rocketmq_classic_core::{
 };
 use rocketmq_classic_remoting::client::{CallbackExecutor, RpcHook};
 
-#[cfg(test)]
-use rocketmq_classic_core::api::producer::{SendKind, SendMode, SendResult};
-
 use crate::request_reply::RequestFutureHolder;
 use crate::{
     AsyncSenderExecutor, CheckForbiddenContext, EndTransactionContext, EndTransactionHook,
@@ -33,31 +30,6 @@ use crate::{
     validation,
 };
 
-#[cfg(test)]
-#[derive(Clone)]
-pub(crate) struct ScriptedSendAttempt {
-    pub(crate) broker: String,
-    pub(crate) address: String,
-    pub(crate) producer_group: Option<String>,
-    pub(crate) queue: rocketmq_classic_common::message::MessageQueue,
-    pub(crate) default_topic: String,
-    pub(crate) default_topic_queue_nums: i32,
-    pub(crate) body: Vec<u8>,
-    pub(crate) topic: String,
-    pub(crate) properties: Option<String>,
-    pub(crate) sys_flag: i32,
-    pub(crate) unique_id: String,
-    pub(crate) mode: SendMode,
-    pub(crate) batch: bool,
-    pub(crate) send_kind: SendKind,
-}
-
-#[cfg(test)]
-#[derive(Default)]
-pub(crate) struct ScriptedTransport {
-    pub(crate) responses: std::collections::VecDeque<Result<Option<SendResult>, ProducerError>>,
-    pub(crate) attempts: Vec<ScriptedSendAttempt>,
-}
 use tokio::task::JoinHandle;
 
 enum State {
@@ -1618,6 +1590,35 @@ impl ProducerRuntime for Producer {
     fn update_topic_publish_info(&self, topic: &str, info: Arc<TopicSnapshot>) {
         self.cache_publish_info(topic, info);
     }
+}
+
+#[cfg(test)]
+use rocketmq_classic_core::api::producer::{SendKind, SendMode, SendResult};
+
+#[cfg(test)]
+#[derive(Clone)]
+pub(crate) struct ScriptedSendAttempt {
+    pub(crate) broker: String,
+    pub(crate) address: String,
+    pub(crate) producer_group: Option<String>,
+    pub(crate) queue: rocketmq_classic_common::message::MessageQueue,
+    pub(crate) default_topic: String,
+    pub(crate) default_topic_queue_nums: i32,
+    pub(crate) body: Vec<u8>,
+    pub(crate) topic: String,
+    pub(crate) properties: Option<String>,
+    pub(crate) sys_flag: i32,
+    pub(crate) unique_id: String,
+    pub(crate) mode: SendMode,
+    pub(crate) batch: bool,
+    pub(crate) send_kind: SendKind,
+}
+
+#[cfg(test)]
+#[derive(Default)]
+pub(crate) struct ScriptedTransport {
+    pub(crate) responses: std::collections::VecDeque<Result<Option<SendResult>, ProducerError>>,
+    pub(crate) attempts: Vec<ScriptedSendAttempt>,
 }
 
 #[cfg(test)]

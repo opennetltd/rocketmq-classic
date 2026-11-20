@@ -1,5 +1,109 @@
 # Current compatibility status
 
+## Pinned Java Pull re-review and live confirmation — 2026-11-14
+
+The focused P10-V05 case now has real Broker evidence at clean revision `6d6db7ed`:
+Java 5.5.1 and Rust each admitted all 16 empty-queue Pulls before any target response,
+kept one active Pull per queue, and delivered every seeded queue inside the 5 s bound
+against the disposable 5.3.4 host-routed Broker. Comparison and cleanup both passed.
+The checked-in scenario summary is `PASS_RECORDED`; this supersedes the pending
+P10-V05 statements in the earlier entries below. The previous 37-case aggregate is
+historical; the full 38-case aggregate and owner/release approval were not rerun here.
+
+The source audit also corrected slave/disabled commit-offset header values, excluded
+orderly Pull from concurrent-only max-span flow control while preserving cache limits,
+and gave the Pull RPC a fresh 30 s timeout after separately bounded route lookup.
+The new invoked Java oracle holds callbacks for 80 dispatched queues and drift-checks
+`fixtures/consumer/push-pull-dispatch.json`; Rust regressions consume that evidence.
+A real `mqadmin topicStatus` footer also exposed and corrected a runner parsing defect.
+
+Final local checks: 314 consumer tests, 8 peer tests, 11 probe tests, checker/runner
+self-tests, strict workspace Clippy, formatting and serial portable Maven verification
+pass. The standard exact-JDK address fixture gate still reports environment drift;
+its fixture was not rewritten. Evidence locations, source revision, failed attempts,
+and cleanup results are recorded in the [re-review log](../../rlogs/2026/11/02b-push-pull-fanout-ordering-cleanup__20261114T004734Z.rlog).
+This verifies the listed Pull contracts, not the complete Java API or whole phase.
+
+## Fan-out recorder ordering and failure cleanup — 2026-11-14
+
+The owned-dispatch architecture is unchanged; this pass corrected evidence ordering and failure
+cleanup only.
+
+- Both live probes now treat a Pull event time as a recorder state-transition time: the monotonic
+  clock is sampled inside the recorder lock, and the start inventory, active-Pull set, response
+  counter and admission gate are all updated in that same critical section. Rows are emitted after
+  the lock is released but carry the locked sample, so a `GATE` row can never precede a Pull start
+  it claims to cover, and the admission-window origin is the earliest recorded start rather than
+  whichever call happened to win the lock first.
+- The Rust probe exposes its clock only to tests; the new recorder tests drive a delayed admission
+  that blocks on the state lock, race 16 admissions per round over 24 rounds, and check both racing
+  interleavings of a response against the last initial start. The Java fixtures mirror the same
+  cases through an injected `ProbeClock` and a package-private recorder lock seam.
+- `check_p10_fanout.py` now enforces the admission window on the evidence itself: the gate must be
+  reached no earlier than the first Pull start and no later than the configured window measured
+  from it, in addition to the existing span, response-order and send-order rules. The self-test
+  grew to 23 synthetic cases including a reproduced 10 s delayed-gate fixture plus exactly-at-limit
+  and one-nanosecond-past-limit boundaries.
+- The scripted consumer test keeps peer ownership outside the fallible scenario body: the scenario
+  runs in its own task, an injected assertion failure is captured with its original message, then
+  acceptance closes, every recorded connection task is drained (a timed-out handle is aborted and
+  awaited), and only afterwards are the scenario and cleanup failures reported. New tests cover a
+  forced cleanup timeout across several children, scenario timeout/cancellation, a child panic,
+  an abort before a task's first poll, and an injected failure while a socket stays open; the witness must reach zero in every case.
+
+Local evidence only: checker self-test (23 synthetic cases), runner self-tests, Rust probe-state
+tests (11), scripted-peer tests (8) and Java fan-out fixtures (151 checks). `P10-V05` remains
+`PENDING_PHASE_19`: no Broker evidence exists for it yet, and the earlier 37/37 live aggregate does
+not cover it.
+
+## Push Pull fan-out validation harness — 2026-11-13
+
+The `P10-V05` architecture is unchanged; only the validation around it was corrected.
+
+- Both live probes now acquire a client before using it. The Java probe starts its producer
+  before `fetchPublishMessageQueues`, which pinned RocketMQ 5.5.1 rejects for a non-RUNNING
+  producer, and closes every successfully started client on a partial acquisition failure;
+  `LivePullFanoutProbeFixtures` covers that seam offline.
+- Both recorders track active Pulls per queue-generation and request identity. A second admission
+  while one is outstanding, an unmatched response, or a target response before the barrier is
+  recorded when it happens rather than inferred from a later start; the gate latches atomically
+  with the last admission under one lock, and every listener callback emits a delivery row before
+  de-duplication keeps progress.
+- `tests/differential/run.sh` requires both fan-out topics to report zero max offsets before
+  publishing, records only the subgroups it actually created, and cannot emit PASS after a probe
+  exit, a missing ready file or a checker failure. `check_p10_fanout.py` rejects pre-gate
+  publishing, missing/duplicate/mismatched send completions and duplicate deliveries.
+- The scripted consumer test now retains, cancels and joins every peer connection task with a
+  completion witness, so no detached peer task can survive the run.
+
+Local evidence only: `bash tests/differential/run.sh --self-test`, the checker self-test (20
+synthetic cases), the Java fan-out fixtures, and the Rust probe-state tests. `P10-V05` remains
+`PENDING_PHASE_19`: no Broker evidence exists for it yet, and the earlier 37/37 live aggregate
+does not cover it.
+
+## Push Pull dispatch fan-out — 2026-11-12
+
+The Push consumer no longer routes Pull RPCs through a fixed four-worker pool.
+Each admitted `PullRequest` now runs in its own owned task, and the scheduler slot
+for one queue-generation is released exactly once on completion, panic,
+cancellation or abort. Closed dispatcher admission releases the slot and drops the
+request instead of re-queueing it with a cache-flow-control delay. Push Pull uses
+the future/async RPC mode under the unchanged 30 s client deadline, and the Pull
+header now carries Java's simple-consumer `suspendTimeoutMillis=15000` while POP
+keeps `pollTime`/suspend at `20000`. See
+[ADR-0085](../architecture/ADR-0085-push-pull-dispatch-fanout.md) and the
+[Phase 10 matrix](PHASE_10_OFFLINE_METHOD_MATRIX.md).
+
+Local evidence only: the Consumer unit suites, the scripted-peer barrier in
+`crates/rocketmq-classic-consumer/tests/push_pull_fanout.rs` (all 16 assigned
+queues admit at once; the removed four-worker pool admits four), and the
+`tests/differential/check_p10_fanout.py` synthetic self-test. `P10-V05` is now a
+permanent manifest scenario, so the manifest holds 38 rows and `run.sh --check-all`
+reports full runner coverage without starting Docker. Its live status is
+`PENDING_PHASE_19`: no Broker evidence exists for it yet, the earlier 37/37 live
+aggregate predates this change, and MAN-01–MAN-04 plus final compatibility/release
+approval remain open.
+
 ## ASCII numeric scope follow-up — 2026-11-08
 
 The user's revised scope intentionally replaces Java Unicode integer parsing with

@@ -1147,19 +1147,19 @@ mod tests {
             (PROPERTY_MESSAGE_TYPE.to_owned(), "reply".to_owned()),
         ]);
         let header = {
-            let mut __phase18_header_0 = ReplyMessageRequestHeader::default();
-            __phase18_header_0.set_producer_group("response-producer".into());
-            __phase18_header_0.set_topic("cluster-a_REPLY_TOPIC".into());
-            __phase18_header_0.set_default_topic("TBW102".into());
-            __phase18_header_0.set_default_topic_queue_nums(4);
-            __phase18_header_0.set_queue_id(1);
-            __phase18_header_0.set_born_timestamp(1_700_000_000_123);
-            __phase18_header_0.set_flag(0);
-            __phase18_header_0.set_properties(Some(encode_properties(&properties)));
-            __phase18_header_0.set_born_host("127.0.0.1:10911".into());
-            __phase18_header_0.set_store_host("127.0.0.1:10911".into());
-            __phase18_header_0.set_store_timestamp(1_700_000_001_234);
-            __phase18_header_0
+            let mut header = ReplyMessageRequestHeader::default();
+            header.set_producer_group("response-producer".into());
+            header.set_topic("cluster-a_REPLY_TOPIC".into());
+            header.set_default_topic("TBW102".into());
+            header.set_default_topic_queue_nums(4);
+            header.set_queue_id(1);
+            header.set_born_timestamp(1_700_000_000_123);
+            header.set_flag(0);
+            header.set_properties(Some(encode_properties(&properties)));
+            header.set_born_host("127.0.0.1:10911".into());
+            header.set_store_host("127.0.0.1:10911".into());
+            header.set_store_timestamp(1_700_000_001_234);
+            header
         };
         let mut fields = rocketmq_classic_protocol::header::HeaderMap::new();
         header.encode_fields(&mut fields);
@@ -1211,19 +1211,19 @@ mod tests {
             (PROPERTY_MESSAGE_TYPE.to_owned(), "reply".to_owned()),
         ]);
         let header = {
-            let mut __phase18_header_1 = ReplyMessageRequestHeader::default();
-            __phase18_header_1.set_producer_group("response-producer".into());
-            __phase18_header_1.set_topic("cluster-a_REPLY_TOPIC".into());
-            __phase18_header_1.set_default_topic("TBW102".into());
-            __phase18_header_1.set_default_topic_queue_nums(4);
-            __phase18_header_1.set_queue_id(1);
-            __phase18_header_1.set_born_timestamp(1_700_000_000_123);
-            __phase18_header_1.set_flag(0);
-            __phase18_header_1.set_properties(Some(encode_properties(&properties)));
-            __phase18_header_1.set_born_host(born_host.to_owned());
-            __phase18_header_1.set_store_host(store_host.to_owned());
-            __phase18_header_1.set_store_timestamp(1_700_000_001_234);
-            __phase18_header_1
+            let mut header = ReplyMessageRequestHeader::default();
+            header.set_producer_group("response-producer".into());
+            header.set_topic("cluster-a_REPLY_TOPIC".into());
+            header.set_default_topic("TBW102".into());
+            header.set_default_topic_queue_nums(4);
+            header.set_queue_id(1);
+            header.set_born_timestamp(1_700_000_000_123);
+            header.set_flag(0);
+            header.set_properties(Some(encode_properties(&properties)));
+            header.set_born_host(born_host.to_owned());
+            header.set_store_host(store_host.to_owned());
+            header.set_store_timestamp(1_700_000_001_234);
+            header
         };
         let mut fields = rocketmq_classic_protocol::header::HeaderMap::new();
         header.encode_fields(&mut fields);

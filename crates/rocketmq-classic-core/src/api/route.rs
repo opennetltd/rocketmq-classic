@@ -294,10 +294,10 @@ impl MQClientApi {
         let mut fields = HeaderMap::new();
         if let Some(topic) = topic {
             {
-                let mut __phase18_header_0 = GetRouteInfoRequestHeader::default();
-                __phase18_header_0.set_topic(topic.to_owned());
-                __phase18_header_0.set_accept_standard_json_only(None);
-                __phase18_header_0
+                let mut header = GetRouteInfoRequestHeader::default();
+                header.set_topic(topic.to_owned());
+                header.set_accept_standard_json_only(None);
+                header
             }
             .encode_fields(&mut fields);
         }

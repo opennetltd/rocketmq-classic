@@ -2384,26 +2384,26 @@ mod tests {
         ))
         .unwrap();
         let v1 = {
-            let mut __phase18_header_0 = SendMessageRequestHeaderV1::default();
-            __phase18_header_0.set_producer_group(Some("producer".into()));
-            __phase18_header_0.set_topic("orders".into());
-            __phase18_header_0.set_default_topic("TBW102".into());
-            __phase18_header_0.set_default_topic_queue_nums(4);
-            __phase18_header_0.set_queue_id(2);
-            __phase18_header_0.set_sys_flag(1);
-            __phase18_header_0.set_born_timestamp(1_712_345_678_901);
-            __phase18_header_0.set_flag(7);
-            __phase18_header_0.set_properties(Some("TAGS\u{1}blue".into()));
-            __phase18_header_0.set_reconsume_times(Some(0));
-            __phase18_header_0.set_unit_mode(Some(false));
-            __phase18_header_0.set_max_reconsume_times(Some(16));
-            __phase18_header_0.set_batch(Some(false));
-            __phase18_header_0.set_broker_name(Some("short-broker".into()));
-            __phase18_header_0.set_namespace(Some("tenant".into()));
-            __phase18_header_0.set_namespaced(Some(true));
-            __phase18_header_0.set_lo(Some(true));
-            __phase18_header_0.set_oneway(Some(false));
-            __phase18_header_0
+            let mut header = SendMessageRequestHeaderV1::default();
+            header.set_producer_group(Some("producer".into()));
+            header.set_topic("orders".into());
+            header.set_default_topic("TBW102".into());
+            header.set_default_topic_queue_nums(4);
+            header.set_queue_id(2);
+            header.set_sys_flag(1);
+            header.set_born_timestamp(1_712_345_678_901);
+            header.set_flag(7);
+            header.set_properties(Some("TAGS\u{1}blue".into()));
+            header.set_reconsume_times(Some(0));
+            header.set_unit_mode(Some(false));
+            header.set_max_reconsume_times(Some(16));
+            header.set_batch(Some(false));
+            header.set_broker_name(Some("short-broker".into()));
+            header.set_namespace(Some("tenant".into()));
+            header.set_namespaced(Some(true));
+            header.set_lo(Some(true));
+            header.set_oneway(Some(false));
+            header
         };
         let header = SendMessageRequestHeaderV2::from_v1(&v1);
         let mut fields = HeaderMap::new();
@@ -3083,10 +3083,10 @@ mod tests {
                 RemotingCommand::create_request_command_with_header(
                     74,
                     Some({
-                        let mut __phase18_header_1 =
+                        let mut header =
                             rocketmq_classic_protocol::header::GetRouteInfoRequestHeader::default();
-                        __phase18_header_1.set_topic("orders".into());
-                        __phase18_header_1
+                        header.set_topic("orders".into());
+                        header
                     }),
                 )
                 .unwrap(),
@@ -3233,15 +3233,15 @@ mod tests {
         assert!(cases["extFieldsBeforeMake"]["topic"].is_null());
 
         let header = {
-            let mut __phase18_header_2 =
+            let mut header =
                 rocketmq_classic_protocol::header::GetRouteInfoRequestHeader::default();
-            __phase18_header_2.set_topic("custom-topic".into());
-            __phase18_header_2.set_accept_standard_json_only(Some(true));
-            __phase18_header_2.set_namespace(Some("custom-ns".into()));
-            __phase18_header_2.set_namespaced(Some(false));
-            __phase18_header_2.set_broker_name(Some("broker-a".into()));
-            __phase18_header_2.set_oneway(Some(true));
-            __phase18_header_2
+            header.set_topic("custom-topic".into());
+            header.set_accept_standard_json_only(Some(true));
+            header.set_namespace(Some("custom-ns".into()));
+            header.set_namespaced(Some(false));
+            header.set_broker_name(Some("broker-a".into()));
+            header.set_oneway(Some(true));
+            header
         };
         let mut command = RemotingCommand {
             ext_fields: Some(HeaderMap::from([("oracle".into(), "5.5.1".into())]).into()),

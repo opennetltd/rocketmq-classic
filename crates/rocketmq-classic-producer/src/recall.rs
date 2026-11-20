@@ -121,12 +121,12 @@ impl Producer {
         };
 
         let header = {
-            let mut __phase18_header_0 = RecallMessageRequestHeader::default();
-            __phase18_header_0.set_producer_group(self.producer_group());
-            __phase18_header_0.set_topic(topic);
-            __phase18_header_0.set_recall_handle(recall_handle.to_owned());
-            __phase18_header_0.set_broker_name(Some(decoded_handle.broker_name().to_owned()));
-            __phase18_header_0
+            let mut header = RecallMessageRequestHeader::default();
+            header.set_producer_group(self.producer_group());
+            header.set_topic(topic);
+            header.set_recall_handle(recall_handle.to_owned());
+            header.set_broker_name(Some(decoded_handle.broker_name().to_owned()));
+            header
         };
         Ok(runtime
             .api()

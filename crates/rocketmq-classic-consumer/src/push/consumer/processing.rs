@@ -62,6 +62,33 @@ impl PushConsumer {
         }
 
         let orderly_lock_settings = self.current_orderly_lock_settings().await;
+        // Java applies cache limits before lock/offset work, and max-span only to concurrent Pull.
+        let thresholds = self.active_pull_queue_thresholds();
+        if let Ok(snapshot) = process_queue.snapshot(generation) {
+            if let Some(reason) = flow_control_reason(&snapshot, thresholds).filter(|reason| {
+                !self.is_consume_orderly()
+                    || !matches!(
+                        reason,
+                        crate::push::pull_service::PullFlowControlReason::MaxSpan
+                    )
+            }) {
+                tracing::trace!(
+                    consumer_group = %request.consumer_group(),
+                    queue_id = queue.queue_id(),
+                    generation,
+                    ?reason,
+                    cached_count = snapshot.cached_count,
+                    cached_bytes = snapshot.cached_bytes,
+                    max_span = snapshot.max_span,
+                    "push pull paused by queue flow control"
+                );
+                let _ = context
+                    .scheduler
+                    .schedule(request, PULL_TIME_DELAY_MILLIS_WHEN_CACHE_FLOW_CONTROL);
+                return;
+            }
+        }
+
         if orderly_lock_settings.is_some()
             && self.config.message_model()
                 == rocketmq_classic_protocol::heartbeat::MessageModel::Clustering
@@ -113,26 +140,6 @@ impl PushConsumer {
                         .schedule(request, self.pull_time_delay_millis_when_exception());
                     return;
                 }
-            }
-        }
-
-        let thresholds = self.active_pull_queue_thresholds();
-        if let Ok(snapshot) = process_queue.snapshot(generation) {
-            if let Some(reason) = flow_control_reason(&snapshot, thresholds) {
-                tracing::trace!(
-                    consumer_group = %request.consumer_group(),
-                    queue_id = queue.queue_id(),
-                    generation,
-                    ?reason,
-                    cached_count = snapshot.cached_count,
-                    cached_bytes = snapshot.cached_bytes,
-                    max_span = snapshot.max_span,
-                    "push pull paused by queue flow control"
-                );
-                let _ = context
-                    .scheduler
-                    .schedule(request, PULL_TIME_DELAY_MILLIS_WHEN_CACHE_FLOW_CONTROL);
-                return;
             }
         }
 
@@ -192,8 +199,6 @@ impl PushConsumer {
             .broker_name()
             .filter(|broker| !broker.is_empty())
             .ok_or_else(|| self.pull_retry_error("message queue has no broker name"))?;
-        let deadline =
-            Instant::now() + Duration::from_millis(CONSUMER_TIMEOUT_MILLIS_WHEN_SUSPEND as u64);
         let suggested_broker_id = self.pull_api.recalculate_pull_from_which_node(queue);
         let mut route = context
             .runtime
@@ -203,9 +208,17 @@ impl PushConsumer {
             .subscribe_address(broker_name, suggested_broker_id, false)
             .map_err(|error| self.pull_retry_error(error.to_string()))?;
         if broker.is_none() {
+            // Route lookup has its own client-config timeout; it must not spend the Pull RPC budget.
+            let route_timeout = context
+                .runtime
+                .config()
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .mq_client_api_timeout()
+                .max(0) as u64;
             context
                 .runtime
-                .update_topic_route(topic, deadline)
+                .update_topic_route(topic, Instant::now() + Duration::from_millis(route_timeout))
                 .await
                 .map_err(|error| self.pull_retry_error(error.to_string()))?;
             route = context
@@ -235,8 +248,8 @@ impl PushConsumer {
                 .await
                 .map_err(|error| self.pull_retry_error(error.to_string()))?
             {
-                OffsetRead::Found(offset) if offset > 0 => offset,
-                OffsetRead::Found(_) | OffsetRead::NotFound => 0,
+                OffsetRead::Found(offset) => offset,
+                OffsetRead::NotFound => -1,
             }
         } else {
             0
@@ -247,12 +260,10 @@ impl PushConsumer {
             sub_expression.is_some(),
             class_filter,
         );
-        let commit_offset = if broker.slave {
+        if broker.slave {
+            // PullAPIWrapper clears only the bit; Java retains the supplied header value.
             sys_flag = clear_commit_offset_flag(sys_flag);
-            0
-        } else {
-            commit_offset
-        };
+        }
         let broker_address = if class_filter {
             let route_data = route
                 .raw_routes
@@ -268,28 +279,31 @@ impl PushConsumer {
         };
         let mut client_config = self.config.client_config().clone();
         let header = {
-            let mut __phase18_header_1 = PullMessageRequestHeader::default();
-            __phase18_header_1.set_consumer_group(Some(request.consumer_group().to_owned()));
-            __phase18_header_1.set_topic(Some(topic.to_owned()));
-            __phase18_header_1.set_queue_id(Some(queue.queue_id()));
-            __phase18_header_1.set_queue_offset(Some(request.next_offset()));
-            __phase18_header_1.set_max_msg_nums(Some(self.config.pull_batch_size()));
-            __phase18_header_1.set_sys_flag(Some(sys_flag));
-            __phase18_header_1.set_commit_offset(Some(commit_offset));
-            __phase18_header_1.set_suspend_timeout_millis(Some(BROKER_SUSPEND_MAX_TIME_MILLIS));
-            __phase18_header_1.set_subscription(sub_expression);
-            __phase18_header_1.set_sub_version(Some(subscription.get_sub_version()));
-            __phase18_header_1
-                .set_expression_type(subscription.get_expression_type().map(str::to_owned));
-            __phase18_header_1.set_max_msg_bytes(Some(self.config.pull_batch_size_in_bytes()));
-            __phase18_header_1.set_broker_name(Some(broker_name.to_owned()));
-            __phase18_header_1
+            let mut header = PullMessageRequestHeader::default();
+            header.set_consumer_group(Some(request.consumer_group().to_owned()));
+            header.set_topic(Some(topic.to_owned()));
+            header.set_queue_id(Some(queue.queue_id()));
+            header.set_queue_offset(Some(request.next_offset()));
+            header.set_max_msg_nums(Some(self.config.pull_batch_size()));
+            header.set_sys_flag(Some(sys_flag));
+            header.set_commit_offset(Some(commit_offset));
+            header.set_suspend_timeout_millis(Some(PULL_BROKER_SUSPEND_MAX_TIME_MILLIS));
+            header.set_subscription(sub_expression);
+            header.set_sub_version(Some(subscription.get_sub_version()));
+            header.set_expression_type(subscription.get_expression_type().map(str::to_owned));
+            header.set_max_msg_bytes(Some(self.config.pull_batch_size_in_bytes()));
+            header.set_broker_name(Some(broker_name.to_owned()));
+            header
         };
         let pull_started = Instant::now();
+        let deadline =
+            pull_started + Duration::from_millis(CONSUMER_TIMEOUT_MILLIS_WHEN_SUSPEND as u64);
+        // Java ASYNC pull: the admitted dispatcher task awaits this future
+        // directly instead of occupying a shared PullMessageService worker.
         let pull_result = context
             .runtime
             .api()
-            .pull_message(&broker_address, &header, deadline)
+            .pull_message_future(&broker_address, &header, deadline)
             .await
             .map_err(|error| self.pull_retry_error_from_rpc(error))?;
         let mut processed = self
@@ -1363,16 +1377,16 @@ impl PushConsumer {
         }
         .map(str::to_owned);
         let header = {
-            let mut __phase18_header_2 = ConsumerSendMsgBackRequestHeader::default();
-            __phase18_header_2.set_group(consumer_group.clone());
-            __phase18_header_2.set_broker_name(broker_name.clone());
-            __phase18_header_2.set_origin_topic(origin_topic.clone());
-            __phase18_header_2.set_offset(message.commit_log_offset());
-            __phase18_header_2.set_delay_level(delay_level);
-            __phase18_header_2.set_origin_msg_id(message.message_id().map(str::to_owned));
-            __phase18_header_2.set_max_reconsume_times(Some(max_reconsume_times));
-            __phase18_header_2.set_unit_mode(self.config.unit_mode());
-            __phase18_header_2
+            let mut header = ConsumerSendMsgBackRequestHeader::default();
+            header.set_group(consumer_group.clone());
+            header.set_broker_name(broker_name.clone());
+            header.set_origin_topic(origin_topic.clone());
+            header.set_offset(message.commit_log_offset());
+            header.set_delay_level(delay_level);
+            header.set_origin_msg_id(message.message_id().map(str::to_owned));
+            header.set_max_reconsume_times(Some(max_reconsume_times));
+            header.set_unit_mode(self.config.unit_mode());
+            header
         };
         let store_host = message
             .store_host()

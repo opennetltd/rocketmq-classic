@@ -140,21 +140,21 @@ fn main() {
             let entries = message.nullable_property_entries().collect::<Vec<_>>();
             let properties = encode_nullable_property_entries(Some(&entries));
             let header = {
-                let mut __phase18_header_0 = SendMessageRequestHeaderV1::default();
-                __phase18_header_0.set_producer_group(Some("bench-producer".into()));
-                __phase18_header_0.set_topic(message.topic().into());
-                __phase18_header_0.set_default_topic("TBW102".into());
-                __phase18_header_0.set_default_topic_queue_nums(4);
-                __phase18_header_0.set_queue_id(-1);
-                __phase18_header_0.set_sys_flag(0);
-                __phase18_header_0.set_born_timestamp(1_700_000_000_000);
-                __phase18_header_0.set_flag(0);
-                __phase18_header_0.set_properties(Some(properties));
-                __phase18_header_0.set_reconsume_times(Some(0));
-                __phase18_header_0.set_unit_mode(Some(false));
-                __phase18_header_0.set_max_reconsume_times(None);
-                __phase18_header_0.set_batch(Some(false));
-                __phase18_header_0
+                let mut header = SendMessageRequestHeaderV1::default();
+                header.set_producer_group(Some("bench-producer".into()));
+                header.set_topic(message.topic().into());
+                header.set_default_topic("TBW102".into());
+                header.set_default_topic_queue_nums(4);
+                header.set_queue_id(-1);
+                header.set_sys_flag(0);
+                header.set_born_timestamp(1_700_000_000_000);
+                header.set_flag(0);
+                header.set_properties(Some(properties));
+                header.set_reconsume_times(Some(0));
+                header.set_unit_mode(Some(false));
+                header.set_max_reconsume_times(None);
+                header.set_batch(Some(false));
+                header
             };
             let mut fields = HeaderMap::new();
             header.encode_fields(&mut fields);

@@ -2989,548 +2989,6 @@ fn java_string_compare_to(left: &str, right: &str) -> i32 {
     left_units.len() as i32 - right_units.len() as i32
 }
 
-#[cfg(test)]
-mod queue_data_method_tests {
-    use super::{QueueData, QueueDataCompareError};
-
-    #[test]
-    fn queue_data_methods_match_invoked_java() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        for case in fixture["queueDataMethods"].as_array().unwrap() {
-            let left: QueueData = serde_json::from_value(case["left"].clone()).unwrap();
-            let right: QueueData = serde_json::from_value(case["right"].clone()).unwrap();
-            assert_eq!(left == right, case["equals"]);
-            assert_eq!(
-                left.java_hash_code(),
-                case["leftHashCode"].as_i64().unwrap() as i32
-            );
-            assert_eq!(
-                right.java_hash_code(),
-                case["rightHashCode"].as_i64().unwrap() as i32
-            );
-            assert_eq!(left.java_to_string(), case["leftToString"]);
-            assert_eq!(right.java_to_string(), case["rightToString"]);
-            let result = left.java_compare_to(&right);
-            if case["outcome"] == "OK" {
-                assert_eq!(result.unwrap(), case["result"].as_i64().unwrap() as i32);
-            } else {
-                assert_eq!(result.unwrap_err(), QueueDataCompareError::NullBrokerName);
-            }
-        }
-        assert_eq!(
-            fixture["compareToNullOther"]["queueData"],
-            "NullPointerException"
-        );
-        assert_eq!(
-            QueueData::default().java_compare_to_nullable(None),
-            Err(QueueDataCompareError::NullOther)
-        );
-    }
-}
-
-#[cfg(test)]
-mod broker_data_equality_tests {
-    use super::BrokerData;
-
-    #[test]
-    fn broker_data_equality_matches_invoked_java_equals() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        for case in fixture["brokerDataEquality"].as_array().unwrap() {
-            let left: BrokerData = serde_json::from_value(case["left"].clone()).unwrap();
-            let right: BrokerData = serde_json::from_value(case["right"].clone()).unwrap();
-            assert_eq!(left == right, case["equals"], "{}", case["id"]);
-        }
-    }
-}
-
-#[cfg(test)]
-mod broker_data_hash_code_tests {
-    use super::BrokerData;
-
-    #[test]
-    fn broker_data_hash_code_matches_invoked_java_hash_code() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        for case in fixture["brokerDataHashCode"].as_array().unwrap() {
-            let broker: BrokerData = serde_json::from_value(case["input"].clone()).unwrap();
-            assert_eq!(
-                broker.java_hash_code(),
-                case["hashCode"].as_i64().unwrap() as i32,
-                "{}",
-                case["id"]
-            );
-        }
-    }
-}
-
-#[cfg(test)]
-mod broker_data_to_string_tests {
-    use super::BrokerData;
-
-    #[test]
-    fn broker_data_to_string_matches_invoked_java() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        for case in fixture["brokerDataToString"].as_array().unwrap() {
-            let broker: BrokerData = serde_json::from_value(case["input"].clone()).unwrap();
-            assert_eq!(broker.java_to_string(), case["toString"]);
-        }
-    }
-}
-
-#[cfg(test)]
-mod broker_data_select_addr_tests {
-    use super::{BrokerData, BrokerDataSelectAddrError};
-    use std::collections::BTreeMap;
-
-    #[test]
-    fn broker_data_select_addr_matches_invoked_java_outcomes() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        let cases = fixture["brokerDataSelectAddr"].as_array().unwrap();
-        assert_eq!(cases.len(), 10);
-        for case in cases.iter().skip(7) {
-            assert!(case["input"]["brokerAddrs"]["null"].is_string());
-        }
-        for case in cases {
-            let broker: BrokerData = serde_json::from_value(case["input"].clone()).unwrap();
-            if let Some(exception) = case["exception"].as_str() {
-                let error = broker.java_select_broker_addr().unwrap_err();
-                let expected = match exception {
-                    "NullPointerException" => BrokerDataSelectAddrError::NullAddressMap,
-                    "IllegalArgumentException" => BrokerDataSelectAddrError::NoAddressCandidates,
-                    other => panic!("unexpected Java exception {other}"),
-                };
-                assert_eq!(error, expected, "{}", case["id"]);
-                continue;
-            }
-            match broker.java_select_broker_addr().unwrap() {
-                Some(address) => assert!(
-                    case["addresses"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .any(|allowed| allowed.as_str() == Some(address.as_str())),
-                    "unexpected random address for {}: {address}",
-                    case["id"]
-                ),
-                None => assert_eq!(case["nullAddress"], true, "{}", case["id"]),
-            }
-            for index in 0..broker.broker_addrs.as_ref().unwrap().with(BTreeMap::len) {
-                match broker.java_select_broker_addr_with(|_| index).unwrap() {
-                    Some(address) => assert!(
-                        case["addresses"]
-                            .as_array()
-                            .unwrap()
-                            .iter()
-                            .any(|allowed| allowed.as_str() == Some(address.as_str())),
-                        "unexpected address for {}: {address}",
-                        case["id"]
-                    ),
-                    None => assert_eq!(case["nullAddress"], true, "{}", case["id"]),
-                }
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-mod broker_data_compare_to_tests {
-    use super::{BrokerData, BrokerDataCompareError};
-
-    #[test]
-    fn broker_data_compare_to_matches_invoked_java_comparable() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        for case in fixture["brokerDataCompareTo"].as_array().unwrap() {
-            let left: BrokerData = serde_json::from_value(case["left"].clone()).unwrap();
-            let right: BrokerData = serde_json::from_value(case["right"].clone()).unwrap();
-            let result = left.java_compare_to(&right);
-            if case["outcome"] == "OK" {
-                assert_eq!(result.unwrap(), case["result"].as_i64().unwrap() as i32);
-            } else {
-                assert_eq!(result.unwrap_err(), BrokerDataCompareError::NullBrokerName);
-            }
-        }
-        assert_eq!(
-            fixture["compareToNullOther"]["brokerData"],
-            "NullPointerException"
-        );
-        assert_eq!(
-            BrokerData::default().java_compare_to_nullable(None),
-            Err(BrokerDataCompareError::NullOther)
-        );
-    }
-}
-
-#[cfg(test)]
-mod nullable_broker_address_tests {
-    use super::BrokerData;
-
-    #[test]
-    fn null_map_value_is_distinct_from_missing_key_and_null_map() {
-        let value = serde_json::json!({"cluster":"c","brokerName":"b","brokerAddrs":{"0":null,"1":"slave:10911"}});
-        let broker: BrokerData = serde_json::from_value(value.clone()).unwrap();
-        let addresses = broker.broker_addrs.as_ref().unwrap();
-        addresses.with(|addresses| {
-            assert_eq!(addresses.get(&Some(0)), Some(&None));
-            assert!(!addresses.contains_key(&Some(2)));
-            assert_eq!(
-                addresses.get(&Some(1)).and_then(Option::as_deref),
-                Some("slave:10911")
-            );
-        });
-        assert_eq!(
-            serde_json::to_value(&broker).unwrap()["brokerAddrs"],
-            value["brokerAddrs"]
-        );
-        let null_map: BrokerData = serde_json::from_value(
-            serde_json::json!({"cluster":"c","brokerName":"b","brokerAddrs":null}),
-        )
-        .unwrap();
-        assert!(null_map.broker_addrs.is_none());
-    }
-}
-
-#[cfg(test)]
-mod nullable_nested_route_tests {
-    use super::TopicRouteData;
-
-    #[test]
-    fn nested_broker_and_queue_names_follow_invoked_java_defaults_and_json() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        for case in fixture["nullableNestedRouteFields"].as_array().unwrap() {
-            let route: TopicRouteData = serde_json::from_value(case["input"].clone())
-                .expect("pinned Java accepts this nested route input");
-            let queue = route.queue_datas_snapshot().unwrap()[0]
-                .as_ref()
-                .unwrap()
-                .clone();
-            let encoded = serde_json::to_value(&route).unwrap();
-            assert_eq!(
-                encoded["queueDatas"][0].get("brokerName").is_none(),
-                case["queueNameNull"]
-            );
-            assert_eq!(
-                encoded["brokerDatas"][0].get("brokerName").is_none(),
-                case["brokerNameNull"]
-            );
-            assert_eq!(
-                encoded["brokerDatas"][0].get("cluster").is_none(),
-                case["clusterNull"]
-            );
-            assert_eq!(
-                encoded["queueDatas"][0].get("brokerName").is_some(),
-                case["encodedHasQueueName"]
-            );
-            assert_eq!(
-                encoded["brokerDatas"][0].get("brokerName").is_some(),
-                case["encodedHasBrokerName"]
-            );
-            assert_eq!(
-                encoded["brokerDatas"][0].get("cluster").is_some(),
-                case["encodedHasCluster"]
-            );
-            assert_eq!(queue.read_queue_nums, case["queueRead"]);
-            assert_eq!(queue.write_queue_nums, case["queueWrite"]);
-            assert_eq!(queue.perm, case["queuePerm"]);
-            assert_eq!(queue.topic_sys_flag, case["queueFlag"]);
-            let subscriptions = route.subscribe_queues("topic");
-            assert_eq!(
-                subscriptions.len(),
-                case["subscribeQueueCount"].as_u64().unwrap() as usize
-            );
-            assert_eq!(
-                subscriptions
-                    .iter()
-                    .any(|queue| queue.broker_name().is_none()),
-                case["subscribeQueueBrokerNull"]
-            );
-            assert_eq!(
-                subscriptions.iter().any(|queue| serde_json::to_value(queue)
-                    .unwrap()
-                    .get("brokerName")
-                    .is_none()),
-                case["subscribeJsonBrokerOmitted"]
-            );
-        }
-    }
-}
-
-#[cfg(test)]
-mod nullable_message_queue_tests {
-    use rocketmq_classic_common::message::MessageQueue;
-
-    #[test]
-    fn nullable_message_queue_fields_match_invoked_java_defaults_and_json() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        for case in fixture["nullableMessageQueueFields"].as_array().unwrap() {
-            let queue: MessageQueue = serde_json::from_value(case["input"].clone())
-                .expect("pinned Java decodes this MessageQueue");
-            let encoded = serde_json::to_value(&queue).unwrap();
-            assert_eq!(encoded.get("topic").is_none(), case["topicNull"]);
-            assert_eq!(encoded.get("brokerName").is_none(), case["brokerNull"]);
-            assert_eq!(encoded.get("topic").is_some(), case["encodedHasTopic"]);
-            assert_eq!(
-                encoded.get("brokerName").is_some(),
-                case["encodedHasBroker"]
-            );
-            assert_eq!(queue.queue_id(), case["queueId"].as_i64().unwrap() as i32);
-        }
-    }
-
-    #[test]
-    fn message_queue_compare_to_matches_invoked_java() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        for case in fixture["messageQueueCompareTo"].as_array().unwrap() {
-            let left: MessageQueue = serde_json::from_value(case["left"].clone()).unwrap();
-            let right: MessageQueue = serde_json::from_value(case["right"].clone()).unwrap();
-            let result = left.java_compare_to(&right);
-            if case["outcome"] == "OK" {
-                assert_eq!(result.unwrap(), case["result"].as_i64().unwrap() as i32);
-            } else {
-                assert!(result.is_err());
-            }
-        }
-        assert_eq!(
-            fixture["compareToNullOther"]["messageQueue"],
-            "NullPointerException"
-        );
-        assert_eq!(
-            rocketmq_classic_common::message::MessageQueue::new("topic", "broker", 0)
-                .java_compare_to_nullable(None),
-            Err(rocketmq_classic_common::message::MessageQueueCompareError::NullOther)
-        );
-    }
-
-    #[test]
-    fn message_queue_hash_equals_and_text_match_invoked_java() {
-        use rocketmq_classic_common::message::MessageQueue;
-
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        for case in fixture["messageQueueMethods"].as_array().unwrap() {
-            let queue: MessageQueue = serde_json::from_value(case["queue"].clone()).unwrap();
-            let copy = queue.clone();
-            let constructed = MessageQueue::new_nullable(
-                queue.topic().map(str::to_owned),
-                queue.broker_name().map(str::to_owned),
-                queue.queue_id(),
-            );
-            assert_eq!(constructed, queue, "{} constructor fields", case["case"]);
-            if let (Some(topic), Some(broker_name)) = (queue.topic(), queue.broker_name()) {
-                assert_eq!(
-                    MessageQueue::new(topic, broker_name, queue.queue_id()),
-                    queue,
-                    "{} non-null constructor fields",
-                    case["case"]
-                );
-            }
-            assert_eq!(
-                queue.java_hash_code(),
-                case["hashCode"].as_i64().unwrap() as i32
-            );
-            assert_eq!(queue.to_string(), case["toString"].as_str().unwrap());
-            assert_eq!(queue == queue, case["equalsSelf"].as_bool().unwrap());
-            assert_eq!(queue == copy, case["equalsCopy"].as_bool().unwrap());
-            assert!(!case["equalsNull"].as_bool().unwrap());
-            assert!(!case["equalsWrongType"].as_bool().unwrap());
-            if case["case"] == "defaults" {
-                assert_eq!(MessageQueue::default(), queue);
-            }
-
-            let mut topic_changed = queue.clone();
-            topic_changed.set_topic(Some(match queue.topic() {
-                Some(topic) => format!("{topic}x"),
-                None => "topic".to_owned(),
-            }));
-            assert_eq!(
-                queue == topic_changed,
-                case["equalsTopicChanged"].as_bool().unwrap()
-            );
-
-            let mut broker_changed = queue.clone();
-            broker_changed.set_broker_name(Some(match queue.broker_name() {
-                Some(broker) => format!("{broker}x"),
-                None => "broker".to_owned(),
-            }));
-            assert_eq!(
-                queue == broker_changed,
-                case["equalsBrokerChanged"].as_bool().unwrap()
-            );
-
-            let mut queue_id_changed = queue.clone();
-            queue_id_changed.set_queue_id(queue.queue_id().wrapping_add(1));
-            assert_eq!(
-                queue == queue_id_changed,
-                case["equalsQueueIdChanged"].as_bool().unwrap()
-            );
-        }
-    }
-}
-
-#[cfg(test)]
-mod nullable_route_collection_tests {
-    use super::TopicRouteData;
-
-    #[test]
-    fn source_explicit_null_route_collections_decode_without_becoming_empty() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        for case in fixture["nullableRouteCollections"].as_array().unwrap() {
-            let route: TopicRouteData = serde_json::from_value(case["input"].clone())
-                .expect("Java decodes explicit null route collections");
-            let encoded = serde_json::to_value(route).unwrap();
-            for (field, decoded_key, encoded_key) in [
-                ("queueDatas", "decodedQueueNull", "encodedHasQueue"),
-                ("brokerDatas", "decodedBrokerNull", "encodedHasBroker"),
-                ("filterServerTable", "decodedFilterNull", "encodedHasFilter"),
-            ] {
-                assert_eq!(encoded.get(field).is_none(), case[decoded_key]);
-                assert_eq!(encoded.get(field).is_some(), case[encoded_key]);
-            }
-            assert_eq!(
-                encoded.get("topicQueueMappingByBroker").is_some(),
-                case["encodedHasMapping"]
-            );
-        }
-    }
-
-    #[test]
-    fn java_copy_constructor_normalizes_nullable_route_collections() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        for case in fixture["nullableRouteCollections"].as_array().unwrap() {
-            let route: TopicRouteData = serde_json::from_value(case["input"].clone()).unwrap();
-            let copy = route.java_copy_constructed();
-            assert_eq!(
-                copy.queue_datas_snapshot().unwrap().is_empty(),
-                case["copyQueueEmpty"]
-            );
-            assert_eq!(
-                copy.broker_datas_snapshot().unwrap().is_empty(),
-                case["copyBrokerEmpty"]
-            );
-            assert_eq!(
-                copy.filter_server_table_snapshot().unwrap().is_empty(),
-                case["copyFilterEmpty"]
-            );
-            assert_eq!(
-                copy.topic_queue_mapping_by_broker.is_none(),
-                case["input"]["topicQueueMappingByBroker"].is_null()
-            );
-        }
-    }
-}
-
-#[cfg(test)]
-mod nullable_static_mapping_tests {
-    use super::TopicQueueMappingInfo;
-    use std::collections::BTreeMap;
-
-    #[test]
-    fn static_mapping_optional_fields_match_invoked_java_decode_and_json() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        for case in fixture["nullableStaticMappingFields"].as_array().unwrap() {
-            let mapping: TopicQueueMappingInfo = serde_json::from_value(case["input"].clone())
-                .expect("pinned Java accepts this mapping input");
-            let encoded = serde_json::to_value(&mapping).unwrap();
-            for (field, null_key, encoded_key) in [
-                ("topic", "topicNull", "encodedHasTopic"),
-                ("bname", "bnameNull", "encodedHasBname"),
-                ("scope", "scopeNull", "encodedHasScope"),
-                ("currIdMap", "currIdMapNull", "encodedHasCurrIdMap"),
-            ] {
-                assert_eq!(encoded.get(field).is_none(), case[null_key]);
-                assert_eq!(encoded.get(field).is_some(), case[encoded_key]);
-            }
-            assert_eq!(
-                mapping
-                    .curr_id_map
-                    .as_ref()
-                    .is_some_and(|map| map.with(BTreeMap::is_empty)),
-                case["currIdMapEmpty"]
-            );
-        }
-    }
-
-    #[test]
-    fn static_mapping_map_entry_inputs_match_invoked_java_acceptance() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        for case in fixture["staticMappingMapEntryCases"].as_array().unwrap() {
-            let mapping: Result<TopicQueueMappingInfo, _> =
-                serde_json::from_str(case["rawInput"].as_str().unwrap());
-            let java_accepts = case["outcome"] == "accepted";
-            assert_eq!(
-                mapping.is_ok(),
-                java_accepts,
-                "{} ({})",
-                case["case"],
-                case["error"]
-            );
-            if let Ok(mapping) = mapping {
-                assert_eq!(
-                    mapping
-                        .curr_id_map
-                        .as_ref()
-                        .map(|values| values.with(BTreeMap::len)),
-                    case["mapSize"].as_u64().map(|size| size as usize)
-                );
-                assert_eq!(
-                    mapping
-                        .curr_id_map
-                        .as_ref()
-                        .is_some_and(|values| values.with(|values| values.contains_key(&0))),
-                    case["hasKeyZero"]
-                );
-                assert_eq!(
-                    mapping
-                        .curr_id_map
-                        .as_ref()
-                        .and_then(|values| { values.with(|values| values.get(&0).copied()) }),
-                    case["keyZeroValue"].as_i64().map(|value| value as i32)
-                );
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-mod overlapping_static_mapping_tests {
-    use super::TopicRouteData;
-
-    #[test]
-    fn overlapping_static_owners_follow_invoked_java_epochs_and_fallback() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        for case in fixture["overlappingStaticMappingOwners"]
-            .as_array()
-            .unwrap()
-        {
-            let route: TopicRouteData = serde_json::from_value(case["input"].clone()).unwrap();
-            let endpoints = route.static_queue_endpoints("topic").unwrap();
-            let rows: Vec<_> = endpoints
-                .iter()
-                .map(|(queue, owner)| {
-                    serde_json::json!({
-                        "queueId": queue.queue_id(),
-                        "brokerName": queue.broker_name(),
-                        "owner": owner,
-                    })
-                })
-                .collect();
-            assert_eq!(serde_json::json!(rows), case["endpoints"]);
-        }
-    }
-}
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TopicQueueMappingInfo {
@@ -3875,285 +3333,6 @@ impl TopicQueueMappingInfo {
     }
 }
 
-#[cfg(test)]
-mod topic_queue_mapping_method_tests {
-    use super::TopicQueueMappingInfo;
-
-    #[test]
-    fn topic_queue_mapping_methods_match_invoked_java() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        let constants = &fixture["topicQueueMappingConstants"];
-        assert_eq!(TopicQueueMappingInfo::LEVEL_0, constants["infoLevel0"]);
-        assert_eq!(
-            crate::body::TopicQueueMappingDetail::LEVEL_0,
-            constants["detailLevel0"]
-        );
-        for case in fixture["topicQueueMappingMethods"].as_array().unwrap() {
-            let left: TopicQueueMappingInfo = serde_json::from_value(case["left"].clone()).unwrap();
-            let right: TopicQueueMappingInfo =
-                serde_json::from_value(case["right"].clone()).unwrap();
-            assert_eq!(left == right, case["equals"]);
-            assert_eq!(
-                left.java_hash_code(),
-                case["leftHashCode"].as_i64().unwrap() as i32
-            );
-            assert_eq!(
-                right.java_hash_code(),
-                case["rightHashCode"].as_i64().unwrap() as i32
-            );
-            assert_eq!(left.java_to_string(), case["leftToString"]);
-            assert_eq!(right.java_to_string(), case["rightToString"]);
-        }
-    }
-}
-
-#[cfg(test)]
-mod topic_route_data_method_tests {
-    use super::TopicRouteData;
-
-    #[test]
-    fn topic_route_data_methods_match_invoked_java() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        for case in fixture["topicRouteDataMethods"].as_array().unwrap() {
-            let left: TopicRouteData = serde_json::from_value(case["left"].clone()).unwrap();
-            let right: TopicRouteData = serde_json::from_value(case["right"].clone()).unwrap();
-            assert_eq!(left == right, case["equals"]);
-            assert_eq!(
-                left.java_hash_code(),
-                case["leftHashCode"].as_i64().unwrap() as i32
-            );
-            assert_eq!(
-                right.java_hash_code(),
-                case["rightHashCode"].as_i64().unwrap() as i32
-            );
-        }
-    }
-
-    #[test]
-    fn topic_route_data_nullable_nested_values_match_invoked_java() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        let method_case = &fixture["topicRouteDataMethods"][4];
-        let left: TopicRouteData = serde_json::from_value(method_case["left"].clone())
-            .expect("pinned Java accepts null nested route values");
-        let right: TopicRouteData = serde_json::from_value(method_case["right"].clone())
-            .expect("pinned Java accepts null nested route values");
-        assert_eq!(left == right, method_case["equals"]);
-        assert_eq!(
-            left.java_hash_code(),
-            method_case["leftHashCode"].as_i64().unwrap() as i32
-        );
-        assert_eq!(
-            right.java_hash_code(),
-            method_case["rightHashCode"].as_i64().unwrap() as i32
-        );
-        let string_case = fixture["topicRouteDataToString"]
-            .as_array()
-            .unwrap()
-            .last()
-            .unwrap();
-        let route: TopicRouteData = serde_json::from_value(string_case["input"].clone())
-            .expect("pinned Java accepts null nested route values");
-        assert_eq!(route.java_to_string(), string_case["toString"]);
-    }
-}
-
-#[cfg(test)]
-mod topic_route_data_to_string_tests {
-    use super::TopicRouteData;
-
-    #[test]
-    fn topic_route_data_to_string_matches_invoked_java() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        for case in fixture["topicRouteDataToString"].as_array().unwrap() {
-            let route: TopicRouteData = serde_json::from_value(case["input"].clone()).unwrap();
-            assert_eq!(route.java_to_string(), case["toString"]);
-        }
-    }
-}
-
-#[cfg(test)]
-mod topic_route_data_changed_method_tests {
-    use super::TopicRouteData;
-
-    #[test]
-    fn topic_route_data_changed_matches_invoked_java_comparison_and_sort_errors() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        for case in fixture["topicRouteDataChanged"].as_array().unwrap() {
-            let current: TopicRouteData = serde_json::from_value(case["current"].clone()).unwrap();
-            let old: Option<TopicRouteData> = if case["old"].is_null() {
-                None
-            } else {
-                Some(serde_json::from_value(case["old"].clone()).unwrap())
-            };
-            let result = current.java_topic_route_data_changed(old.as_ref());
-            if case["outcome"] == "OK" {
-                assert_eq!(result.unwrap(), case["changed"]);
-            } else {
-                assert!(result.is_err());
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-mod topic_route_data_clone_method_tests {
-    use super::{SharedFilterServerList, SharedTopicQueueMappingInfoHandle, TopicRouteData};
-    use serde_json::{Value, json};
-
-    fn first_queue_alias(source: &TopicRouteData, copy: &TopicRouteData) -> bool {
-        let (Some(source), Some(copy)) = (&source.queue_datas, &copy.queue_datas) else {
-            return false;
-        };
-        source.with(|source| {
-            copy.with(|copy| match (source.first(), copy.first()) {
-                (Some(None), Some(None)) => true,
-                (Some(Some(source)), Some(Some(copy))) => source.ptr_eq(copy),
-                _ => false,
-            })
-        })
-    }
-
-    fn first_broker_alias(source: &TopicRouteData, copy: &TopicRouteData) -> bool {
-        let (Some(source), Some(copy)) = (&source.broker_datas, &copy.broker_datas) else {
-            return false;
-        };
-        source.with(|source| {
-            copy.with(|copy| match (source.first(), copy.first()) {
-                (Some(None), Some(None)) => true,
-                (Some(Some(source)), Some(Some(copy))) => source.ptr_eq(copy),
-                _ => false,
-            })
-        })
-    }
-
-    fn broker_filter_list(route: &TopicRouteData) -> Option<SharedFilterServerList> {
-        route
-            .filter_server_table
-            .as_ref()?
-            .with(|filters| filters.get("broker").and_then(Clone::clone))
-    }
-
-    fn broker_mapping(route: &TopicRouteData) -> Option<SharedTopicQueueMappingInfoHandle> {
-        route
-            .topic_queue_mapping_by_broker
-            .as_ref()?
-            .with(|mappings| mappings.get("broker").and_then(Clone::clone))
-    }
-
-    fn collection_aliases(source: &TopicRouteData, copy: Option<&TopicRouteData>) -> Value {
-        let Some(copy) = copy else {
-            return json!({
-                "queueList": false,
-                "queueElement": false,
-                "brokerList": false,
-                "brokerElement": false,
-                "filterTable": false,
-                "filterList": false,
-                "mappingTable": false,
-                "mappingValue": false,
-            });
-        };
-        json!({
-            "queueList": source.queue_datas.as_ref().zip(copy.queue_datas.as_ref())
-                .is_some_and(|(left, right)| left.ptr_eq(right)),
-            "queueElement": first_queue_alias(source, copy),
-            "brokerList": source.broker_datas.as_ref().zip(copy.broker_datas.as_ref())
-                .is_some_and(|(left, right)| left.ptr_eq(right)),
-            "brokerElement": first_broker_alias(source, copy),
-            "filterTable": source.filter_server_table.as_ref().zip(copy.filter_server_table.as_ref())
-                .is_some_and(|(left, right)| left.ptr_eq(right)),
-            "filterList": broker_filter_list(source).zip(broker_filter_list(copy))
-                .is_some_and(|(left, right)| left.ptr_eq(&right)),
-            "mappingTable": source.topic_queue_mapping_by_broker.as_ref()
-                .zip(copy.topic_queue_mapping_by_broker.as_ref())
-                .is_some_and(|(left, right)| left.ptr_eq(right)),
-            "mappingValue": broker_mapping(source).zip(broker_mapping(copy))
-                .is_some_and(|(left, right)| left.ptr_eq(&right)),
-        })
-    }
-
-    #[test]
-    fn topic_route_data_copy_and_clone_methods_match_invoked_java_values_and_failures() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        for case in fixture["topicRouteDataClone"].as_array().unwrap() {
-            let source: TopicRouteData = serde_json::from_value(case["input"].clone()).unwrap();
-            let expected_copy: TopicRouteData =
-                serde_json::from_value(case["copyConstructor"].clone()).unwrap();
-            assert_eq!(
-                source.java_copy_constructed(),
-                expected_copy,
-                "{}",
-                case["id"]
-            );
-            let copy = source.java_copy_constructed();
-            assert_eq!(
-                collection_aliases(&source, Some(&copy)),
-                case["copyCollectionAliases"],
-                "{} copy aliases",
-                case["id"]
-            );
-
-            let clone = source.clone_topic_route_data();
-            assert_eq!(
-                clone.is_ok(),
-                case["cloneOutcome"] == "OK",
-                "{}",
-                case["id"]
-            );
-            if let Ok(clone) = clone {
-                let expected: TopicRouteData =
-                    serde_json::from_value(case["clone"].clone()).unwrap();
-                assert_eq!(clone, expected, "{}", case["id"]);
-                assert_eq!(
-                    collection_aliases(&source, Some(&clone)),
-                    case["cloneCollectionAliases"],
-                    "{} clone aliases",
-                    case["id"]
-                );
-            } else {
-                assert_eq!(
-                    collection_aliases(&source, None),
-                    case["cloneCollectionAliases"],
-                    "{} clone aliases",
-                    case["id"]
-                );
-            }
-
-            let deep_clone = source.deep_clone_topic_route_data();
-            assert_eq!(
-                deep_clone.is_ok(),
-                case["deepCloneOutcome"] == "OK",
-                "{}",
-                case["id"]
-            );
-            if let Ok(deep_clone) = deep_clone {
-                let expected: TopicRouteData =
-                    serde_json::from_value(case["deepClone"].clone()).unwrap();
-                assert_eq!(deep_clone, expected, "{}", case["id"]);
-                assert_eq!(
-                    collection_aliases(&source, Some(&deep_clone)),
-                    case["deepCloneCollectionAliases"],
-                    "{} deep clone aliases",
-                    case["id"]
-                );
-            } else {
-                assert_eq!(
-                    collection_aliases(&source, None),
-                    case["deepCloneCollectionAliases"],
-                    "{} deep clone aliases",
-                    case["id"]
-                );
-            }
-        }
-    }
-}
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TopicRouteData {
@@ -4259,325 +3438,6 @@ impl<'de> Deserialize<'de> for TopicRouteData {
                 )
             }),
         })
-    }
-}
-
-#[cfg(test)]
-mod route_dto_input_cases_tests {
-    use super::{
-        BrokerData, QueueData, TopicQueueMappingInfo, TopicRouteData, parse_java_route_json,
-    };
-    use rocketmq_classic_common::message::MessageQueue;
-
-    fn null_omission_equivalent(actual: &serde_json::Value, expected: &serde_json::Value) -> bool {
-        match (actual, expected) {
-            (serde_json::Value::Object(actual), serde_json::Value::Object(expected)) => {
-                actual.iter().all(|(key, value)| match expected.get(key) {
-                    Some(expected) => null_omission_equivalent(value, expected),
-                    None => value.is_null(),
-                }) && expected.iter().all(|(key, value)| match actual.get(key) {
-                    Some(actual) => null_omission_equivalent(actual, value),
-                    None => value.is_null(),
-                })
-            }
-            (serde_json::Value::Array(actual), serde_json::Value::Array(expected)) => {
-                actual.len() == expected.len()
-                    && actual
-                        .iter()
-                        .zip(expected)
-                        .all(|(actual, expected)| null_omission_equivalent(actual, expected))
-            }
-            _ => actual == expected,
-        }
-    }
-
-    #[test]
-    fn route_dto_inputs_match_invoked_java_fastjson() {
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
-        let cases = fixture["routeDtoInputCases"].as_array().unwrap();
-        assert_eq!(
-            cases.len(),
-            527,
-            "Java oracle includes root shapes, exact coercions, duplicate fields, collection shapes, per-field token kinds, and raw C0 string probes"
-        );
-        for dto in [
-            "queueData",
-            "messageQueue",
-            "brokerData",
-            "mapping",
-            "topicRouteData",
-        ] {
-            for shape in [
-                "empty-object",
-                "null",
-                "empty-array",
-                "singleton-array",
-                "number",
-                "boolean",
-                "string",
-            ] {
-                let id = format!("root-{dto}-{shape}");
-                assert!(
-                    cases
-                        .iter()
-                        .any(|case| case["id"].as_str() == Some(id.as_str())),
-                    "missing {id}"
-                );
-            }
-        }
-        for required in [
-            "queue-duplicate-broker-name-last-wins",
-            "queue-duplicate-read-queue-nums-last-wins",
-            "queue-duplicate-write-queue-nums-last-wins",
-            "queue-duplicate-perm-last-wins",
-            "queue-duplicate-topic-sys-flag-last-wins",
-            "broker-duplicate-cluster-last-wins",
-            "broker-duplicate-name-last-wins",
-            "broker-duplicate-addresses-last-wins",
-            "broker-duplicate-zone-last-wins",
-            "broker-duplicate-acting-master-last-wins",
-            "mapping-duplicate-topic-last-wins",
-            "mapping-duplicate-total-queues-last-wins",
-            "mapping-duplicate-bname-last-wins",
-            "mapping-duplicate-epoch-last-wins",
-            "mapping-duplicate-dirty-last-wins",
-            "mapping-duplicate-scope-last-wins",
-            "mapping-duplicate-curr-id-map-last-wins",
-            "topic-route-duplicate-order-topic-last-wins",
-            "topic-route-duplicate-queue-datas-last-wins",
-            "topic-route-duplicate-broker-datas-last-wins",
-            "topic-route-duplicate-filter-server-table-last-wins",
-            "topic-route-duplicate-mapping-table-last-wins",
-            "route-queue-datas-single-object",
-            "route-broker-datas-single-object",
-            "route-queue-datas-null-element",
-            "route-broker-datas-null-element",
-            "queue-uppercase-property",
-            "queue-titlecase-property",
-            "queue-snakecase-property",
-            "queue-case-collision",
-            "broker-uppercase-property",
-            "mapping-uppercase-property",
-            "topic-route-uppercase-property",
-            "broker-boolean-high-precision-decimal-one",
-            "broker-address-high-precision-number-strings",
-            "broker-address-unquoted-integer-keys",
-            "broker-address-unquoted-leading-zero-key",
-            "broker-address-unquoted-plus-key",
-            "broker-address-unquoted-fraction-key",
-            "broker-address-unquoted-negative-fraction-key",
-            "broker-address-unquoted-exponent-key",
-            "filter-server-high-precision-number-strings",
-            "queue-unquoted-fraction-property-key",
-            "queue-unquoted-integer-property-key",
-            "queue-unquoted-plus-property-key",
-            "queue-unknown-nested-unquoted-numeric-key",
-            "broker-address-map-value-null",
-            "broker-address-map-value-string",
-            "broker-address-map-value-integer",
-            "broker-address-map-value-fraction",
-            "broker-address-map-value-boolean",
-            "broker-address-map-value-array",
-            "broker-address-map-value-object",
-            "broker-address-object-value-unquoted-numeric-key",
-            "filter-server-list-member-null",
-            "filter-server-list-member-string",
-            "filter-server-list-member-integer",
-            "filter-server-list-member-fraction",
-            "filter-server-list-member-boolean",
-            "filter-server-list-member-array",
-            "filter-server-list-member-object",
-            "mapping-curr-id-map-value-null",
-            "mapping-curr-id-map-value-string",
-            "mapping-curr-id-map-value-integer",
-            "mapping-curr-id-map-value-fraction",
-            "mapping-curr-id-map-value-boolean",
-            "mapping-curr-id-map-value-array",
-            "mapping-curr-id-map-value-object",
-            "route-queue-data-element-null",
-            "route-queue-data-element-string",
-            "route-queue-data-element-integer",
-            "route-queue-data-element-fraction",
-            "route-queue-data-element-boolean",
-            "route-queue-data-element-array",
-            "route-queue-data-element-object",
-            "route-broker-data-element-null",
-            "route-broker-data-element-string",
-            "route-broker-data-element-integer",
-            "route-broker-data-element-fraction",
-            "route-broker-data-element-boolean",
-            "route-broker-data-element-array",
-            "route-broker-data-element-object",
-            "route-filter-server-map-value-null",
-            "route-filter-server-map-value-string",
-            "route-filter-server-map-value-integer",
-            "route-filter-server-map-value-fraction",
-            "route-filter-server-map-value-boolean",
-            "route-filter-server-map-value-array",
-            "route-filter-server-map-value-object",
-            "route-filter-server-map-value-empty-string",
-            "route-filter-server-unquoted-fraction-key",
-            "route-filter-server-unquoted-plus-key",
-            "route-filter-server-unquoted-exponent-key",
-            "route-mapping-table-unquoted-leading-zero-key",
-            "route-mapping-table-unquoted-plus-key",
-            "route-mapping-table-unquoted-exponent-key",
-            "route-mapping-table-map-value-null",
-            "route-mapping-table-map-value-string",
-            "route-mapping-table-map-value-integer",
-            "route-mapping-table-map-value-fraction",
-            "route-mapping-table-map-value-boolean",
-            "route-mapping-table-map-value-array",
-            "route-mapping-table-map-value-object",
-            "queue-unicode-decimal-string",
-            "mapping-unicode-decimal-strings",
-            "message-queue-unicode-decimal-id",
-            "message-queue-id-plus-string",
-            "message-queue-id-leading-zero-string",
-            "message-queue-id-fraction-string",
-            "message-queue-id-exponent-string",
-            "message-queue-id-whitespace-string",
-            "message-queue-id-string-overflow",
-            "message-queue-id-string-underflow",
-            "broker-address-key-plus-leading-zero",
-            "broker-address-key-fraction-string",
-            "broker-address-key-exponent-string",
-            "broker-address-key-whitespace-string",
-            "broker-address-key-long-maximum",
-            "broker-address-key-long-overflow",
-            "broker-address-key-normalization-collision-forward",
-            "broker-address-key-normalization-collision-reverse",
-            "broker-address-key-normalization-collision-repeat-first-key-last-wins",
-            "broker-address-key-normalization-collision-repeat-alias-last-wins",
-            "broker-address-unquoted-null-key",
-            "broker-address-quoted-null-key",
-            "mapping-id-key-plus-leading-zero",
-            "mapping-id-key-fraction-string",
-            "mapping-id-key-exponent-string",
-            "mapping-id-key-whitespace-string",
-            "mapping-id-key-int-maximum",
-            "mapping-id-key-int-overflow",
-            "mapping-id-key-normalization-collision-forward",
-            "mapping-id-key-normalization-collision-reverse",
-            "mapping-id-key-normalization-collision-repeat-first-key-last-wins",
-            "mapping-id-key-normalization-collision-repeat-alias-last-wins",
-            "mapping-id-unquoted-null-key",
-            "mapping-id-quoted-null-key",
-            "mapping-long-plus-maximum-string",
-            "mapping-long-leading-zero-string",
-            "mapping-long-fraction-string",
-            "mapping-long-maximum-decimal-string",
-            "mapping-long-minimum-decimal-string",
-            "mapping-long-overflow-decimal-string",
-            "mapping-long-underflow-decimal-string",
-            "mapping-long-maximum-decimal-number",
-            "mapping-long-overflow-decimal-number",
-            "mapping-long-underflow-decimal-number",
-            "mapping-curr-id-map-high-precision-decimals",
-            "mapping-curr-id-map-unquoted-integer-keys",
-            "mapping-curr-id-map-unquoted-leading-zero-key",
-            "mapping-curr-id-map-unquoted-plus-key",
-            "mapping-curr-id-map-unquoted-fraction-key",
-            "mapping-curr-id-map-unquoted-negative-fraction-key",
-            "mapping-curr-id-map-unquoted-exponent-key",
-            "broker-unicode-decimal-address-key",
-            "mapping-unicode-decimal-id-key",
-            "queue-fastjson-leading-plus-number",
-            "queue-fastjson-leading-zero-number",
-            "queue-fastjson-leading-plus-fraction",
-            "queue-fastjson-leading-zero-fraction",
-            "mapping-fastjson-leading-plus-exponent",
-            "mapping-fastjson-leading-zero-exponent",
-            "queue-fastjson-vertical-tab-prefix",
-            "queue-fastjson-form-feed-prefix",
-            "queue-fastjson-form-feed-before-number",
-            "queue-fastjson-form-feed-around-punctuation",
-            "queue-fastjson-vertical-tab-before-number",
-            "queue-fastjson-nbsp-prefix",
-            "queue-fastjson-bom-prefix",
-            "queue-fastjson-bom-before-number",
-            "shape-mapping-currIdMap-array",
-            "shape-topicRouteData-queueDatas-object",
-            "shape-brokerData-enableActingMaster-fraction",
-            "route-raw-c0-0000-order-topic-value",
-            "route-raw-c0-000c-field-name",
-            "route-raw-c0-001f-filter-key",
-            "route-raw-c0-001f-filter-value",
-        ] {
-            assert!(
-                cases.iter().any(|case| case["id"] == required),
-                "missing {required}"
-            );
-        }
-        for code_unit in 0..=0x1f {
-            let hex = format!("{code_unit:04x}");
-            for position in [
-                "order-topic-value",
-                "field-name",
-                "filter-key",
-                "filter-value",
-            ] {
-                let id = format!("route-raw-c0-{hex}-{position}");
-                assert!(
-                    cases.iter().any(|case| case["id"] == id),
-                    "missing raw-control probe {id}"
-                );
-            }
-        }
-        for id in [
-            "broker-address-unquoted-null-key",
-            "broker-address-quoted-null-key",
-        ] {
-            let case = cases.iter().find(|case| case["id"] == id).unwrap();
-            assert_eq!(case["brokerAddrsNullKeyPresent"], true, "{id}");
-            assert_eq!(case["brokerAddrsStringNullKeyPresent"], false, "{id}");
-            let broker: BrokerData = parse_java_route_json(case["rawInput"].as_str().unwrap())
-                .expect("pinned Java accepts nullable Long map keys");
-            let addresses = broker.broker_addrs.unwrap();
-            addresses.with(|addresses| {
-                assert!(addresses.contains_key(&None), "{id}");
-                assert_eq!(addresses.len(), 1, "{id}");
-            });
-        }
-        for case in cases {
-            let raw_input = case["rawInput"].as_str().unwrap();
-            let decoded =
-                match case["type"].as_str().unwrap() {
-                    "queueData" => {
-                        parse_java_route_json::<QueueData>(raw_input).and_then(serde_json::to_value)
-                    }
-                    "messageQueue" => parse_java_route_json::<MessageQueue>(raw_input)
-                        .and_then(serde_json::to_value),
-                    "brokerData" => parse_java_route_json::<BrokerData>(raw_input)
-                        .and_then(serde_json::to_value),
-                    "mapping" => parse_java_route_json::<TopicQueueMappingInfo>(raw_input)
-                        .and_then(serde_json::to_value),
-                    "topicRouteData" => parse_java_route_json::<TopicRouteData>(raw_input)
-                        .and_then(serde_json::to_value),
-                    other => panic!("unknown DTO case type {other}"),
-                };
-            let java_accepts = case["outcome"] == "ACCEPTED";
-            assert_eq!(decoded.is_ok(), java_accepts, "{}: {decoded:?}", case["id"]);
-            if let Ok(decoded) = decoded {
-                for (field, expected) in case["fields"].as_object().unwrap() {
-                    let actual = decoded.get(field);
-                    if expected.is_null() {
-                        assert!(
-                            actual.is_none_or(serde_json::Value::is_null),
-                            "{}.{field}: expected null/omitted, got {actual:?}",
-                            case["id"]
-                        );
-                    } else {
-                        assert!(
-                            actual.is_some_and(|actual| null_omission_equivalent(actual, expected)),
-                            "{}.{field}: actual {actual:?}, expected {expected:?}",
-                            case["id"]
-                        );
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -5450,6 +4310,1146 @@ fn logical_broker(scope: &str) -> String {
             scope
         }
     )
+}
+
+#[cfg(test)]
+mod queue_data_method_tests {
+    use super::{QueueData, QueueDataCompareError};
+
+    #[test]
+    fn queue_data_methods_match_invoked_java() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        for case in fixture["queueDataMethods"].as_array().unwrap() {
+            let left: QueueData = serde_json::from_value(case["left"].clone()).unwrap();
+            let right: QueueData = serde_json::from_value(case["right"].clone()).unwrap();
+            assert_eq!(left == right, case["equals"]);
+            assert_eq!(
+                left.java_hash_code(),
+                case["leftHashCode"].as_i64().unwrap() as i32
+            );
+            assert_eq!(
+                right.java_hash_code(),
+                case["rightHashCode"].as_i64().unwrap() as i32
+            );
+            assert_eq!(left.java_to_string(), case["leftToString"]);
+            assert_eq!(right.java_to_string(), case["rightToString"]);
+            let result = left.java_compare_to(&right);
+            if case["outcome"] == "OK" {
+                assert_eq!(result.unwrap(), case["result"].as_i64().unwrap() as i32);
+            } else {
+                assert_eq!(result.unwrap_err(), QueueDataCompareError::NullBrokerName);
+            }
+        }
+        assert_eq!(
+            fixture["compareToNullOther"]["queueData"],
+            "NullPointerException"
+        );
+        assert_eq!(
+            QueueData::default().java_compare_to_nullable(None),
+            Err(QueueDataCompareError::NullOther)
+        );
+    }
+}
+
+#[cfg(test)]
+mod broker_data_equality_tests {
+    use super::BrokerData;
+
+    #[test]
+    fn broker_data_equality_matches_invoked_java_equals() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        for case in fixture["brokerDataEquality"].as_array().unwrap() {
+            let left: BrokerData = serde_json::from_value(case["left"].clone()).unwrap();
+            let right: BrokerData = serde_json::from_value(case["right"].clone()).unwrap();
+            assert_eq!(left == right, case["equals"], "{}", case["id"]);
+        }
+    }
+}
+
+#[cfg(test)]
+mod broker_data_hash_code_tests {
+    use super::BrokerData;
+
+    #[test]
+    fn broker_data_hash_code_matches_invoked_java_hash_code() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        for case in fixture["brokerDataHashCode"].as_array().unwrap() {
+            let broker: BrokerData = serde_json::from_value(case["input"].clone()).unwrap();
+            assert_eq!(
+                broker.java_hash_code(),
+                case["hashCode"].as_i64().unwrap() as i32,
+                "{}",
+                case["id"]
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod broker_data_to_string_tests {
+    use super::BrokerData;
+
+    #[test]
+    fn broker_data_to_string_matches_invoked_java() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        for case in fixture["brokerDataToString"].as_array().unwrap() {
+            let broker: BrokerData = serde_json::from_value(case["input"].clone()).unwrap();
+            assert_eq!(broker.java_to_string(), case["toString"]);
+        }
+    }
+}
+
+#[cfg(test)]
+mod broker_data_select_addr_tests {
+    use super::{BrokerData, BrokerDataSelectAddrError};
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn broker_data_select_addr_matches_invoked_java_outcomes() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        let cases = fixture["brokerDataSelectAddr"].as_array().unwrap();
+        assert_eq!(cases.len(), 10);
+        for case in cases.iter().skip(7) {
+            assert!(case["input"]["brokerAddrs"]["null"].is_string());
+        }
+        for case in cases {
+            let broker: BrokerData = serde_json::from_value(case["input"].clone()).unwrap();
+            if let Some(exception) = case["exception"].as_str() {
+                let error = broker.java_select_broker_addr().unwrap_err();
+                let expected = match exception {
+                    "NullPointerException" => BrokerDataSelectAddrError::NullAddressMap,
+                    "IllegalArgumentException" => BrokerDataSelectAddrError::NoAddressCandidates,
+                    other => panic!("unexpected Java exception {other}"),
+                };
+                assert_eq!(error, expected, "{}", case["id"]);
+                continue;
+            }
+            match broker.java_select_broker_addr().unwrap() {
+                Some(address) => assert!(
+                    case["addresses"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|allowed| allowed.as_str() == Some(address.as_str())),
+                    "unexpected random address for {}: {address}",
+                    case["id"]
+                ),
+                None => assert_eq!(case["nullAddress"], true, "{}", case["id"]),
+            }
+            for index in 0..broker.broker_addrs.as_ref().unwrap().with(BTreeMap::len) {
+                match broker.java_select_broker_addr_with(|_| index).unwrap() {
+                    Some(address) => assert!(
+                        case["addresses"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .any(|allowed| allowed.as_str() == Some(address.as_str())),
+                        "unexpected address for {}: {address}",
+                        case["id"]
+                    ),
+                    None => assert_eq!(case["nullAddress"], true, "{}", case["id"]),
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod broker_data_compare_to_tests {
+    use super::{BrokerData, BrokerDataCompareError};
+
+    #[test]
+    fn broker_data_compare_to_matches_invoked_java_comparable() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        for case in fixture["brokerDataCompareTo"].as_array().unwrap() {
+            let left: BrokerData = serde_json::from_value(case["left"].clone()).unwrap();
+            let right: BrokerData = serde_json::from_value(case["right"].clone()).unwrap();
+            let result = left.java_compare_to(&right);
+            if case["outcome"] == "OK" {
+                assert_eq!(result.unwrap(), case["result"].as_i64().unwrap() as i32);
+            } else {
+                assert_eq!(result.unwrap_err(), BrokerDataCompareError::NullBrokerName);
+            }
+        }
+        assert_eq!(
+            fixture["compareToNullOther"]["brokerData"],
+            "NullPointerException"
+        );
+        assert_eq!(
+            BrokerData::default().java_compare_to_nullable(None),
+            Err(BrokerDataCompareError::NullOther)
+        );
+    }
+}
+
+#[cfg(test)]
+mod nullable_broker_address_tests {
+    use super::BrokerData;
+
+    #[test]
+    fn null_map_value_is_distinct_from_missing_key_and_null_map() {
+        let value = serde_json::json!({"cluster":"c","brokerName":"b","brokerAddrs":{"0":null,"1":"slave:10911"}});
+        let broker: BrokerData = serde_json::from_value(value.clone()).unwrap();
+        let addresses = broker.broker_addrs.as_ref().unwrap();
+        addresses.with(|addresses| {
+            assert_eq!(addresses.get(&Some(0)), Some(&None));
+            assert!(!addresses.contains_key(&Some(2)));
+            assert_eq!(
+                addresses.get(&Some(1)).and_then(Option::as_deref),
+                Some("slave:10911")
+            );
+        });
+        assert_eq!(
+            serde_json::to_value(&broker).unwrap()["brokerAddrs"],
+            value["brokerAddrs"]
+        );
+        let null_map: BrokerData = serde_json::from_value(
+            serde_json::json!({"cluster":"c","brokerName":"b","brokerAddrs":null}),
+        )
+        .unwrap();
+        assert!(null_map.broker_addrs.is_none());
+    }
+}
+
+#[cfg(test)]
+mod nullable_nested_route_tests {
+    use super::TopicRouteData;
+
+    #[test]
+    fn nested_broker_and_queue_names_follow_invoked_java_defaults_and_json() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        for case in fixture["nullableNestedRouteFields"].as_array().unwrap() {
+            let route: TopicRouteData = serde_json::from_value(case["input"].clone())
+                .expect("pinned Java accepts this nested route input");
+            let queue = route.queue_datas_snapshot().unwrap()[0]
+                .as_ref()
+                .unwrap()
+                .clone();
+            let encoded = serde_json::to_value(&route).unwrap();
+            assert_eq!(
+                encoded["queueDatas"][0].get("brokerName").is_none(),
+                case["queueNameNull"]
+            );
+            assert_eq!(
+                encoded["brokerDatas"][0].get("brokerName").is_none(),
+                case["brokerNameNull"]
+            );
+            assert_eq!(
+                encoded["brokerDatas"][0].get("cluster").is_none(),
+                case["clusterNull"]
+            );
+            assert_eq!(
+                encoded["queueDatas"][0].get("brokerName").is_some(),
+                case["encodedHasQueueName"]
+            );
+            assert_eq!(
+                encoded["brokerDatas"][0].get("brokerName").is_some(),
+                case["encodedHasBrokerName"]
+            );
+            assert_eq!(
+                encoded["brokerDatas"][0].get("cluster").is_some(),
+                case["encodedHasCluster"]
+            );
+            assert_eq!(queue.read_queue_nums, case["queueRead"]);
+            assert_eq!(queue.write_queue_nums, case["queueWrite"]);
+            assert_eq!(queue.perm, case["queuePerm"]);
+            assert_eq!(queue.topic_sys_flag, case["queueFlag"]);
+            let subscriptions = route.subscribe_queues("topic");
+            assert_eq!(
+                subscriptions.len(),
+                case["subscribeQueueCount"].as_u64().unwrap() as usize
+            );
+            assert_eq!(
+                subscriptions
+                    .iter()
+                    .any(|queue| queue.broker_name().is_none()),
+                case["subscribeQueueBrokerNull"]
+            );
+            assert_eq!(
+                subscriptions.iter().any(|queue| serde_json::to_value(queue)
+                    .unwrap()
+                    .get("brokerName")
+                    .is_none()),
+                case["subscribeJsonBrokerOmitted"]
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod nullable_message_queue_tests {
+    use rocketmq_classic_common::message::MessageQueue;
+
+    #[test]
+    fn nullable_message_queue_fields_match_invoked_java_defaults_and_json() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        for case in fixture["nullableMessageQueueFields"].as_array().unwrap() {
+            let queue: MessageQueue = serde_json::from_value(case["input"].clone())
+                .expect("pinned Java decodes this MessageQueue");
+            let encoded = serde_json::to_value(&queue).unwrap();
+            assert_eq!(encoded.get("topic").is_none(), case["topicNull"]);
+            assert_eq!(encoded.get("brokerName").is_none(), case["brokerNull"]);
+            assert_eq!(encoded.get("topic").is_some(), case["encodedHasTopic"]);
+            assert_eq!(
+                encoded.get("brokerName").is_some(),
+                case["encodedHasBroker"]
+            );
+            assert_eq!(queue.queue_id(), case["queueId"].as_i64().unwrap() as i32);
+        }
+    }
+
+    #[test]
+    fn message_queue_compare_to_matches_invoked_java() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        for case in fixture["messageQueueCompareTo"].as_array().unwrap() {
+            let left: MessageQueue = serde_json::from_value(case["left"].clone()).unwrap();
+            let right: MessageQueue = serde_json::from_value(case["right"].clone()).unwrap();
+            let result = left.java_compare_to(&right);
+            if case["outcome"] == "OK" {
+                assert_eq!(result.unwrap(), case["result"].as_i64().unwrap() as i32);
+            } else {
+                assert!(result.is_err());
+            }
+        }
+        assert_eq!(
+            fixture["compareToNullOther"]["messageQueue"],
+            "NullPointerException"
+        );
+        assert_eq!(
+            rocketmq_classic_common::message::MessageQueue::new("topic", "broker", 0)
+                .java_compare_to_nullable(None),
+            Err(rocketmq_classic_common::message::MessageQueueCompareError::NullOther)
+        );
+    }
+
+    #[test]
+    fn message_queue_hash_equals_and_text_match_invoked_java() {
+        use rocketmq_classic_common::message::MessageQueue;
+
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        for case in fixture["messageQueueMethods"].as_array().unwrap() {
+            let queue: MessageQueue = serde_json::from_value(case["queue"].clone()).unwrap();
+            let copy = queue.clone();
+            let constructed = MessageQueue::new_nullable(
+                queue.topic().map(str::to_owned),
+                queue.broker_name().map(str::to_owned),
+                queue.queue_id(),
+            );
+            assert_eq!(constructed, queue, "{} constructor fields", case["case"]);
+            if let (Some(topic), Some(broker_name)) = (queue.topic(), queue.broker_name()) {
+                assert_eq!(
+                    MessageQueue::new(topic, broker_name, queue.queue_id()),
+                    queue,
+                    "{} non-null constructor fields",
+                    case["case"]
+                );
+            }
+            assert_eq!(
+                queue.java_hash_code(),
+                case["hashCode"].as_i64().unwrap() as i32
+            );
+            assert_eq!(queue.to_string(), case["toString"].as_str().unwrap());
+            assert_eq!(queue == queue, case["equalsSelf"].as_bool().unwrap());
+            assert_eq!(queue == copy, case["equalsCopy"].as_bool().unwrap());
+            assert!(!case["equalsNull"].as_bool().unwrap());
+            assert!(!case["equalsWrongType"].as_bool().unwrap());
+            if case["case"] == "defaults" {
+                assert_eq!(MessageQueue::default(), queue);
+            }
+
+            let mut topic_changed = queue.clone();
+            topic_changed.set_topic(Some(match queue.topic() {
+                Some(topic) => format!("{topic}x"),
+                None => "topic".to_owned(),
+            }));
+            assert_eq!(
+                queue == topic_changed,
+                case["equalsTopicChanged"].as_bool().unwrap()
+            );
+
+            let mut broker_changed = queue.clone();
+            broker_changed.set_broker_name(Some(match queue.broker_name() {
+                Some(broker) => format!("{broker}x"),
+                None => "broker".to_owned(),
+            }));
+            assert_eq!(
+                queue == broker_changed,
+                case["equalsBrokerChanged"].as_bool().unwrap()
+            );
+
+            let mut queue_id_changed = queue.clone();
+            queue_id_changed.set_queue_id(queue.queue_id().wrapping_add(1));
+            assert_eq!(
+                queue == queue_id_changed,
+                case["equalsQueueIdChanged"].as_bool().unwrap()
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod nullable_route_collection_tests {
+    use super::TopicRouteData;
+
+    #[test]
+    fn source_explicit_null_route_collections_decode_without_becoming_empty() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        for case in fixture["nullableRouteCollections"].as_array().unwrap() {
+            let route: TopicRouteData = serde_json::from_value(case["input"].clone())
+                .expect("Java decodes explicit null route collections");
+            let encoded = serde_json::to_value(route).unwrap();
+            for (field, decoded_key, encoded_key) in [
+                ("queueDatas", "decodedQueueNull", "encodedHasQueue"),
+                ("brokerDatas", "decodedBrokerNull", "encodedHasBroker"),
+                ("filterServerTable", "decodedFilterNull", "encodedHasFilter"),
+            ] {
+                assert_eq!(encoded.get(field).is_none(), case[decoded_key]);
+                assert_eq!(encoded.get(field).is_some(), case[encoded_key]);
+            }
+            assert_eq!(
+                encoded.get("topicQueueMappingByBroker").is_some(),
+                case["encodedHasMapping"]
+            );
+        }
+    }
+
+    #[test]
+    fn java_copy_constructor_normalizes_nullable_route_collections() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        for case in fixture["nullableRouteCollections"].as_array().unwrap() {
+            let route: TopicRouteData = serde_json::from_value(case["input"].clone()).unwrap();
+            let copy = route.java_copy_constructed();
+            assert_eq!(
+                copy.queue_datas_snapshot().unwrap().is_empty(),
+                case["copyQueueEmpty"]
+            );
+            assert_eq!(
+                copy.broker_datas_snapshot().unwrap().is_empty(),
+                case["copyBrokerEmpty"]
+            );
+            assert_eq!(
+                copy.filter_server_table_snapshot().unwrap().is_empty(),
+                case["copyFilterEmpty"]
+            );
+            assert_eq!(
+                copy.topic_queue_mapping_by_broker.is_none(),
+                case["input"]["topicQueueMappingByBroker"].is_null()
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod nullable_static_mapping_tests {
+    use super::TopicQueueMappingInfo;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn static_mapping_optional_fields_match_invoked_java_decode_and_json() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        for case in fixture["nullableStaticMappingFields"].as_array().unwrap() {
+            let mapping: TopicQueueMappingInfo = serde_json::from_value(case["input"].clone())
+                .expect("pinned Java accepts this mapping input");
+            let encoded = serde_json::to_value(&mapping).unwrap();
+            for (field, null_key, encoded_key) in [
+                ("topic", "topicNull", "encodedHasTopic"),
+                ("bname", "bnameNull", "encodedHasBname"),
+                ("scope", "scopeNull", "encodedHasScope"),
+                ("currIdMap", "currIdMapNull", "encodedHasCurrIdMap"),
+            ] {
+                assert_eq!(encoded.get(field).is_none(), case[null_key]);
+                assert_eq!(encoded.get(field).is_some(), case[encoded_key]);
+            }
+            assert_eq!(
+                mapping
+                    .curr_id_map
+                    .as_ref()
+                    .is_some_and(|map| map.with(BTreeMap::is_empty)),
+                case["currIdMapEmpty"]
+            );
+        }
+    }
+
+    #[test]
+    fn static_mapping_map_entry_inputs_match_invoked_java_acceptance() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        for case in fixture["staticMappingMapEntryCases"].as_array().unwrap() {
+            let mapping: Result<TopicQueueMappingInfo, _> =
+                serde_json::from_str(case["rawInput"].as_str().unwrap());
+            let java_accepts = case["outcome"] == "accepted";
+            assert_eq!(
+                mapping.is_ok(),
+                java_accepts,
+                "{} ({})",
+                case["case"],
+                case["error"]
+            );
+            if let Ok(mapping) = mapping {
+                assert_eq!(
+                    mapping
+                        .curr_id_map
+                        .as_ref()
+                        .map(|values| values.with(BTreeMap::len)),
+                    case["mapSize"].as_u64().map(|size| size as usize)
+                );
+                assert_eq!(
+                    mapping
+                        .curr_id_map
+                        .as_ref()
+                        .is_some_and(|values| values.with(|values| values.contains_key(&0))),
+                    case["hasKeyZero"]
+                );
+                assert_eq!(
+                    mapping
+                        .curr_id_map
+                        .as_ref()
+                        .and_then(|values| { values.with(|values| values.get(&0).copied()) }),
+                    case["keyZeroValue"].as_i64().map(|value| value as i32)
+                );
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod overlapping_static_mapping_tests {
+    use super::TopicRouteData;
+
+    #[test]
+    fn overlapping_static_owners_follow_invoked_java_epochs_and_fallback() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        for case in fixture["overlappingStaticMappingOwners"]
+            .as_array()
+            .unwrap()
+        {
+            let route: TopicRouteData = serde_json::from_value(case["input"].clone()).unwrap();
+            let endpoints = route.static_queue_endpoints("topic").unwrap();
+            let rows: Vec<_> = endpoints
+                .iter()
+                .map(|(queue, owner)| {
+                    serde_json::json!({
+                        "queueId": queue.queue_id(),
+                        "brokerName": queue.broker_name(),
+                        "owner": owner,
+                    })
+                })
+                .collect();
+            assert_eq!(serde_json::json!(rows), case["endpoints"]);
+        }
+    }
+}
+
+#[cfg(test)]
+mod topic_queue_mapping_method_tests {
+    use super::TopicQueueMappingInfo;
+
+    #[test]
+    fn topic_queue_mapping_methods_match_invoked_java() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        let constants = &fixture["topicQueueMappingConstants"];
+        assert_eq!(TopicQueueMappingInfo::LEVEL_0, constants["infoLevel0"]);
+        assert_eq!(
+            crate::body::TopicQueueMappingDetail::LEVEL_0,
+            constants["detailLevel0"]
+        );
+        for case in fixture["topicQueueMappingMethods"].as_array().unwrap() {
+            let left: TopicQueueMappingInfo = serde_json::from_value(case["left"].clone()).unwrap();
+            let right: TopicQueueMappingInfo =
+                serde_json::from_value(case["right"].clone()).unwrap();
+            assert_eq!(left == right, case["equals"]);
+            assert_eq!(
+                left.java_hash_code(),
+                case["leftHashCode"].as_i64().unwrap() as i32
+            );
+            assert_eq!(
+                right.java_hash_code(),
+                case["rightHashCode"].as_i64().unwrap() as i32
+            );
+            assert_eq!(left.java_to_string(), case["leftToString"]);
+            assert_eq!(right.java_to_string(), case["rightToString"]);
+        }
+    }
+}
+
+#[cfg(test)]
+mod topic_route_data_method_tests {
+    use super::TopicRouteData;
+
+    #[test]
+    fn topic_route_data_methods_match_invoked_java() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        for case in fixture["topicRouteDataMethods"].as_array().unwrap() {
+            let left: TopicRouteData = serde_json::from_value(case["left"].clone()).unwrap();
+            let right: TopicRouteData = serde_json::from_value(case["right"].clone()).unwrap();
+            assert_eq!(left == right, case["equals"]);
+            assert_eq!(
+                left.java_hash_code(),
+                case["leftHashCode"].as_i64().unwrap() as i32
+            );
+            assert_eq!(
+                right.java_hash_code(),
+                case["rightHashCode"].as_i64().unwrap() as i32
+            );
+        }
+    }
+
+    #[test]
+    fn topic_route_data_nullable_nested_values_match_invoked_java() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        let method_case = &fixture["topicRouteDataMethods"][4];
+        let left: TopicRouteData = serde_json::from_value(method_case["left"].clone())
+            .expect("pinned Java accepts null nested route values");
+        let right: TopicRouteData = serde_json::from_value(method_case["right"].clone())
+            .expect("pinned Java accepts null nested route values");
+        assert_eq!(left == right, method_case["equals"]);
+        assert_eq!(
+            left.java_hash_code(),
+            method_case["leftHashCode"].as_i64().unwrap() as i32
+        );
+        assert_eq!(
+            right.java_hash_code(),
+            method_case["rightHashCode"].as_i64().unwrap() as i32
+        );
+        let string_case = fixture["topicRouteDataToString"]
+            .as_array()
+            .unwrap()
+            .last()
+            .unwrap();
+        let route: TopicRouteData = serde_json::from_value(string_case["input"].clone())
+            .expect("pinned Java accepts null nested route values");
+        assert_eq!(route.java_to_string(), string_case["toString"]);
+    }
+}
+
+#[cfg(test)]
+mod topic_route_data_to_string_tests {
+    use super::TopicRouteData;
+
+    #[test]
+    fn topic_route_data_to_string_matches_invoked_java() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        for case in fixture["topicRouteDataToString"].as_array().unwrap() {
+            let route: TopicRouteData = serde_json::from_value(case["input"].clone()).unwrap();
+            assert_eq!(route.java_to_string(), case["toString"]);
+        }
+    }
+}
+
+#[cfg(test)]
+mod topic_route_data_changed_method_tests {
+    use super::TopicRouteData;
+
+    #[test]
+    fn topic_route_data_changed_matches_invoked_java_comparison_and_sort_errors() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        for case in fixture["topicRouteDataChanged"].as_array().unwrap() {
+            let current: TopicRouteData = serde_json::from_value(case["current"].clone()).unwrap();
+            let old: Option<TopicRouteData> = if case["old"].is_null() {
+                None
+            } else {
+                Some(serde_json::from_value(case["old"].clone()).unwrap())
+            };
+            let result = current.java_topic_route_data_changed(old.as_ref());
+            if case["outcome"] == "OK" {
+                assert_eq!(result.unwrap(), case["changed"]);
+            } else {
+                assert!(result.is_err());
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod topic_route_data_clone_method_tests {
+    use super::{SharedFilterServerList, SharedTopicQueueMappingInfoHandle, TopicRouteData};
+    use serde_json::{Value, json};
+
+    fn first_queue_alias(source: &TopicRouteData, copy: &TopicRouteData) -> bool {
+        let (Some(source), Some(copy)) = (&source.queue_datas, &copy.queue_datas) else {
+            return false;
+        };
+        source.with(|source| {
+            copy.with(|copy| match (source.first(), copy.first()) {
+                (Some(None), Some(None)) => true,
+                (Some(Some(source)), Some(Some(copy))) => source.ptr_eq(copy),
+                _ => false,
+            })
+        })
+    }
+
+    fn first_broker_alias(source: &TopicRouteData, copy: &TopicRouteData) -> bool {
+        let (Some(source), Some(copy)) = (&source.broker_datas, &copy.broker_datas) else {
+            return false;
+        };
+        source.with(|source| {
+            copy.with(|copy| match (source.first(), copy.first()) {
+                (Some(None), Some(None)) => true,
+                (Some(Some(source)), Some(Some(copy))) => source.ptr_eq(copy),
+                _ => false,
+            })
+        })
+    }
+
+    fn broker_filter_list(route: &TopicRouteData) -> Option<SharedFilterServerList> {
+        route
+            .filter_server_table
+            .as_ref()?
+            .with(|filters| filters.get("broker").and_then(Clone::clone))
+    }
+
+    fn broker_mapping(route: &TopicRouteData) -> Option<SharedTopicQueueMappingInfoHandle> {
+        route
+            .topic_queue_mapping_by_broker
+            .as_ref()?
+            .with(|mappings| mappings.get("broker").and_then(Clone::clone))
+    }
+
+    fn collection_aliases(source: &TopicRouteData, copy: Option<&TopicRouteData>) -> Value {
+        let Some(copy) = copy else {
+            return json!({
+                "queueList": false,
+                "queueElement": false,
+                "brokerList": false,
+                "brokerElement": false,
+                "filterTable": false,
+                "filterList": false,
+                "mappingTable": false,
+                "mappingValue": false,
+            });
+        };
+        json!({
+            "queueList": source.queue_datas.as_ref().zip(copy.queue_datas.as_ref())
+                .is_some_and(|(left, right)| left.ptr_eq(right)),
+            "queueElement": first_queue_alias(source, copy),
+            "brokerList": source.broker_datas.as_ref().zip(copy.broker_datas.as_ref())
+                .is_some_and(|(left, right)| left.ptr_eq(right)),
+            "brokerElement": first_broker_alias(source, copy),
+            "filterTable": source.filter_server_table.as_ref().zip(copy.filter_server_table.as_ref())
+                .is_some_and(|(left, right)| left.ptr_eq(right)),
+            "filterList": broker_filter_list(source).zip(broker_filter_list(copy))
+                .is_some_and(|(left, right)| left.ptr_eq(&right)),
+            "mappingTable": source.topic_queue_mapping_by_broker.as_ref()
+                .zip(copy.topic_queue_mapping_by_broker.as_ref())
+                .is_some_and(|(left, right)| left.ptr_eq(right)),
+            "mappingValue": broker_mapping(source).zip(broker_mapping(copy))
+                .is_some_and(|(left, right)| left.ptr_eq(&right)),
+        })
+    }
+
+    #[test]
+    fn topic_route_data_copy_and_clone_methods_match_invoked_java_values_and_failures() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        for case in fixture["topicRouteDataClone"].as_array().unwrap() {
+            let source: TopicRouteData = serde_json::from_value(case["input"].clone()).unwrap();
+            let expected_copy: TopicRouteData =
+                serde_json::from_value(case["copyConstructor"].clone()).unwrap();
+            assert_eq!(
+                source.java_copy_constructed(),
+                expected_copy,
+                "{}",
+                case["id"]
+            );
+            let copy = source.java_copy_constructed();
+            assert_eq!(
+                collection_aliases(&source, Some(&copy)),
+                case["copyCollectionAliases"],
+                "{} copy aliases",
+                case["id"]
+            );
+
+            let clone = source.clone_topic_route_data();
+            assert_eq!(
+                clone.is_ok(),
+                case["cloneOutcome"] == "OK",
+                "{}",
+                case["id"]
+            );
+            if let Ok(clone) = clone {
+                let expected: TopicRouteData =
+                    serde_json::from_value(case["clone"].clone()).unwrap();
+                assert_eq!(clone, expected, "{}", case["id"]);
+                assert_eq!(
+                    collection_aliases(&source, Some(&clone)),
+                    case["cloneCollectionAliases"],
+                    "{} clone aliases",
+                    case["id"]
+                );
+            } else {
+                assert_eq!(
+                    collection_aliases(&source, None),
+                    case["cloneCollectionAliases"],
+                    "{} clone aliases",
+                    case["id"]
+                );
+            }
+
+            let deep_clone = source.deep_clone_topic_route_data();
+            assert_eq!(
+                deep_clone.is_ok(),
+                case["deepCloneOutcome"] == "OK",
+                "{}",
+                case["id"]
+            );
+            if let Ok(deep_clone) = deep_clone {
+                let expected: TopicRouteData =
+                    serde_json::from_value(case["deepClone"].clone()).unwrap();
+                assert_eq!(deep_clone, expected, "{}", case["id"]);
+                assert_eq!(
+                    collection_aliases(&source, Some(&deep_clone)),
+                    case["deepCloneCollectionAliases"],
+                    "{} deep clone aliases",
+                    case["id"]
+                );
+            } else {
+                assert_eq!(
+                    collection_aliases(&source, None),
+                    case["deepCloneCollectionAliases"],
+                    "{} deep clone aliases",
+                    case["id"]
+                );
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod route_dto_input_cases_tests {
+    use super::{
+        BrokerData, QueueData, TopicQueueMappingInfo, TopicRouteData, parse_java_route_json,
+    };
+    use rocketmq_classic_common::message::MessageQueue;
+
+    fn null_omission_equivalent(actual: &serde_json::Value, expected: &serde_json::Value) -> bool {
+        match (actual, expected) {
+            (serde_json::Value::Object(actual), serde_json::Value::Object(expected)) => {
+                actual.iter().all(|(key, value)| match expected.get(key) {
+                    Some(expected) => null_omission_equivalent(value, expected),
+                    None => value.is_null(),
+                }) && expected.iter().all(|(key, value)| match actual.get(key) {
+                    Some(actual) => null_omission_equivalent(actual, value),
+                    None => value.is_null(),
+                })
+            }
+            (serde_json::Value::Array(actual), serde_json::Value::Array(expected)) => {
+                actual.len() == expected.len()
+                    && actual
+                        .iter()
+                        .zip(expected)
+                        .all(|(actual, expected)| null_omission_equivalent(actual, expected))
+            }
+            _ => actual == expected,
+        }
+    }
+
+    #[test]
+    fn route_dto_inputs_match_invoked_java_fastjson() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../fixtures/runtime/route.json")).unwrap();
+        let cases = fixture["routeDtoInputCases"].as_array().unwrap();
+        assert_eq!(
+            cases.len(),
+            527,
+            "Java oracle includes root shapes, exact coercions, duplicate fields, collection shapes, per-field token kinds, and raw C0 string probes"
+        );
+        for dto in [
+            "queueData",
+            "messageQueue",
+            "brokerData",
+            "mapping",
+            "topicRouteData",
+        ] {
+            for shape in [
+                "empty-object",
+                "null",
+                "empty-array",
+                "singleton-array",
+                "number",
+                "boolean",
+                "string",
+            ] {
+                let id = format!("root-{dto}-{shape}");
+                assert!(
+                    cases
+                        .iter()
+                        .any(|case| case["id"].as_str() == Some(id.as_str())),
+                    "missing {id}"
+                );
+            }
+        }
+        for required in [
+            "queue-duplicate-broker-name-last-wins",
+            "queue-duplicate-read-queue-nums-last-wins",
+            "queue-duplicate-write-queue-nums-last-wins",
+            "queue-duplicate-perm-last-wins",
+            "queue-duplicate-topic-sys-flag-last-wins",
+            "broker-duplicate-cluster-last-wins",
+            "broker-duplicate-name-last-wins",
+            "broker-duplicate-addresses-last-wins",
+            "broker-duplicate-zone-last-wins",
+            "broker-duplicate-acting-master-last-wins",
+            "mapping-duplicate-topic-last-wins",
+            "mapping-duplicate-total-queues-last-wins",
+            "mapping-duplicate-bname-last-wins",
+            "mapping-duplicate-epoch-last-wins",
+            "mapping-duplicate-dirty-last-wins",
+            "mapping-duplicate-scope-last-wins",
+            "mapping-duplicate-curr-id-map-last-wins",
+            "topic-route-duplicate-order-topic-last-wins",
+            "topic-route-duplicate-queue-datas-last-wins",
+            "topic-route-duplicate-broker-datas-last-wins",
+            "topic-route-duplicate-filter-server-table-last-wins",
+            "topic-route-duplicate-mapping-table-last-wins",
+            "route-queue-datas-single-object",
+            "route-broker-datas-single-object",
+            "route-queue-datas-null-element",
+            "route-broker-datas-null-element",
+            "queue-uppercase-property",
+            "queue-titlecase-property",
+            "queue-snakecase-property",
+            "queue-case-collision",
+            "broker-uppercase-property",
+            "mapping-uppercase-property",
+            "topic-route-uppercase-property",
+            "broker-boolean-high-precision-decimal-one",
+            "broker-address-high-precision-number-strings",
+            "broker-address-unquoted-integer-keys",
+            "broker-address-unquoted-leading-zero-key",
+            "broker-address-unquoted-plus-key",
+            "broker-address-unquoted-fraction-key",
+            "broker-address-unquoted-negative-fraction-key",
+            "broker-address-unquoted-exponent-key",
+            "filter-server-high-precision-number-strings",
+            "queue-unquoted-fraction-property-key",
+            "queue-unquoted-integer-property-key",
+            "queue-unquoted-plus-property-key",
+            "queue-unknown-nested-unquoted-numeric-key",
+            "broker-address-map-value-null",
+            "broker-address-map-value-string",
+            "broker-address-map-value-integer",
+            "broker-address-map-value-fraction",
+            "broker-address-map-value-boolean",
+            "broker-address-map-value-array",
+            "broker-address-map-value-object",
+            "broker-address-object-value-unquoted-numeric-key",
+            "filter-server-list-member-null",
+            "filter-server-list-member-string",
+            "filter-server-list-member-integer",
+            "filter-server-list-member-fraction",
+            "filter-server-list-member-boolean",
+            "filter-server-list-member-array",
+            "filter-server-list-member-object",
+            "mapping-curr-id-map-value-null",
+            "mapping-curr-id-map-value-string",
+            "mapping-curr-id-map-value-integer",
+            "mapping-curr-id-map-value-fraction",
+            "mapping-curr-id-map-value-boolean",
+            "mapping-curr-id-map-value-array",
+            "mapping-curr-id-map-value-object",
+            "route-queue-data-element-null",
+            "route-queue-data-element-string",
+            "route-queue-data-element-integer",
+            "route-queue-data-element-fraction",
+            "route-queue-data-element-boolean",
+            "route-queue-data-element-array",
+            "route-queue-data-element-object",
+            "route-broker-data-element-null",
+            "route-broker-data-element-string",
+            "route-broker-data-element-integer",
+            "route-broker-data-element-fraction",
+            "route-broker-data-element-boolean",
+            "route-broker-data-element-array",
+            "route-broker-data-element-object",
+            "route-filter-server-map-value-null",
+            "route-filter-server-map-value-string",
+            "route-filter-server-map-value-integer",
+            "route-filter-server-map-value-fraction",
+            "route-filter-server-map-value-boolean",
+            "route-filter-server-map-value-array",
+            "route-filter-server-map-value-object",
+            "route-filter-server-map-value-empty-string",
+            "route-filter-server-unquoted-fraction-key",
+            "route-filter-server-unquoted-plus-key",
+            "route-filter-server-unquoted-exponent-key",
+            "route-mapping-table-unquoted-leading-zero-key",
+            "route-mapping-table-unquoted-plus-key",
+            "route-mapping-table-unquoted-exponent-key",
+            "route-mapping-table-map-value-null",
+            "route-mapping-table-map-value-string",
+            "route-mapping-table-map-value-integer",
+            "route-mapping-table-map-value-fraction",
+            "route-mapping-table-map-value-boolean",
+            "route-mapping-table-map-value-array",
+            "route-mapping-table-map-value-object",
+            "queue-unicode-decimal-string",
+            "mapping-unicode-decimal-strings",
+            "message-queue-unicode-decimal-id",
+            "message-queue-id-plus-string",
+            "message-queue-id-leading-zero-string",
+            "message-queue-id-fraction-string",
+            "message-queue-id-exponent-string",
+            "message-queue-id-whitespace-string",
+            "message-queue-id-string-overflow",
+            "message-queue-id-string-underflow",
+            "broker-address-key-plus-leading-zero",
+            "broker-address-key-fraction-string",
+            "broker-address-key-exponent-string",
+            "broker-address-key-whitespace-string",
+            "broker-address-key-long-maximum",
+            "broker-address-key-long-overflow",
+            "broker-address-key-normalization-collision-forward",
+            "broker-address-key-normalization-collision-reverse",
+            "broker-address-key-normalization-collision-repeat-first-key-last-wins",
+            "broker-address-key-normalization-collision-repeat-alias-last-wins",
+            "broker-address-unquoted-null-key",
+            "broker-address-quoted-null-key",
+            "mapping-id-key-plus-leading-zero",
+            "mapping-id-key-fraction-string",
+            "mapping-id-key-exponent-string",
+            "mapping-id-key-whitespace-string",
+            "mapping-id-key-int-maximum",
+            "mapping-id-key-int-overflow",
+            "mapping-id-key-normalization-collision-forward",
+            "mapping-id-key-normalization-collision-reverse",
+            "mapping-id-key-normalization-collision-repeat-first-key-last-wins",
+            "mapping-id-key-normalization-collision-repeat-alias-last-wins",
+            "mapping-id-unquoted-null-key",
+            "mapping-id-quoted-null-key",
+            "mapping-long-plus-maximum-string",
+            "mapping-long-leading-zero-string",
+            "mapping-long-fraction-string",
+            "mapping-long-maximum-decimal-string",
+            "mapping-long-minimum-decimal-string",
+            "mapping-long-overflow-decimal-string",
+            "mapping-long-underflow-decimal-string",
+            "mapping-long-maximum-decimal-number",
+            "mapping-long-overflow-decimal-number",
+            "mapping-long-underflow-decimal-number",
+            "mapping-curr-id-map-high-precision-decimals",
+            "mapping-curr-id-map-unquoted-integer-keys",
+            "mapping-curr-id-map-unquoted-leading-zero-key",
+            "mapping-curr-id-map-unquoted-plus-key",
+            "mapping-curr-id-map-unquoted-fraction-key",
+            "mapping-curr-id-map-unquoted-negative-fraction-key",
+            "mapping-curr-id-map-unquoted-exponent-key",
+            "broker-unicode-decimal-address-key",
+            "mapping-unicode-decimal-id-key",
+            "queue-fastjson-leading-plus-number",
+            "queue-fastjson-leading-zero-number",
+            "queue-fastjson-leading-plus-fraction",
+            "queue-fastjson-leading-zero-fraction",
+            "mapping-fastjson-leading-plus-exponent",
+            "mapping-fastjson-leading-zero-exponent",
+            "queue-fastjson-vertical-tab-prefix",
+            "queue-fastjson-form-feed-prefix",
+            "queue-fastjson-form-feed-before-number",
+            "queue-fastjson-form-feed-around-punctuation",
+            "queue-fastjson-vertical-tab-before-number",
+            "queue-fastjson-nbsp-prefix",
+            "queue-fastjson-bom-prefix",
+            "queue-fastjson-bom-before-number",
+            "shape-mapping-currIdMap-array",
+            "shape-topicRouteData-queueDatas-object",
+            "shape-brokerData-enableActingMaster-fraction",
+            "route-raw-c0-0000-order-topic-value",
+            "route-raw-c0-000c-field-name",
+            "route-raw-c0-001f-filter-key",
+            "route-raw-c0-001f-filter-value",
+        ] {
+            assert!(
+                cases.iter().any(|case| case["id"] == required),
+                "missing {required}"
+            );
+        }
+        for code_unit in 0..=0x1f {
+            let hex = format!("{code_unit:04x}");
+            for position in [
+                "order-topic-value",
+                "field-name",
+                "filter-key",
+                "filter-value",
+            ] {
+                let id = format!("route-raw-c0-{hex}-{position}");
+                assert!(
+                    cases.iter().any(|case| case["id"] == id),
+                    "missing raw-control probe {id}"
+                );
+            }
+        }
+        for id in [
+            "broker-address-unquoted-null-key",
+            "broker-address-quoted-null-key",
+        ] {
+            let case = cases.iter().find(|case| case["id"] == id).unwrap();
+            assert_eq!(case["brokerAddrsNullKeyPresent"], true, "{id}");
+            assert_eq!(case["brokerAddrsStringNullKeyPresent"], false, "{id}");
+            let broker: BrokerData = parse_java_route_json(case["rawInput"].as_str().unwrap())
+                .expect("pinned Java accepts nullable Long map keys");
+            let addresses = broker.broker_addrs.unwrap();
+            addresses.with(|addresses| {
+                assert!(addresses.contains_key(&None), "{id}");
+                assert_eq!(addresses.len(), 1, "{id}");
+            });
+        }
+        for case in cases {
+            let raw_input = case["rawInput"].as_str().unwrap();
+            let decoded =
+                match case["type"].as_str().unwrap() {
+                    "queueData" => {
+                        parse_java_route_json::<QueueData>(raw_input).and_then(serde_json::to_value)
+                    }
+                    "messageQueue" => parse_java_route_json::<MessageQueue>(raw_input)
+                        .and_then(serde_json::to_value),
+                    "brokerData" => parse_java_route_json::<BrokerData>(raw_input)
+                        .and_then(serde_json::to_value),
+                    "mapping" => parse_java_route_json::<TopicQueueMappingInfo>(raw_input)
+                        .and_then(serde_json::to_value),
+                    "topicRouteData" => parse_java_route_json::<TopicRouteData>(raw_input)
+                        .and_then(serde_json::to_value),
+                    other => panic!("unknown DTO case type {other}"),
+                };
+            let java_accepts = case["outcome"] == "ACCEPTED";
+            assert_eq!(decoded.is_ok(), java_accepts, "{}: {decoded:?}", case["id"]);
+            if let Ok(decoded) = decoded {
+                for (field, expected) in case["fields"].as_object().unwrap() {
+                    let actual = decoded.get(field);
+                    if expected.is_null() {
+                        assert!(
+                            actual.is_none_or(serde_json::Value::is_null),
+                            "{}.{field}: expected null/omitted, got {actual:?}",
+                            case["id"]
+                        );
+                    } else {
+                        assert!(
+                            actual.is_some_and(|actual| null_omission_equivalent(actual, expected)),
+                            "{}.{field}: actual {actual:?}, expected {expected:?}",
+                            case["id"]
+                        );
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]

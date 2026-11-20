@@ -18,6 +18,28 @@ fn route_fixture() -> Value {
     serde_json::from_str(include_str!("../../../fixtures/runtime/route.json")).unwrap()
 }
 
+fn cluster_info_for_value_method(broker_cluster: &str, address: &str) -> ClusterInfo {
+    let broker = SharedBrokerDataHandle::new(BrokerData {
+        cluster: Some(broker_cluster.to_owned()),
+        broker_name: Some("broker-a".to_owned()),
+        broker_addrs: Some(BTreeMap::from([(Some(0), Some(address.to_owned()))]).into()),
+        enable_acting_master: broker_cluster == "cluster-a",
+        ..Default::default()
+    });
+    let mut info = ClusterInfo::default();
+    info.set_broker_addr_table(Some(
+        HashMap::from([(Some("broker-a".to_owned()), Some(broker))]).into(),
+    ));
+    info.set_cluster_addr_table(Some(
+        HashMap::from([(
+            Some("cluster-a".to_owned()),
+            Some(HashSet::from([Some("broker-a".to_owned())]).into()),
+        )])
+        .into(),
+    ));
+    info
+}
+
 #[test]
 fn route_dto_public_fields_match_invoked_java_getter_setter_values() {
     let fixture = route_fixture();
@@ -858,26 +880,4 @@ fn cluster_info_equality_and_hash_match_java_implementations() {
         java["changedBrokerAddressHashCode"].as_i64().unwrap() as i32
     );
     assert_eq!(java["changedBrokerAddressEquals"], false);
-}
-
-fn cluster_info_for_value_method(broker_cluster: &str, address: &str) -> ClusterInfo {
-    let broker = SharedBrokerDataHandle::new(BrokerData {
-        cluster: Some(broker_cluster.to_owned()),
-        broker_name: Some("broker-a".to_owned()),
-        broker_addrs: Some(BTreeMap::from([(Some(0), Some(address.to_owned()))]).into()),
-        enable_acting_master: broker_cluster == "cluster-a",
-        ..Default::default()
-    });
-    let mut info = ClusterInfo::default();
-    info.set_broker_addr_table(Some(
-        HashMap::from([(Some("broker-a".to_owned()), Some(broker))]).into(),
-    ));
-    info.set_cluster_addr_table(Some(
-        HashMap::from([(
-            Some("cluster-a".to_owned()),
-            Some(HashSet::from([Some("broker-a".to_owned())]).into()),
-        )])
-        .into(),
-    ));
-    info
 }

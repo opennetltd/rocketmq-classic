@@ -44,6 +44,21 @@ impl RpcHook for NullableLanguageHook {
     }
 }
 
+impl RpcHook for Signer {
+    fn before_request_mut_result(
+        &self,
+        _: &str,
+        command: &mut RemotingCommand,
+    ) -> Result<(), RpcHookError> {
+        let fields = command.ext_fields.as_mut().unwrap();
+        assert_eq!(fields["ns"], "v2");
+        assert_eq!(fields["nsd"], "true");
+        assert_eq!(fields["ReqT"], "0");
+        fields.insert("signature".into(), "ns=v2;ReqT=0".into());
+        Ok(())
+    }
+}
+
 #[tokio::test]
 async fn nullable_heartbeat_language_reaches_hooks_and_json_wire() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -160,21 +175,6 @@ async fn runtime_config_mutations_reach_heartbeat_language_and_namespace_hook() 
         .unwrap();
     peer.await.unwrap();
     runtime.remoting().shutdown().await;
-}
-
-impl RpcHook for Signer {
-    fn before_request_mut_result(
-        &self,
-        _: &str,
-        command: &mut RemotingCommand,
-    ) -> Result<(), RpcHookError> {
-        let fields = command.ext_fields.as_mut().unwrap();
-        assert_eq!(fields["ns"], "v2");
-        assert_eq!(fields["nsd"], "true");
-        assert_eq!(fields["ReqT"], "0");
-        fields.insert("signature".into(), "ns=v2;ReqT=0".into());
-        Ok(())
-    }
 }
 
 #[tokio::test]

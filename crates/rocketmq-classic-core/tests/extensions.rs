@@ -80,14 +80,14 @@ fn deadline() -> Instant {
 
 fn valid_change_invisible_header() -> ChangeInvisibleTimeRequestHeader {
     {
-        let mut __phase18_header_0 = ChangeInvisibleTimeRequestHeader::default();
-        __phase18_header_0.set_consumer_group(Some("consumer".into()));
-        __phase18_header_0.set_topic(Some("oracle-topic".into()));
-        __phase18_header_0.set_queue_id(Some(2));
-        __phase18_header_0.set_extra_info(Some("checkpoint".into()));
-        __phase18_header_0.set_offset(Some(17));
-        __phase18_header_0.set_invisible_time(Some(456));
-        __phase18_header_0
+        let mut header = ChangeInvisibleTimeRequestHeader::default();
+        header.set_consumer_group(Some("consumer".into()));
+        header.set_topic(Some("oracle-topic".into()));
+        header.set_queue_id(Some(2));
+        header.set_extra_info(Some("checkpoint".into()));
+        header.set_offset(Some(17));
+        header.set_invisible_time(Some(456));
+        header
     }
 }
 
@@ -137,11 +137,11 @@ async fn heartbeat_versions_and_unregister_header() {
         .unregister_client(
             &addr,
             &{
-                let mut __phase18_header_1 = UnregisterClientRequestHeader::default();
-                __phase18_header_1.set_client_id("c".into());
-                __phase18_header_1.set_producer_group(None);
-                __phase18_header_1.set_consumer_group(Some("g".into()));
-                __phase18_header_1
+                let mut header = UnregisterClientRequestHeader::default();
+                header.set_client_id("c".into());
+                header.set_producer_group(None);
+                header.set_consumer_group(Some("g".into()));
+                header
             },
             deadline(),
         )

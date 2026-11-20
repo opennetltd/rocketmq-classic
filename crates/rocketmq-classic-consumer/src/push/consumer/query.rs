@@ -121,10 +121,10 @@ impl PushConsumer {
         });
         if let Some((address, offset)) = decoded {
             let header = {
-                let mut __phase18_header_0 = ViewMessageRequestHeader::default();
-                __phase18_header_0.set_topic(Some(namespaced_topic));
-                __phase18_header_0.set_offset(Some(offset));
-                __phase18_header_0
+                let mut header = ViewMessageRequestHeader::default();
+                header.set_topic(Some(namespaced_topic));
+                header.set_offset(Some(offset));
+                header
             };
             let timeout_millis =
                 i64::from(self.config.client_config().mq_client_api_timeout()).max(0) as u64;

@@ -1345,15 +1345,15 @@ impl MQClientApi {
             &query.topic
         };
         let header = {
-            let mut __phase18_header_0 = QueryMessageRequestHeader::default();
-            __phase18_header_0.set_topic(Some(request_topic.to_owned()));
-            __phase18_header_0.set_key(Some(query.key.clone()));
-            __phase18_header_0.set_max_num(Some(query.max_num));
-            __phase18_header_0.set_begin_timestamp(Some(query.begin_timestamp));
-            __phase18_header_0.set_end_timestamp(Some(query.end_timestamp));
-            __phase18_header_0.set_index_type(query.index_type.clone());
-            __phase18_header_0.set_last_key(query.last_key.clone());
-            __phase18_header_0
+            let mut header = QueryMessageRequestHeader::default();
+            header.set_topic(Some(request_topic.to_owned()));
+            header.set_key(Some(query.key.clone()));
+            header.set_max_num(Some(query.max_num));
+            header.set_begin_timestamp(Some(query.begin_timestamp));
+            header.set_end_timestamp(Some(query.end_timestamp));
+            header.set_index_type(query.index_type.clone());
+            header.set_last_key(query.last_key.clone());
+            header
         };
         let mut tasks = JoinSet::new();
         for address in addresses {

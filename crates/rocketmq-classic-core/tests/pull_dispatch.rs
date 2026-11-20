@@ -61,6 +61,50 @@ async fn settle() {
         tokio::task::yield_now().await;
     }
 }
+
+struct Active(Arc<std::sync::atomic::AtomicUsize>);
+impl Active {
+    fn new(count: Arc<std::sync::atomic::AtomicUsize>) -> Self {
+        count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Self(count)
+    }
+}
+impl Drop for Active {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+struct BlockingConsumer {
+    active: Arc<std::sync::atomic::AtomicUsize>,
+    calls: std::sync::atomic::AtomicUsize,
+    runtime: std::sync::Weak<rocketmq_classic_core::runtime::ClientRuntime>,
+}
+impl ConsumerRuntime for BlockingConsumer {
+    fn heartbeat_data(&self) -> ConsumerData {
+        ConsumerData::default()
+    }
+    fn pull_message(
+        &self,
+        request: Arc<dyn MessageRequest>,
+    ) -> Option<Pin<Box<dyn Future<Output = ()> + Send + '_>>> {
+        Some(Box::pin(async move {
+            let runtime = self.runtime.upgrade().unwrap();
+            assert!(
+                runtime
+                    .select_consumer_nullable(request.consumer_group())
+                    .unwrap()
+                    .is_some()
+            );
+            runtime.route_snapshot().unwrap();
+            let id = request.as_any().downcast_ref::<Request>().unwrap().id;
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            assert_ne!(id, 0, "scripted consumer failure");
+            let _active = Active::new(self.active.clone());
+            std::future::pending::<()>().await;
+        }))
+    }
+}
+
 #[tokio::test(start_paused = true)]
 async fn fifo_mode_dispatch_delay_and_group_selection_use_current_registration() {
     let mut config = ClientConfig::new("pull-dispatch");
@@ -212,49 +256,6 @@ async fn scheduled_tasks_serialize_but_fifo_dispatch_is_independent_and_panic_is
         .await
         .unwrap();
     runtime.shutdown().await.unwrap();
-}
-
-struct Active(Arc<std::sync::atomic::AtomicUsize>);
-impl Active {
-    fn new(count: Arc<std::sync::atomic::AtomicUsize>) -> Self {
-        count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        Self(count)
-    }
-}
-impl Drop for Active {
-    fn drop(&mut self) {
-        self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
-    }
-}
-struct BlockingConsumer {
-    active: Arc<std::sync::atomic::AtomicUsize>,
-    calls: std::sync::atomic::AtomicUsize,
-    runtime: std::sync::Weak<rocketmq_classic_core::runtime::ClientRuntime>,
-}
-impl ConsumerRuntime for BlockingConsumer {
-    fn heartbeat_data(&self) -> ConsumerData {
-        ConsumerData::default()
-    }
-    fn pull_message(
-        &self,
-        request: Arc<dyn MessageRequest>,
-    ) -> Option<Pin<Box<dyn Future<Output = ()> + Send + '_>>> {
-        Some(Box::pin(async move {
-            let runtime = self.runtime.upgrade().unwrap();
-            assert!(
-                runtime
-                    .select_consumer_nullable(request.consumer_group())
-                    .unwrap()
-                    .is_some()
-            );
-            runtime.route_snapshot().unwrap();
-            let id = request.as_any().downcast_ref::<Request>().unwrap().id;
-            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            assert_ne!(id, 0, "scripted consumer failure");
-            let _active = Active::new(self.active.clone());
-            std::future::pending::<()>().await;
-        }))
-    }
 }
 
 #[tokio::test(start_paused = true)]

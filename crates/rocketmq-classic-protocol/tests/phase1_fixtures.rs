@@ -1,5 +1,12 @@
 use rocketmq_classic_protocol::codes::{LanguageCode, SerializeType};
 
+fn serialization_name(value: SerializeType) -> &'static str {
+    match value {
+        SerializeType::Json => "JSON",
+        SerializeType::RocketMq => "ROCKETMQ",
+    }
+}
+
 #[test]
 fn phase_zero_command_fixture_metadata_round_trips_codes_and_wire_tags() {
     let fixtures = [
@@ -34,12 +41,5 @@ fn phase_zero_command_fixture_metadata_round_trips_codes_and_wire_tags() {
         );
         assert_eq!(metadata["normalized_fields"]["opaque"], 7, "{stem}");
         assert_eq!(LanguageCode::Rust.code(), 12);
-    }
-}
-
-fn serialization_name(value: SerializeType) -> &'static str {
-    match value {
-        SerializeType::Json => "JSON",
-        SerializeType::RocketMq => "ROCKETMQ",
     }
 }

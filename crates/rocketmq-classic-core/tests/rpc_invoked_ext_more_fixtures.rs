@@ -644,11 +644,11 @@ async fn invoked_lifecycle_extension_cases_match_rust() {
             }
         } else if name.starts_with("unregister-") {
             let header = {
-                let mut __phase18_header_0 = UnregisterClientRequestHeader::default();
-                __phase18_header_0.set_client_id("client".into());
-                __phase18_header_0.set_producer_group(Some("producer".into()));
-                __phase18_header_0.set_consumer_group(Some("consumer".into()));
-                __phase18_header_0
+                let mut header = UnregisterClientRequestHeader::default();
+                header.set_client_id("client".into());
+                header.set_producer_group(Some("producer".into()));
+                header.set_consumer_group(Some("consumer".into()));
+                header
             };
             match api.unregister_client(&addr, &header, deadline).await {
                 Ok(()) => "ok".into(),

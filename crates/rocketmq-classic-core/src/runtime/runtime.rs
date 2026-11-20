@@ -34,94 +34,6 @@ fn epoch_millis(time: std::time::SystemTime) -> i64 {
     }
 }
 
-#[cfg(test)]
-#[test]
-fn constructor_clock_uses_signed_epoch_milliseconds() {
-    use std::time::{Duration, UNIX_EPOCH};
-    assert_eq!(epoch_millis(UNIX_EPOCH), 0);
-    assert_eq!(epoch_millis(UNIX_EPOCH + Duration::from_millis(1234)), 1234);
-    assert_eq!(
-        epoch_millis(UNIX_EPOCH - Duration::from_millis(1234)),
-        -1234
-    );
-    assert_eq!(epoch_millis(UNIX_EPOCH - Duration::from_nanos(1)), -1);
-}
-
-#[test]
-fn rpc_timeout_reads_the_live_runtime_configuration() {
-    let mut config = ClientConfig::new("live-timeout");
-    config.namesrv_addr = Some(String::new());
-    config.mq_client_api_timeout = 123;
-    let runtime = ClientRuntime::construct(config, &HashMap::new(), None).unwrap();
-    assert_eq!(
-        runtime.rpc_timeout(),
-        tokio::time::Duration::from_millis(123)
-    );
-    runtime.config().write().unwrap().mq_client_api_timeout = -9;
-    assert_eq!(runtime.rpc_timeout(), tokio::time::Duration::ZERO);
-}
-
-#[test]
-fn runtime_extension_is_shared_by_type_and_isolated_between_runtimes() {
-    let first = ClientRuntime::construct(
-        ClientConfig::new("runtime-extension-first"),
-        &HashMap::new(),
-        None,
-    )
-    .unwrap();
-    let second = ClientRuntime::construct(
-        ClientConfig::new("runtime-extension-second"),
-        &HashMap::new(),
-        None,
-    )
-    .unwrap();
-
-    let first_value = first.get_or_insert_extension(Arc::new(String::from("first")));
-    let shared_value = first.get_or_insert_extension(Arc::new(String::from("ignored")));
-    let second_value = second.get_or_insert_extension(Arc::new(String::from("second")));
-
-    assert!(Arc::ptr_eq(&first_value, &shared_value));
-    assert!(!Arc::ptr_eq(&first_value, &second_value));
-    assert_eq!(first_value.as_str(), "first");
-    assert_eq!(second_value.as_str(), "second");
-}
-
-#[cfg(test)]
-#[test]
-fn nameserver_refresh_reads_the_current_nullable_config_value() {
-    let fixtures = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/rpc-invoked-ext-more");
-    for name in [
-        "nameserver-refresh-present",
-        "nameserver-refresh-null",
-        "nameserver-refresh-empty",
-    ] {
-        let fixture: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(fixtures.join(format!("{name}.json"))).unwrap())
-                .unwrap();
-        let mut config = ClientConfig::new("nameserver-refresh");
-        config.namesrv_addr = Some("initial:9876".into());
-        let runtime = ClientRuntime::construct(config, &HashMap::new(), None).unwrap();
-        let configured = fixture["inputNamesrvAddr"].as_str().map(str::to_owned);
-        runtime.config().write().unwrap().namesrv_addr = configured;
-        assert_eq!(
-            runtime.update_name_server_address_list_from_config(),
-            fixture["returnValue"].as_bool().unwrap(),
-            "{name}"
-        );
-        let mut actual = runtime.remoting.get_name_server_address_list().unwrap();
-        let mut expected = fixture["resultingAddresses"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|address| address.as_str().unwrap().to_owned())
-            .collect::<Vec<_>>();
-        actual.sort();
-        expected.sort();
-        assert_eq!(actual, expected, "{name}");
-    }
-}
-
 /// A manager-owned transport and typed API. Construction does not start tasks.
 pub struct ClientRuntime {
     boot_timestamp: i64,
@@ -1528,14 +1440,12 @@ impl ClientRuntime {
         deadline: tokio::time::Instant,
     ) -> Result<(), RuntimeError> {
         let header = {
-            let mut __phase18_header_0 =
+            let mut header =
                 rocketmq_classic_protocol::header::UnregisterClientRequestHeader::default();
-            __phase18_header_0.set_client_id(self.client_id.clone());
-            __phase18_header_0
-                .set_producer_group((kind == GroupKind::Producer).then(|| group.to_owned()));
-            __phase18_header_0
-                .set_consumer_group((kind == GroupKind::Consumer).then(|| group.to_owned()));
-            __phase18_header_0
+            header.set_client_id(self.client_id.clone());
+            header.set_producer_group((kind == GroupKind::Producer).then(|| group.to_owned()));
+            header.set_consumer_group((kind == GroupKind::Consumer).then(|| group.to_owned()));
+            header
         };
         let snapshot = self.routes.snapshot()?;
         for brokers in snapshot.broker_addresses.values() {
@@ -1887,6 +1797,94 @@ impl ClientRuntime {
             removed |= link.remove(self)?;
         }
         Ok(removed)
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn constructor_clock_uses_signed_epoch_milliseconds() {
+    use std::time::{Duration, UNIX_EPOCH};
+    assert_eq!(epoch_millis(UNIX_EPOCH), 0);
+    assert_eq!(epoch_millis(UNIX_EPOCH + Duration::from_millis(1234)), 1234);
+    assert_eq!(
+        epoch_millis(UNIX_EPOCH - Duration::from_millis(1234)),
+        -1234
+    );
+    assert_eq!(epoch_millis(UNIX_EPOCH - Duration::from_nanos(1)), -1);
+}
+
+#[test]
+fn rpc_timeout_reads_the_live_runtime_configuration() {
+    let mut config = ClientConfig::new("live-timeout");
+    config.namesrv_addr = Some(String::new());
+    config.mq_client_api_timeout = 123;
+    let runtime = ClientRuntime::construct(config, &HashMap::new(), None).unwrap();
+    assert_eq!(
+        runtime.rpc_timeout(),
+        tokio::time::Duration::from_millis(123)
+    );
+    runtime.config().write().unwrap().mq_client_api_timeout = -9;
+    assert_eq!(runtime.rpc_timeout(), tokio::time::Duration::ZERO);
+}
+
+#[test]
+fn runtime_extension_is_shared_by_type_and_isolated_between_runtimes() {
+    let first = ClientRuntime::construct(
+        ClientConfig::new("runtime-extension-first"),
+        &HashMap::new(),
+        None,
+    )
+    .unwrap();
+    let second = ClientRuntime::construct(
+        ClientConfig::new("runtime-extension-second"),
+        &HashMap::new(),
+        None,
+    )
+    .unwrap();
+
+    let first_value = first.get_or_insert_extension(Arc::new(String::from("first")));
+    let shared_value = first.get_or_insert_extension(Arc::new(String::from("ignored")));
+    let second_value = second.get_or_insert_extension(Arc::new(String::from("second")));
+
+    assert!(Arc::ptr_eq(&first_value, &shared_value));
+    assert!(!Arc::ptr_eq(&first_value, &second_value));
+    assert_eq!(first_value.as_str(), "first");
+    assert_eq!(second_value.as_str(), "second");
+}
+
+#[cfg(test)]
+#[test]
+fn nameserver_refresh_reads_the_current_nullable_config_value() {
+    let fixtures = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/rpc-invoked-ext-more");
+    for name in [
+        "nameserver-refresh-present",
+        "nameserver-refresh-null",
+        "nameserver-refresh-empty",
+    ] {
+        let fixture: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(fixtures.join(format!("{name}.json"))).unwrap())
+                .unwrap();
+        let mut config = ClientConfig::new("nameserver-refresh");
+        config.namesrv_addr = Some("initial:9876".into());
+        let runtime = ClientRuntime::construct(config, &HashMap::new(), None).unwrap();
+        let configured = fixture["inputNamesrvAddr"].as_str().map(str::to_owned);
+        runtime.config().write().unwrap().namesrv_addr = configured;
+        assert_eq!(
+            runtime.update_name_server_address_list_from_config(),
+            fixture["returnValue"].as_bool().unwrap(),
+            "{name}"
+        );
+        let mut actual = runtime.remoting.get_name_server_address_list().unwrap();
+        let mut expected = fixture["resultingAddresses"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|address| address.as_str().unwrap().to_owned())
+            .collect::<Vec<_>>();
+        actual.sort();
+        expected.sort();
+        assert_eq!(actual, expected, "{name}");
     }
 }
 

@@ -1,0 +1,44 @@
+Pinned Java re-review and corrections — 2026-11-14 UTC
+User request: review again and ensure the changed behavior agrees with Java. Starting revision feb535cf; working tree was clean. Continued the Pull-dispatch scope of Plan 02/02a/02b; did not edit plans or expand any full-phase compatibility claim.
+
+Reference: read matching Maven 5.5.1 client/remoting source jars from the local repository, especially DefaultMQPushConsumerImpl.pullMessage, PullAPIWrapper.pullKernelImpl, MQClientAPIImpl.pullMessage, and NettyRemotingAbstract.invoke0/scanResponseTable. The pinned client contract has ASYNC hand-off, 15000 ms suspend, 30000 ms RPC timeout, semaphore-based admission, and no four-task cap. Internal ownership/join implementation remains the existing approved Rust design.
+
+Confirmed mismatches and changes:
+1. Slave pulls cleared both the commit bit and the commitOffset value. Java clears only the bit. Corrected header preservation, and later retained nonpositive values too: Java memory-offset absence is -1 with commit disabled, whereas Rust previously emitted zero. Broadcasting still sends zero. Regression covers master/slave 42 and disabled commit values NotFound/-2/0.
+2. Max-span flow control applied to orderly pulls. Java checks it only when the live consumeOrderly flag is false. Corrected the condition and moved count/size flow control ahead of orderly lock/offset work, as Java does. Regression verifies orderly skipping max-span, a live flag change restoring it, and count flow control remaining active.
+3. A cold route lookup spent the 30-second Pull RPC deadline. Java refreshes routing before invoking pullMessage with the full timeout. Lookup now uses the runtime's configured route timeout; a fresh absolute 30-second Pull deadline is established at the RPC call. A paused-clock peer delaying route lookup 2 seconds and RPC response 30.5 seconds proves the async cleanup-grace mode still receives its full budget.
+4. The first real Broker run failed before either probe: mqadmin topicStatus appends 'Topic Put TPS: 0.0', which the empty-topic parser treated as an offset. Queue parsing now requires numeric queue/min/max columns; the self-test includes the actual footer.
+
+Red/green evidence: all three initial regressions failed against the starting production implementation (slave header 0 vs 42; route-refresh response wait expired; orderly span hit 50 ms flow control). The added disabled-commit regression independently failed with 0 vs -1. All pass after correction.
+
+Pinned invocation oracle: new PushPullDispatchFixtures invokes actual DefaultMQPushConsumerImpl and PullAPIWrapper methods with offline recording subclasses, holds every callback, and verifies 80 distinct queue requests use ASYNC before any response. It verifies route refresh followed by a full 30000 ms timeout, 15000 ms suspend, slave commit-bit/value rules, missing memory offset, concurrent span delay and orderly cache rules. Maven verify drift-checks fixtures/consumer/push-pull-dispatch.json, consumed by the Rust regressions. No Broker, sockets or running Java services are used by this oracle; constructor-free recording subclasses follow existing fixture conventions.
+
+Commits:
+- dc4b4665: production Pull corrections, first three regressions, invoked Java oracle and fixture.
+- 05a89adb: mqadmin footer parser and load-bearing runner regression.
+- 7e46c229: oracle documentation and ADR details.
+- 6d6db7ed: disabled commit-offset values, pinned oracle extension and boundary regressions.
+
+Local verification after final production changes:
+- cargo test -p rocketmq-classic-consumer --lib --locked: 314 passed.
+- cargo test -p rocketmq-classic-consumer --test push_pull_fanout --locked: 8 passed.
+- cargo test -p rocketmq-classic-integration --bin live_client --locked: 11 passed.
+- cargo clippy --workspace --all-targets --all-features --locked -- -D warnings: exit 0.
+- cargo fmt --all -- --check and git diff --check: pass.
+- checker --self-test: 23 cases passed; runner --self-test passed; --check-all confirms 38 supported rows.
+- Focused Java oracle compile/generation and drift check: pass.
+- Exact environment gate exec:java@verify-runtime-address-fixtures fails at fixtures/runtime/address.json drift; fixture unchanged. Do not present this as a standard verify pass.
+- First supplemental portable verify failed loading compat.RuntimeHookFixtures while another Maven compilation was updating class outputs. Serial full portable verify was scheduled after the final Java changes; its actual result is appended below. Do not treat the earlier failed attempt as a pass.
+
+Live local Docker validation (all resources isolated and runner-owned):
+- First run, /private/tmp/rocketmq-pull-parity-review-20261114/P10-V05/20261114T004606Z: failed at mqadmin footer parsing; runner recorded exit_status=1 and cleaned its resources.
+- Second run, /private/tmp/rocketmq-pull-parity-review-20261114/P10-V05/20261114T004842Z: PASS at clean source 7e46c229, exit_status=0, 99 seconds including setup and cleanup. Java and Rust each had all 16 target queues active before any response and delivered one message per queue inside the bound. Java send-to-delivery 4–50 ms, Rust 1–4 ms; these are one-run diagnostics, not a performance guarantee. 16 final long-polls per client remained open at shutdown as permitted. This run preceded the separate disabled-offset boundary correction.
+- Final clean-source run for 6d6db7ed is queued after serial portable verification; append the actual outcome, revision and evidence below.
+
+Scope of conclusion: the tested Pull fan-out, header, RPC-budget and flow-control branches align with pinned Java. This is not a new claim of full Java API/Phase 10 or whole-Phase 19 coverage. The 38-scenario aggregate and external owner/release approval were not executed by this review.
+Serial portable verify completed with exit 0 on the final Java sources and fixture. Final output: Java decoded 106 Rust-generated header fixtures and 19 typed body fixtures; Pinned Java Push Pull dispatch fixtures PASS (80 outstanding queues); LivePullFanoutProbe fixtures PASS (151 checks).
+SHA-256: push-pull-dispatch.json = 3d1d74c8e0e31f5672a6c5d3309cf099c6e68f243e8cd084c2f4a05ed094c322; pinned client 5.5.1 source jar = de63ae377bcc9b461b0d65b4cb77673d9daabb8f46caabef903826ea7c627e76.
+Final live result: /private/tmp/rocketmq-pull-parity-final-20261114/P10-V05/20261114T005417Z. Clean source_revision=6d6db7ed9e27685b35b922b5bbc390f6678ea9c1, source_code_dirty=false, exit_status=0, duration_seconds=101 (setup, probes, comparison and cleanup). Checker PASS for both languages, 16 queues, 5000 ms admission/delivery windows. Java latency 3–48 ms; Rust 1–966 ms. These single-run values are diagnostic, not equivalent latency promises. Each client had 16 legitimate final outstanding long-polls at shutdown. No scenario-owned containers remain after cleanup.
+Updated the P10-V05 source summary to PASS_RECORDED and reconciled current status, ADR, method matrix, compatibility narrative and integration README. Earlier dated pending statements remain historical under the newer superseding status entry. Full 38-case aggregate and owner/release approval remain unexecuted; do not extrapolate from this focused case.
+Final plan audit: immutable plans retained; owned-dispatch/guard/cancellation architecture unchanged, new production corrections are the additional user-authorized Java re-review findings. Each correction has pinned source/invoked evidence and red/green regressions. All local checks and the focused live case described above actually ran.
+Additional test-only review fix: the earlier narrow push_pull_ run had one warm-route deadline failure even though the subsequent full 314-test consumer suite passed. The paused Tokio clock could auto-advance past the transport grace deadline while the OS socket response was still becoming readable. Replaced the peer sleeps with explicit virtual-time advances and retained a yielding clock-keeper task (owned by JoinSet) to prevent uncontrolled auto-advances during I/O. This preserves the late-response and cold-route regressions without lengthening deadlines or changing production code. Repeated the 7 focused push_pull_ tests ten times; all ten runs passed. Strict workspace Clippy passed again. Live evidence at 6d6db7ed remains the exact final production code; this later commit changes test scheduling only.

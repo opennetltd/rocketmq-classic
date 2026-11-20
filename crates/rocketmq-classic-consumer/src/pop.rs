@@ -633,14 +633,14 @@ impl PopReceipt {
 
     pub fn ack_header(&self, topic: &str, consumer_group: &str) -> AckMessageRequestHeader {
         {
-            let mut __phase18_header_0 = AckMessageRequestHeader::default();
-            __phase18_header_0.set_consumer_group(consumer_group.to_owned());
-            __phase18_header_0.set_topic(self.real_topic(topic, consumer_group));
-            __phase18_header_0.set_queue_id(self.queue_id);
-            __phase18_header_0.set_extra_info(self.raw.clone());
-            __phase18_header_0.set_offset(self.queue_offset);
-            __phase18_header_0.set_lite_topic(None);
-            __phase18_header_0
+            let mut header = AckMessageRequestHeader::default();
+            header.set_consumer_group(consumer_group.to_owned());
+            header.set_topic(self.real_topic(topic, consumer_group));
+            header.set_queue_id(self.queue_id);
+            header.set_extra_info(self.raw.clone());
+            header.set_offset(self.queue_offset);
+            header.set_lite_topic(None);
+            header
         }
     }
 
@@ -651,16 +651,16 @@ impl PopReceipt {
         invisible_time: i64,
     ) -> ChangeInvisibleTimeRequestHeader {
         {
-            let mut __phase18_header_1 = ChangeInvisibleTimeRequestHeader::default();
-            __phase18_header_1.set_consumer_group(Some(consumer_group.to_owned()));
-            __phase18_header_1.set_topic(Some(self.real_topic(topic, consumer_group)));
-            __phase18_header_1.set_queue_id(Some(self.queue_id));
-            __phase18_header_1.set_extra_info(Some(self.raw.clone()));
-            __phase18_header_1.set_offset(Some(self.queue_offset));
-            __phase18_header_1.set_invisible_time(Some(invisible_time));
-            __phase18_header_1.set_lite_topic(None);
-            __phase18_header_1.set_suspend(false);
-            __phase18_header_1
+            let mut header = ChangeInvisibleTimeRequestHeader::default();
+            header.set_consumer_group(Some(consumer_group.to_owned()));
+            header.set_topic(Some(self.real_topic(topic, consumer_group)));
+            header.set_queue_id(Some(self.queue_id));
+            header.set_extra_info(Some(self.raw.clone()));
+            header.set_offset(Some(self.queue_offset));
+            header.set_invisible_time(Some(invisible_time));
+            header.set_lite_topic(None);
+            header.set_suspend(false);
+            header
         }
     }
 }
@@ -751,15 +751,6 @@ fn java_batch_key_bucket(key: &(String, i32, i64, i64), capacity: usize) -> usiz
     ((hash ^ (hash >> 16)) as usize) & (capacity - 1)
 }
 
-#[cfg(test)]
-fn build_batch_ack_body(
-    receipts: &[PopReceipt],
-    topic: &str,
-    consumer_group: &str,
-) -> Result<BatchAckMessageRequestBody, PopReceiptError> {
-    build_batch_ack_body_nullable(receipts, Some(topic), Some(consumer_group))
-}
-
 /// Maps Java's `MQClientAPIImpl.batchAckMessageAsync` overload that accepts
 /// `topic`, `consumerGroup`, and POP receipt `extraInfoList` values. The list
 /// is grouped into the request body before the asynchronous Broker request.
@@ -798,6 +789,15 @@ fn parse_i32(value: &str, field: &'static str, kind: &'static str) -> Result<i32
     value
         .parse()
         .map_err(|_| PopReceiptError::InvalidNumber { field, kind })
+}
+
+#[cfg(test)]
+fn build_batch_ack_body(
+    receipts: &[PopReceipt],
+    topic: &str,
+    consumer_group: &str,
+) -> Result<BatchAckMessageRequestBody, PopReceiptError> {
+    build_batch_ack_body_nullable(receipts, Some(topic), Some(consumer_group))
 }
 
 #[cfg(test)]
@@ -883,9 +883,9 @@ mod tests {
     #[test]
     fn pop_response_metadata_maps_receipts_by_retry_kind_and_queue() {
         let request = {
-            let mut __phase18_header_2 = PopMessageRequestHeader::default();
-            __phase18_header_2.set_topic(Some("orders".into()));
-            __phase18_header_2
+            let mut header = PopMessageRequestHeader::default();
+            header.set_topic(Some("orders".into()));
+            header
         };
         let mut header = PopMessageResponseHeader::default();
         header.set_pop_time(123);
@@ -927,9 +927,9 @@ mod tests {
     #[test]
     fn pop_response_without_checkpoint_metadata_uses_first_queue_offset() {
         let request = {
-            let mut __phase18_header_3 = PopMessageRequestHeader::default();
-            __phase18_header_3.set_topic(Some("orders".into()));
-            __phase18_header_3
+            let mut header = PopMessageRequestHeader::default();
+            header.set_topic(Some("orders".into()));
+            header
         };
         let mut header = PopMessageResponseHeader::default();
         header.set_pop_time(123);
@@ -1029,9 +1029,9 @@ mod tests {
     #[test]
     fn malformed_mixed_queue_metadata_is_rejected_before_dispatch() {
         let request = {
-            let mut __phase18_header_4 = PopMessageRequestHeader::default();
-            __phase18_header_4.set_topic(Some("orders".into()));
-            __phase18_header_4
+            let mut header = PopMessageRequestHeader::default();
+            header.set_topic(Some("orders".into()));
+            header
         };
         let mut header = PopMessageResponseHeader::default();
         header.set_pop_time(123);

@@ -29,10 +29,12 @@ mod heartbeat;
 pub mod namesrv;
 pub mod route;
 pub mod runtime;
-#[cfg(test)]
-mod test_support;
+
 pub mod trace;
 #[doc(hidden)]
 pub mod unique_id;
 pub use rocketmq_classic_protocol::NamespaceUtil;
 pub use rocketmq_classic_remoting::client::RpcHook;
+
+#[cfg(test)]
+mod test_support;

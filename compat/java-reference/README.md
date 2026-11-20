@@ -48,3 +48,12 @@ The separate `invoked-rpc-oracle` command (also run by Maven `test`) executes pi
 ## Licensing
 
 RocketMQ client artifacts are Apache License 2.0. This harness uses the published dependency and does not copy RocketMQ implementation sources. Preserve Apache NOTICE/license obligations if future work copies source-derived code or fixtures.
+
+### Push Pull dispatch parity oracle
+
+`PushPullDispatchFixtures` calls pinned Java 5.5.1 Push/Pull methods with a recording client:
+80 ASYNC queue requests before callbacks, 15000 ms suspend, 30000 ms RPC timeout after route
+refresh, slave commit-header preservation, and orderly versus concurrent cache flow control.
+Maven `verify` checks `fixtures/consumer/push-pull-dispatch.json` for drift. Focused offline check:
+`mvn -o -f compat/java-reference/pom.xml compile exec:java@verify-push-pull-dispatch-fixtures`.
+Use `-Dexec.args=--write` only when intentionally regenerating this oracle with the pinned client.

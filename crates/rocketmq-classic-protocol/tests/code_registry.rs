@@ -6,54 +6,6 @@ const JAVA_FIXTURE: &str = include_str!("../../../fixtures/protocol/request-resp
 const REQUEST_SOURCE: &str = include_str!("../src/codes/request.rs");
 const RESPONSE_SOURCE: &str = include_str!("../src/codes/response.rs");
 
-#[test]
-fn public_code_registries_match_all_pinned_java_constants() {
-    let fixture: Value = serde_json::from_str(JAVA_FIXTURE).expect("valid Java code fixture");
-    assert_eq!(
-        fixture["artifact"],
-        "org.apache.rocketmq:rocketmq-remoting:5.5.1"
-    );
-    assert_eq!(
-        fixture["sourceCommit"],
-        "efa1be59d6fc747ad220f036c86030f05f0419f9"
-    );
-    assert_eq!(fixture["serverBaselineContacted"], false);
-
-    let request = java_code_map(&fixture, "requestCode");
-    assert_eq!(
-        request.len(),
-        166,
-        "pinned Java RequestCode declaration count"
-    );
-    assert_eq!(parse_rust_constants(REQUEST_SOURCE), request);
-
-    let response = java_code_map(&fixture, "responseCode");
-    let remoting_system = java_code_map(&fixture, "remotingSysResponseCode");
-    assert_eq!(
-        response.len(),
-        68,
-        "pinned Java ResponseCode public field count, including inherited fields"
-    );
-    assert_eq!(
-        remoting_system.len(),
-        5,
-        "pinned Java RemotingSysResponseCode declaration count"
-    );
-
-    for (java_name, value) in &remoting_system {
-        assert_eq!(
-            response.get(java_name),
-            Some(value),
-            "ResponseCode inherits RemotingSysResponseCode.{java_name}"
-        );
-    }
-    assert_eq!(
-        parse_rust_constants(RESPONSE_SOURCE),
-        response,
-        "Rust response fields match ResponseCode's public fields, including inherited fields"
-    );
-}
-
 fn java_code_map(fixture: &Value, key: &str) -> BTreeMap<String, i64> {
     fixture[key]
         .as_object()
@@ -117,4 +69,52 @@ fn parse_rust_constants(source: &str) -> BTreeMap<String, i64> {
         "every code constant must be a numeric literal or resolve to another constant"
     );
     resolved
+}
+
+#[test]
+fn public_code_registries_match_all_pinned_java_constants() {
+    let fixture: Value = serde_json::from_str(JAVA_FIXTURE).expect("valid Java code fixture");
+    assert_eq!(
+        fixture["artifact"],
+        "org.apache.rocketmq:rocketmq-remoting:5.5.1"
+    );
+    assert_eq!(
+        fixture["sourceCommit"],
+        "efa1be59d6fc747ad220f036c86030f05f0419f9"
+    );
+    assert_eq!(fixture["serverBaselineContacted"], false);
+
+    let request = java_code_map(&fixture, "requestCode");
+    assert_eq!(
+        request.len(),
+        166,
+        "pinned Java RequestCode declaration count"
+    );
+    assert_eq!(parse_rust_constants(REQUEST_SOURCE), request);
+
+    let response = java_code_map(&fixture, "responseCode");
+    let remoting_system = java_code_map(&fixture, "remotingSysResponseCode");
+    assert_eq!(
+        response.len(),
+        68,
+        "pinned Java ResponseCode public field count, including inherited fields"
+    );
+    assert_eq!(
+        remoting_system.len(),
+        5,
+        "pinned Java RemotingSysResponseCode declaration count"
+    );
+
+    for (java_name, value) in &remoting_system {
+        assert_eq!(
+            response.get(java_name),
+            Some(value),
+            "ResponseCode inherits RemotingSysResponseCode.{java_name}"
+        );
+    }
+    assert_eq!(
+        parse_rust_constants(RESPONSE_SOURCE),
+        response,
+        "Rust response fields match ResponseCode's public fields, including inherited fields"
+    );
 }

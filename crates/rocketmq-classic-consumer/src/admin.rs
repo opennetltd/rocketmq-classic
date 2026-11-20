@@ -108,18 +108,18 @@ pub(crate) async fn create_topic(
     });
 
     let header = {
-        let mut __phase18_header_0 = CreateTopicRequestHeader::default();
-        __phase18_header_0.set_topic(Some(topic.to_owned()));
-        __phase18_header_0.set_default_topic(Some(key.to_owned()));
-        __phase18_header_0.set_read_queue_nums(Some(queue_num));
-        __phase18_header_0.set_write_queue_nums(Some(queue_num));
-        __phase18_header_0.set_perm(Some(6));
-        __phase18_header_0.set_topic_filter_type(Some("SINGLE_TAG".into()));
-        __phase18_header_0.set_topic_sys_flag(Some(topic_sys_flag));
-        __phase18_header_0.set_order(Some(false));
-        __phase18_header_0.set_attributes(Some(String::new()));
-        __phase18_header_0.set_force(Some(false));
-        __phase18_header_0
+        let mut header = CreateTopicRequestHeader::default();
+        header.set_topic(Some(topic.to_owned()));
+        header.set_default_topic(Some(key.to_owned()));
+        header.set_read_queue_nums(Some(queue_num));
+        header.set_write_queue_nums(Some(queue_num));
+        header.set_perm(Some(6));
+        header.set_topic_filter_type(Some("SINGLE_TAG".into()));
+        header.set_topic_sys_flag(Some(topic_sys_flag));
+        header.set_order(Some(false));
+        header.set_attributes(Some(String::new()));
+        header.set_force(Some(false));
+        header
     };
     let vip_enabled = runtime
         .config()
@@ -748,11 +748,11 @@ mod tests {
         let processor = ConsumerStatusProcessor::new(Arc::downgrade(&store));
         let mut fields = rocketmq_classic_protocol::header::HeaderMap::new();
         {
-            let mut __phase18_header_1 = GetConsumerStatusRequestHeader::default();
-            __phase18_header_1.set_topic("tenant%orders".into());
-            __phase18_header_1.set_group("tenant%workers".into());
-            __phase18_header_1.set_client_addr(None);
-            __phase18_header_1
+            let mut header = GetConsumerStatusRequestHeader::default();
+            header.set_topic("tenant%orders".into());
+            header.set_group("tenant%workers".into());
+            header.set_client_addr(None);
+            header
         }
         .encode_fields(&mut fields);
 

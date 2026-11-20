@@ -21,6 +21,50 @@ fn explicit_config(ip: &str) -> ClientConfig {
     config
 }
 
+async fn read_command(stream: &mut TcpStream) -> RemotingCommand {
+    let mut length = [0; 4];
+    stream.read_exact(&mut length).await.unwrap();
+    let mut bytes = BytesMut::from(&length[..]);
+    bytes.resize(u32::from_be_bytes(length) as usize + 4, 0);
+    stream.read_exact(&mut bytes[4..]).await.unwrap();
+    frame::decode_next(&mut bytes).unwrap().unwrap()
+}
+
+async fn respond(stream: &mut TcpStream, command: &RemotingCommand, body: Option<Vec<u8>>) {
+    let mut response = RemotingCommand {
+        opaque: command.opaque,
+        body,
+        ..Default::default()
+    };
+    response.mark_response();
+    stream
+        .write_all(&frame::encode(&response).unwrap())
+        .await
+        .unwrap();
+}
+
+async fn read_unregister(stream: &mut TcpStream) -> RemotingCommand {
+    loop {
+        let command = read_command(stream).await;
+        if command.code != request::HEART_BEAT {
+            return command;
+        }
+        let heartbeat: rocketmq_classic_protocol::heartbeat::HeartbeatData =
+            serde_json::from_slice(command.body.as_ref().unwrap()).unwrap();
+        assert_eq!(heartbeat.client_id.as_deref(), Some("192.0.2.6@DEFAULT"));
+        assert!(
+            heartbeat
+                .consumer_data_set
+                .as_ref()
+                .unwrap()
+                .with(|consumers| consumers.is_empty())
+        );
+        // A newly established unregister channel now emits Java's optional
+        // active heartbeat. Acknowledge it without weakening unregister order.
+        respond(stream, &command, None).await;
+    }
+}
+
 #[tokio::test]
 async fn shared_shutdown_uses_registration_identity_not_runtime_arc_counts() {
     let manager = ClientRuntimeManager::new();
@@ -166,50 +210,6 @@ async fn concurrent_shutdown_callers_join_the_same_terminal_control_task() {
     }
     assert_eq!(actual_stops, 1);
     assert_eq!(runtime.state(), RuntimeState::Stopped);
-}
-
-async fn read_command(stream: &mut TcpStream) -> RemotingCommand {
-    let mut length = [0; 4];
-    stream.read_exact(&mut length).await.unwrap();
-    let mut bytes = BytesMut::from(&length[..]);
-    bytes.resize(u32::from_be_bytes(length) as usize + 4, 0);
-    stream.read_exact(&mut bytes[4..]).await.unwrap();
-    frame::decode_next(&mut bytes).unwrap().unwrap()
-}
-
-async fn respond(stream: &mut TcpStream, command: &RemotingCommand, body: Option<Vec<u8>>) {
-    let mut response = RemotingCommand {
-        opaque: command.opaque,
-        body,
-        ..Default::default()
-    };
-    response.mark_response();
-    stream
-        .write_all(&frame::encode(&response).unwrap())
-        .await
-        .unwrap();
-}
-
-async fn read_unregister(stream: &mut TcpStream) -> RemotingCommand {
-    loop {
-        let command = read_command(stream).await;
-        if command.code != request::HEART_BEAT {
-            return command;
-        }
-        let heartbeat: rocketmq_classic_protocol::heartbeat::HeartbeatData =
-            serde_json::from_slice(command.body.as_ref().unwrap()).unwrap();
-        assert_eq!(heartbeat.client_id.as_deref(), Some("192.0.2.6@DEFAULT"));
-        assert!(
-            heartbeat
-                .consumer_data_set
-                .as_ref()
-                .unwrap()
-                .with(|consumers| consumers.is_empty())
-        );
-        // A newly established unregister channel now emits Java's optional
-        // active heartbeat. Acknowledge it without weakening unregister order.
-        respond(stream, &command, None).await;
-    }
 }
 
 #[tokio::test]
